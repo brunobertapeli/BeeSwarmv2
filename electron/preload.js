@@ -63,5 +63,88 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Listen for dependency install progress
   onDependencyProgress: (callback) => {
     ipcRenderer.on('dependency-install-progress', (_event, data) => callback(data))
+  },
+
+  // Process methods
+  process: {
+    startDevServer: (projectId) => ipcRenderer.invoke('process:start-dev-server', projectId),
+    stopDevServer: (projectId) => ipcRenderer.invoke('process:stop-dev-server', projectId),
+    restartDevServer: (projectId) => ipcRenderer.invoke('process:restart-dev-server', projectId),
+    getStatus: (projectId) => ipcRenderer.invoke('process:get-status', projectId),
+    getOutput: (projectId, limit) => ipcRenderer.invoke('process:get-output', projectId, limit),
+
+    // Process event listeners
+    onStatusChanged: (callback) => {
+      const listener = (_event, projectId, status) => callback(projectId, status)
+      ipcRenderer.on('process-status-changed', listener)
+      return () => ipcRenderer.removeListener('process-status-changed', listener)
+    },
+    onOutput: (callback) => {
+      const listener = (_event, projectId, output) => callback(projectId, output)
+      ipcRenderer.on('process-output', listener)
+      return () => ipcRenderer.removeListener('process-output', listener)
+    },
+    onReady: (callback) => {
+      const listener = (_event, projectId, port) => callback(projectId, port)
+      ipcRenderer.on('process-ready', listener)
+      return () => ipcRenderer.removeListener('process-ready', listener)
+    },
+    onError: (callback) => {
+      const listener = (_event, projectId, error) => callback(projectId, error)
+      ipcRenderer.on('process-error', listener)
+      return () => ipcRenderer.removeListener('process-error', listener)
+    },
+    onCrashed: (callback) => {
+      const listener = (_event, projectId, details) => callback(projectId, details)
+      ipcRenderer.on('process-crashed', listener)
+      return () => ipcRenderer.removeListener('process-crashed', listener)
+    }
+  },
+
+  // Preview methods
+  preview: {
+    create: (projectId, url, bounds) => ipcRenderer.invoke('preview:create', projectId, url, bounds),
+    updateBounds: (projectId, bounds) => ipcRenderer.invoke('preview:update-bounds', projectId, bounds),
+    refresh: (projectId) => ipcRenderer.invoke('preview:refresh', projectId),
+    toggleDevTools: (projectId) => ipcRenderer.invoke('preview:toggle-devtools', projectId),
+    navigate: (projectId, url) => ipcRenderer.invoke('preview:navigate', projectId, url),
+    destroy: (projectId) => ipcRenderer.invoke('preview:destroy', projectId),
+
+    // Preview event listeners
+    onCreated: (callback) => {
+      const listener = (_event, projectId) => callback(projectId)
+      ipcRenderer.on('preview-created', listener)
+      return () => ipcRenderer.removeListener('preview-created', listener)
+    },
+    onLoaded: (callback) => {
+      const listener = (_event, projectId) => callback(projectId)
+      ipcRenderer.on('preview-loaded', listener)
+      return () => ipcRenderer.removeListener('preview-loaded', listener)
+    },
+    onError: (callback) => {
+      const listener = (_event, projectId, error) => callback(projectId, error)
+      ipcRenderer.on('preview-error', listener)
+      return () => ipcRenderer.removeListener('preview-error', listener)
+    },
+    onCrashed: (callback) => {
+      const listener = (_event, projectId, details) => callback(projectId, details)
+      ipcRenderer.on('preview-crashed', listener)
+      return () => ipcRenderer.removeListener('preview-crashed', listener)
+    },
+    onConsole: (callback) => {
+      const listener = (_event, projectId, message) => callback(projectId, message)
+      ipcRenderer.on('preview-console', listener)
+      return () => ipcRenderer.removeListener('preview-console', listener)
+    },
+    onDevToolsToggled: (callback) => {
+      const listener = (_event, projectId, isOpen) => callback(projectId, isOpen)
+      ipcRenderer.on('preview-devtools-toggled', listener)
+      return () => ipcRenderer.removeListener('preview-devtools-toggled', listener)
+    }
+  },
+
+  // Shell methods
+  shell: {
+    openExternal: (url) => ipcRenderer.invoke('shell:open-external', url)
   }
 })

@@ -11,7 +11,7 @@ function ProjectHeader({ projectName, onOpenProjectSelector }: ProjectHeaderProp
   const [isHovered, setIsHovered] = useState(false)
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 border-b border-dark-border/30" style={{ WebkitAppRegion: 'drag' } as any}>
+    <div className="fixed top-0 left-0 right-0 z-[100] border-b border-dark-border/30 bg-dark-bg/95 backdrop-blur-sm" style={{ WebkitAppRegion: 'drag' } as any}>
       <div className="flex items-center justify-between h-12 pl-20 pr-4">
         {/* Back Arrow and Project Name */}
         <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as any}>

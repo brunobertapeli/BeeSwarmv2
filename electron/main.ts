@@ -6,10 +6,15 @@ dotenv.config()
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { registerAuthHandlers } from './handlers/authHandlers'
-import { registerTemplateHandlers } from './handlers/templateHandlers'
-import { registerProjectHandlers } from './handlers/projectHandlers'
-import { databaseService } from './services/DatabaseService'
+import { registerAuthHandlers } from './handlers/authHandlers.js'
+import { registerTemplateHandlers } from './handlers/templateHandlers.js'
+import { registerProjectHandlers } from './handlers/projectHandlers.js'
+import { registerProcessHandlers, setProcessHandlersWindow } from './handlers/processHandlers.js'
+import { registerPreviewHandlers, setPreviewHandlersWindow } from './handlers/previewHandlers.js'
+import { registerShellHandlers } from './handlers/shellHandlers.js'
+import { databaseService } from './services/DatabaseService.js'
+import { previewService } from './services/PreviewService.js'
+import { processManager } from './services/ProcessManager.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -177,18 +182,44 @@ function createWindow() {
     mainWindow = null
   })
 
-  // Initialize database
-  databaseService.init()
+  // Set up PreviewService with main window
+  previewService.setMainWindow(mainWindow)
 
-  // Register IPC handlers
-  registerAuthHandlers(mainWindow)
-  registerTemplateHandlers()
-  registerProjectHandlers()
+  // Set up event forwarding windows
+  setProcessHandlersWindow(mainWindow.webContents)
+  setPreviewHandlersWindow(mainWindow.webContents)
+}
+
+// Initialize database and register IPC handlers only once
+let handlersRegistered = false
+let authHandlersRegistered = false
+
+function initializeApp() {
+  if (!handlersRegistered) {
+    // Initialize database
+    databaseService.init()
+
+    // Register IPC handlers (only once)
+    registerTemplateHandlers()
+    registerProjectHandlers()
+    registerProcessHandlers()
+    registerPreviewHandlers()
+    registerShellHandlers()
+
+    handlersRegistered = true
+  }
 }
 
 app.whenReady().then(() => {
+  initializeApp()
   createMenu()
   createWindow()
+
+  // Register auth handlers only once (they need a window reference)
+  if (mainWindow && !authHandlersRegistered) {
+    registerAuthHandlers(mainWindow)
+    authHandlersRegistered = true
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -198,6 +229,22 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
+  // Cleanup before quitting
+  console.log('🛑 Stopping all processes and cleaning up...')
+
+  // Stop all dev servers (sync version, no await needed for quit)
+  processManager.stopAll().catch((error) => {
+    console.error('Error stopping processes:', error)
+  })
+
+  // Destroy all previews
+  previewService.destroyAll()
+
+  // Close database
+  databaseService.close()
+
+  console.log('✅ Cleanup complete')
+
   if (process.platform !== 'darwin') {
     app.quit()
   }

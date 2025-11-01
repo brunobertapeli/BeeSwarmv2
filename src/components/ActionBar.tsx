@@ -214,13 +214,13 @@ function ActionBar({
     <>
       {/* Bottom hover trigger zone */}
       <div
-        className="fixed bottom-0 left-0 right-0 h-4 z-40"
+        className="fixed bottom-0 left-0 right-0 h-4 z-[90]"
         onMouseEnter={handleMouseEnterBottom}
       />
 
       {/* iOS-style indicator when hidden */}
       {isHidden && (
-        <div className="fixed bottom-2 left-1/2 transform -translate-x-1/2 z-40">
+        <div className="fixed bottom-2 left-1/2 transform -translate-x-1/2 z-[90]">
           <div className="w-32 h-1 bg-gray-600/50 rounded-full" />
         </div>
       )}
@@ -244,7 +244,7 @@ function ActionBar({
 
       {/* Action Bar */}
       <div
-        className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 transition-all duration-500 ease-out ${
+        className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[100] transition-all duration-500 ease-out ${
           isVisible && !isHidden
             ? 'translate-y-0 opacity-100'
             : 'translate-y-32 opacity-0'

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '../store/appStore'
 import { useToast } from '../hooks/useToast'
 import ActionBar from './ActionBar'
@@ -8,8 +8,9 @@ import TemplateSelector from './TemplateSelector'
 import ProjectSettings from './ProjectSettings'
 import TerminalModal from './TerminalModal'
 import DeviceFrame from './DeviceFrame'
+import DesktopPreviewFrame from './DesktopPreviewFrame'
 import DeviceSelector from './DeviceSelector'
-import { Project } from '../types/electron'
+import { Project, ProcessState, ProcessOutput } from '../types/electron'
 
 function ProjectView() {
   const {
@@ -41,6 +42,13 @@ function ProjectView() {
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
 
+  // Dev server and preview state
+  const [serverStatus, setServerStatus] = useState<ProcessState>('stopped')
+  const [serverPort, setServerPort] = useState<number | null>(null)
+  const [previewReady, setPreviewReady] = useState(false)
+  const [terminalOutput, setTerminalOutput] = useState<ProcessOutput[]>([])
+  const previewContainerRef = useRef<HTMLDivElement>(null)
+
   // Fetch projects and auto-open last project
   useEffect(() => {
     const fetchProjects = async () => {
@@ -71,6 +79,80 @@ function ProjectView() {
   }, [refreshKey])
 
   const currentProject = projects.find((p) => p.id === currentProjectId)
+
+  // Start dev server and setup preview when project loads
+  useEffect(() => {
+    if (!currentProject) return
+
+    const startDevServer = async () => {
+      try {
+        setServerStatus('starting')
+        setPreviewReady(false)
+        setTerminalOutput([])
+
+        // Check if dependencies are installed
+        if (!currentProject.dependenciesInstalled) {
+          toast.info('Installing dependencies...', 'This may take a few minutes')
+          const installResult = await window.electronAPI?.projects.installDependencies(currentProject.id)
+          if (!installResult?.success) {
+            console.error('Failed to install dependencies:', installResult?.error)
+            setServerStatus('error')
+            return
+          }
+        }
+
+        // Start the dev server
+        const result = await window.electronAPI?.process.startDevServer(currentProject.id)
+        if (result?.success && result.port) {
+          setServerPort(result.port)
+          // Don't show toast - server ready will show one
+        } else {
+          console.error('Failed to start dev server:', result?.error)
+          setServerStatus('error')
+        }
+      } catch (error) {
+        console.error('Error starting dev server:', error)
+        setServerStatus('error')
+      }
+    }
+
+    startDevServer()
+
+    // Setup process event listeners
+    const unsubStatusChanged = window.electronAPI?.process.onStatusChanged((projectId, status) => {
+      if (projectId === currentProject.id) {
+        setServerStatus(status)
+      }
+    })
+
+    const unsubOutput = window.electronAPI?.process.onOutput((projectId, output) => {
+      if (projectId === currentProject.id) {
+        setTerminalOutput(prev => [...prev, output])
+      }
+    })
+
+    const unsubReady = window.electronAPI?.process.onReady((projectId, port) => {
+      if (projectId === currentProject.id) {
+        setServerPort(port)
+        toast.success('Dev server ready!', `Running on http://localhost:${port}`)
+      }
+    })
+
+    const unsubError = window.electronAPI?.process.onError((projectId, error) => {
+      if (projectId === currentProject.id) {
+        // Errors are already logged to terminal output, no need for toast
+        console.error('[Process Error]:', error)
+      }
+    })
+
+    // Cleanup on unmount or project change
+    return () => {
+      unsubStatusChanged?.()
+      unsubOutput?.()
+      unsubReady?.()
+      unsubError?.()
+    }
+  }, [currentProject?.id])
 
   // Determine project name for header
   const getProjectName = () => {
@@ -149,8 +231,8 @@ function ProjectView() {
   }
 
   return (
-    <div className="w-full h-full relative">
-      {/* Project Header */}
+    <div className="w-full h-screen relative flex flex-col pt-12">
+      {/* Project Header - Fixed */}
       <ProjectHeader
         projectName={getProjectName()}
         onOpenProjectSelector={() => setShowProjectSelector(true)}
@@ -174,7 +256,7 @@ function ProjectView() {
       />
 
       {/* Preview Area - Desktop or Mobile Mode */}
-      <div className="w-full h-full relative">
+      <div className="w-full flex-1 relative overflow-hidden">
         {projects.length === 0 && !loading ? (
           // No Projects State
           <div className="w-full h-full bg-gradient-to-br from-gray-900 via-dark-bg to-gray-900 flex items-center justify-center">
@@ -198,66 +280,101 @@ function ProjectView() {
             </div>
           </div>
         ) : viewMode === 'desktop' ? (
-          // Desktop Mode: Full screen preview
-          <div className="w-full h-full bg-gradient-to-br from-gray-900 via-dark-bg to-gray-900 flex items-center justify-center transition-all duration-500 animate-fadeIn">
-            {/* Placeholder content */}
-            <div className="text-center">
-              <div className="w-32 h-32 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
-                <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M32 8L16 24L32 40L48 24L32 8Z" fill="url(#grad1)" opacity="0.9"/>
-                  <path d="M32 28L20 40L32 52L44 40L32 28Z" fill="url(#grad2)" opacity="0.7"/>
-                  <defs>
-                    <linearGradient id="grad1" x1="16" y1="8" x2="48" y2="40" gradientUnits="userSpaceOnUse">
-                      <stop stopColor="#10B981"/>
-                      <stop offset="1" stopColor="#059669"/>
-                    </linearGradient>
-                    <linearGradient id="grad2" x1="20" y1="28" x2="44" y2="52" gradientUnits="userSpaceOnUse">
-                      <stop stopColor="#10B981"/>
-                      <stop offset="1" stopColor="#8B5CF6"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-2">Your Project Preview</h2>
-              <p className="text-gray-400">Your live app will appear here</p>
-              <div className="mt-8 flex items-center justify-center gap-2 text-sm text-gray-500">
-                <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
-                <span>Servers starting...</span>
-              </div>
-            </div>
+          // Desktop Mode: Browser frame with scaled preview
+          <div ref={previewContainerRef} className="w-full h-full animate-fadeIn">
+            <DesktopPreviewFrame port={serverPort || undefined}>
+              {serverPort && serverStatus === 'running' ? (
+                <iframe
+                  src={`http://localhost:${serverPort}`}
+                  className="w-full h-full border-0 bg-white"
+                  title="Desktop Preview"
+                  onLoad={() => setPreviewReady(true)}
+                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+                />
+              ) : (
+                <div className="w-full h-full bg-white flex items-center justify-center">
+                  <div className="text-center px-4">
+                    <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
+                      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M32 8L16 24L32 40L48 24L32 8Z" fill="url(#grad1)" opacity="0.9"/>
+                        <path d="M32 28L20 40L32 52L44 40L32 28Z" fill="url(#grad2)" opacity="0.7"/>
+                        <defs>
+                          <linearGradient id="grad1" x1="16" y1="8" x2="48" y2="40" gradientUnits="userSpaceOnUse">
+                            <stop stopColor="#10B981"/>
+                            <stop offset="1" stopColor="#059669"/>
+                          </linearGradient>
+                          <linearGradient id="grad2" x1="20" y1="28" x2="44" y2="52" gradientUnits="userSpaceOnUse">
+                            <stop stopColor="#10B981"/>
+                            <stop offset="1" stopColor="#8B5CF6"/>
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Project Preview</h2>
+                    <p className="text-gray-600">
+                      {serverStatus === 'starting' && 'Starting dev server...'}
+                      {serverStatus === 'running' && !previewReady && 'Loading preview...'}
+                      {serverStatus === 'error' && 'Error starting server. Check console for details.'}
+                      {serverStatus === 'crashed' && 'Server crashed. Check console for details.'}
+                      {serverStatus === 'stopped' && 'Server stopped'}
+                    </p>
+                    {(serverStatus === 'starting' || (serverStatus === 'running' && !previewReady)) && (
+                      <div className="mt-8 flex items-center justify-center gap-2 text-sm text-gray-500">
+                        <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                        <span>{serverStatus === 'starting' ? 'Starting servers...' : 'Loading preview...'}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </DesktopPreviewFrame>
           </div>
         ) : (
           // Mobile Mode: Device frame with phone silhouette
           <div className="w-full h-full animate-fadeIn">
             <DeviceFrame device={selectedDevice} orientation={orientation}>
               {/* Preview content inside the device frame */}
-              <div className="w-full h-full bg-white flex items-center justify-center overflow-auto">
-              {/* Placeholder content - scaled for mobile */}
-              <div className="text-center px-4">
-                <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
-                  <svg width="40" height="40" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M32 8L16 24L32 40L48 24L32 8Z" fill="url(#grad1)" opacity="0.9"/>
-                    <path d="M32 28L20 40L32 52L44 40L32 28Z" fill="url(#grad2)" opacity="0.7"/>
-                    <defs>
-                      <linearGradient id="grad1" x1="16" y1="8" x2="48" y2="40" gradientUnits="userSpaceOnUse">
-                        <stop stopColor="#10B981"/>
-                        <stop offset="1" stopColor="#059669"/>
-                      </linearGradient>
-                      <linearGradient id="grad2" x1="20" y1="28" x2="44" y2="52" gradientUnits="userSpaceOnUse">
-                        <stop stopColor="#10B981"/>
-                        <stop offset="1" stopColor="#8B5CF6"/>
-                      </linearGradient>
-                    </defs>
-                  </svg>
+              {serverPort && serverStatus === 'running' ? (
+                <iframe
+                  src={`http://localhost:${serverPort}`}
+                  className="w-full h-full border-0 bg-white"
+                  title="Mobile Preview"
+                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+                />
+              ) : (
+                <div className="w-full h-full bg-white flex items-center justify-center">
+                  <div className="text-center px-4">
+                    <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
+                      <svg width="40" height="40" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M32 8L16 24L32 40L48 24L32 8Z" fill="url(#grad1)" opacity="0.9"/>
+                        <path d="M32 28L20 40L32 52L44 40L32 28Z" fill="url(#grad2)" opacity="0.7"/>
+                        <defs>
+                          <linearGradient id="grad1" x1="16" y1="8" x2="48" y2="40" gradientUnits="userSpaceOnUse">
+                            <stop stopColor="#10B981"/>
+                            <stop offset="1" stopColor="#059669"/>
+                          </linearGradient>
+                          <linearGradient id="grad2" x1="20" y1="28" x2="44" y2="52" gradientUnits="userSpaceOnUse">
+                            <stop stopColor="#10B981"/>
+                            <stop offset="1" stopColor="#8B5CF6"/>
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                    </div>
+                    <h2 className="text-lg font-bold text-gray-900 mb-1">Your Project Preview</h2>
+                    <p className="text-sm text-gray-600">
+                      {serverStatus === 'starting' && 'Starting servers...'}
+                      {serverStatus === 'stopped' && 'Server stopped'}
+                      {serverStatus === 'error' && 'Error starting server'}
+                    </p>
+                    {serverStatus === 'starting' && (
+                      <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-500">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></div>
+                        <span>Loading...</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <h2 className="text-lg font-bold text-gray-900 mb-1">Your Project Preview</h2>
-                <p className="text-sm text-gray-600">Your live app will appear here</p>
-                <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-500">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></div>
-                  <span>Servers starting...</span>
-                </div>
-              </div>
-            </div>
+              )}
             </DeviceFrame>
           </div>
         )}
@@ -305,9 +422,12 @@ function ProjectView() {
         isOpen={showTerminal}
         onClose={() => setShowTerminal(false)}
         onStop={() => {
-          // Stop Claude generation
-          console.log('Stopping Claude...')
+          if (currentProject) {
+            window.electronAPI?.process.stopDevServer(currentProject.id)
+            toast.info('Stopping dev server...')
+          }
         }}
+        output={terminalOutput}
       />
     </div>
   )

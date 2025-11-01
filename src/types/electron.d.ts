@@ -27,11 +27,27 @@ export interface Project {
   lastOpenedAt: number | null
 }
 
+export type ProcessState = 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed' | 'error'
+
+export interface ProcessOutput {
+  timestamp: Date
+  type: 'stdout' | 'stderr'
+  message: string
+  raw: string
+}
+
+export interface PreviewBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface ElectronAPI {
   send: (channel: string, data: any) => void
   receive: (channel: string, func: (...args: any[]) => void) => void
   invoke: (channel: string, ...args: any[]) => Promise<any>
-  onDependencyProgress?: (callback: (data: string) => void) => void
+  onDependencyProgress: (callback: (data: string) => void) => void
 
   auth: {
     signInWithGoogle: () => Promise<{ success: boolean; url?: string; error?: string }>
@@ -129,6 +145,76 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
+  }
+
+  process: {
+    startDevServer: (projectId: string) => Promise<{
+      success: boolean
+      port?: number
+      error?: string
+    }>
+    stopDevServer: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    restartDevServer: (projectId: string) => Promise<{
+      success: boolean
+      port?: number
+      error?: string
+    }>
+    getStatus: (projectId: string) => Promise<{
+      success: boolean
+      status?: ProcessState
+      port?: number
+      error?: string
+    }>
+    getOutput: (projectId: string, limit?: number) => Promise<{
+      success: boolean
+      output?: ProcessOutput[]
+      error?: string
+    }>
+    onStatusChanged: (callback: (projectId: string, status: ProcessState) => void) => () => void
+    onOutput: (callback: (projectId: string, output: ProcessOutput) => void) => () => void
+    onReady: (callback: (projectId: string, port: number) => void) => () => void
+    onError: (callback: (projectId: string, error: any) => void) => () => void
+    onCrashed: (callback: (projectId: string, details: any) => void) => () => void
+  }
+
+  preview: {
+    create: (projectId: string, url: string, bounds: PreviewBounds) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    updateBounds: (projectId: string, bounds: PreviewBounds) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    refresh: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    toggleDevTools: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    navigate: (projectId: string, url: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    destroy: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    onCreated: (callback: (projectId: string) => void) => () => void
+    onLoaded: (callback: (projectId: string) => void) => () => void
+    onError: (callback: (projectId: string, error: any) => void) => () => void
+    onCrashed: (callback: (projectId: string, details: any) => void) => () => void
+    onConsole: (callback: (projectId: string, message: any) => void) => () => void
+    onDevToolsToggled: (callback: (projectId: string, isOpen: boolean) => void) => () => void
+  }
+
+  shell: {
+    openExternal: (url: string) => Promise<void>
   }
 }
 

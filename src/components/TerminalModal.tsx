@@ -1,9 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Square, Trash2, Minimize2, Maximize2, Terminal as TerminalIcon, Copy, Check } from 'lucide-react'
+import { ProcessOutput } from '../types/electron'
+import Convert from 'ansi-to-html'
 
 interface TerminalLine {
-  type: 'user' | 'assistant' | 'tool' | 'success' | 'error' | 'info'
+  type: 'stdout' | 'stderr' | 'info'
   content: string
+  raw: string
   timestamp: Date
 }
 
@@ -11,84 +14,79 @@ interface TerminalModalProps {
   isOpen: boolean
   onClose: () => void
   onStop?: () => void
+  output?: ProcessOutput[]
 }
 
-// Mock terminal history - will be replaced with real data
-const MOCK_HISTORY: TerminalLine[] = [
-  {
-    type: 'info',
-    content: '$ BeeSwarm Terminal v1.0.0',
-    timestamp: new Date(Date.now() - 600000),
-  },
-  {
-    type: 'info',
-    content: '$ Connected to Claude Code SDK',
-    timestamp: new Date(Date.now() - 590000),
-  },
-  {
-    type: 'user',
-    content: '> User: Add a dark mode toggle to the settings page',
-    timestamp: new Date(Date.now() - 580000),
-  },
-  {
-    type: 'assistant',
-    content: "I'll help you add a dark mode toggle. Let me first check the current settings page structure.",
-    timestamp: new Date(Date.now() - 575000),
-  },
-  {
-    type: 'tool',
-    content: '⚙ Reading file: src/pages/Settings.tsx',
-    timestamp: new Date(Date.now() - 570000),
-  },
-  {
-    type: 'tool',
-    content: '⚙ Reading file: src/context/ThemeContext.tsx',
-    timestamp: new Date(Date.now() - 565000),
-  },
-  {
-    type: 'assistant',
-    content: "I found the theme context. Now I'll add the toggle component.",
-    timestamp: new Date(Date.now() - 560000),
-  },
-  {
-    type: 'tool',
-    content: '⚙ Writing changes to src/pages/Settings.tsx',
-    timestamp: new Date(Date.now() - 555000),
-  },
-  {
-    type: 'tool',
-    content: '⚙ Creating new file: src/components/DarkModeToggle.tsx',
-    timestamp: new Date(Date.now() - 550000),
-  },
-  {
-    type: 'success',
-    content: '✓ Dark mode toggle has been added to the settings page.',
-    timestamp: new Date(Date.now() - 545000),
-  },
-  {
-    type: 'tool',
-    content: '⚙ Committed changes: "feat: add dark mode toggle to settings"',
-    timestamp: new Date(Date.now() - 540000),
-  },
-  {
-    type: 'success',
-    content: '✓ Task completed successfully',
-    timestamp: new Date(Date.now() - 535000),
-  },
-]
+const ansiConverter = new Convert({
+  fg: '#fff',
+  bg: '#0a0e14',
+  newline: false,
+  escapeXML: true,
+  stream: false,
+  colors: {
+    0: '#0a0e14',
+    1: '#ff6b6b',
+    2: '#10B981',
+    3: '#ffd93d',
+    4: '#6495ED',
+    5: '#f472b6',
+    6: '#06b6d4',
+    7: '#e5e7eb',
+  }
+})
 
-function TerminalModal({ isOpen, onClose, onStop }: TerminalModalProps) {
-  const [history, setHistory] = useState<TerminalLine[]>(MOCK_HISTORY)
+function TerminalModal({ isOpen, onClose, onStop, output = [] }: TerminalModalProps) {
+  const [history, setHistory] = useState<TerminalLine[]>([])
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [isMaximized, setIsMaximized] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const terminalEndRef = useRef<HTMLDivElement>(null)
+  const terminalContentRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when new lines added
+  // Convert ProcessOutput to TerminalLine format
   useEffect(() => {
-    if (terminalEndRef.current) {
+    const lines: TerminalLine[] = output.map(item => ({
+      type: item.type,
+      content: item.message,
+      raw: item.raw,
+      timestamp: item.timestamp instanceof Date ? item.timestamp : new Date(item.timestamp)
+    }))
+
+    // Add initial message if no output yet
+    if (lines.length === 0) {
+      lines.push({
+        type: 'info',
+        content: '$ Waiting for dev server output...',
+        raw: '$ Waiting for dev server output...',
+        timestamp: new Date()
+      })
+    }
+
+    setHistory(lines)
+  }, [output])
+
+  // Auto-scroll to bottom when new lines added (only if user hasn't scrolled up)
+  useEffect(() => {
+    if (shouldAutoScroll && terminalEndRef.current) {
       terminalEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [history])
+  }, [history, shouldAutoScroll])
+
+  // Detect if user scrolled up manually
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!terminalContentRef.current) return
+
+      const { scrollTop, scrollHeight, clientHeight } = terminalContentRef.current
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+
+      setShouldAutoScroll(isNearBottom)
+    }
+
+    const contentRef = terminalContentRef.current
+    contentRef?.addEventListener('scroll', handleScroll)
+    return () => contentRef?.removeEventListener('scroll', handleScroll)
+  }, [])
 
   // Handle ESC key to close
   useEffect(() => {
@@ -107,6 +105,7 @@ function TerminalModal({ isOpen, onClose, onStop }: TerminalModalProps) {
       {
         type: 'info',
         content: '$ Terminal cleared',
+        raw: '$ Terminal cleared',
         timestamp: new Date(),
       },
     ])
@@ -121,15 +120,9 @@ function TerminalModal({ isOpen, onClose, onStop }: TerminalModalProps) {
 
   const getLineColor = (type: TerminalLine['type']) => {
     switch (type) {
-      case 'user':
-        return 'text-blue-400'
-      case 'assistant':
-        return 'text-white'
-      case 'tool':
-        return 'text-gray-400'
-      case 'success':
-        return 'text-primary'
-      case 'error':
+      case 'stdout':
+        return 'text-gray-200'
+      case 'stderr':
         return 'text-red-400'
       case 'info':
         return 'text-gray-500'
@@ -173,7 +166,7 @@ function TerminalModal({ isOpen, onClose, onStop }: TerminalModalProps) {
             </div>
             <div>
               <h2 className="text-sm font-semibold text-white">Terminal</h2>
-              <p className="text-[10px] text-gray-500">Claude Code SDK Output</p>
+              <p className="text-[10px] text-gray-500">Dev Server Output</p>
             </div>
           </div>
 
@@ -238,7 +231,10 @@ function TerminalModal({ isOpen, onClose, onStop }: TerminalModalProps) {
 
         {/* Terminal Content */}
         <div className="flex-1 overflow-hidden bg-[#0a0e14] font-mono">
-          <div className="h-full overflow-y-auto p-4 space-y-1 terminal-scrollbar">
+          <div
+            ref={terminalContentRef}
+            className="h-full overflow-y-auto p-4 space-y-1 terminal-scrollbar"
+          >
             {history.map((line, idx) => (
               <div key={idx} className="flex items-start gap-3 group">
                 {/* Timestamp */}
@@ -246,10 +242,13 @@ function TerminalModal({ isOpen, onClose, onStop }: TerminalModalProps) {
                   {formatTimestamp(line.timestamp)}
                 </span>
 
-                {/* Content */}
-                <div className={`text-[13px] leading-relaxed flex-1 ${getLineColor(line.type)}`}>
-                  {line.content}
-                </div>
+                {/* Content with ANSI colors */}
+                <div
+                  className={`text-[13px] leading-relaxed flex-1 ${getLineColor(line.type)}`}
+                  dangerouslySetInnerHTML={{
+                    __html: ansiConverter.toHtml(line.raw)
+                  }}
+                />
               </div>
             ))}
 
