@@ -1,7 +1,16 @@
 # BeeSwarm 🐝 - Technical Architecture Document
 
-**Version:** 2.0  
+**Version:** 2.0
+**Last Updated:** 2024-11-01
 **Purpose:** Visual wrapper for Claude Code CLI - enables non-technical users to build/edit web apps through natural language
+
+**Implementation Status:**
+- ✅ Phases 1-4 Complete: Auth, Templates, Projects, Dev Servers, Preview, Terminal
+- ⚠️ Phase 5+ Coming Soon: Claude Code integration, Editing Loop, Deployment
+
+**See Also:**
+- `TEMPLATE_GUIDE.md` - Complete template structure and requirements
+- `UNIFIED_TERMINAL.md` - Terminal system documentation
 
 ---
 
@@ -23,18 +32,23 @@
 - **Electron + Chromium** (like VS Code, Cursor)
 - **Main Process:** Node.js backend (IPC handlers, services, process management)
 - **Renderer Process:** React + TypeScript + TailwindCSS + Zustand
-- **Terminal:** node-pty for Claude Code CLI + xterm.js for display/parsing
+- **Terminal:** node-pty for interactive shell + xterm.js for display
+- **Unified Terminal:** TerminalAggregator combines output from all sources (dev server, shell, npm, git, Claude)
 - **Preview:** BrowserView (embedded Chromium)
 - **Security:** safeStorage for API key encryption
 
 ### User's Local Environment
-- **Claude Code CLI**: Terminal application installed automatically by BeeSwarm
-  - Installed via: `npm install -g @anthropic-ai/claude-code` 
-  - Spawned via node-pty from BeeSwarm's main process
-- **Anthropic API Key**: User provides their own, stored encrypted locally
-- **Dev Servers**: Vite dev server (frontend) + Nodemon (backend)
-- **Git**: Local version control, auto-commit after each successful edit
-- **Node.js**: Required for Claude Code CLI and dev servers
+- **Claude Code CLI**: Terminal application (Coming Soon)
+  - Will be installed via: `npm install -g @anthropic-ai/claude-code`
+  - Will be spawned via node-pty from BeeSwarm's main process
+- **Anthropic API Key**: User provides their own, stored encrypted locally (Coming Soon)
+- **Dev Server**: Netlify Dev (single server that proxies Vite frontend)
+  - Netlify CLI runs on ports 8888-8999 (auto-allocated)
+  - Vite dev server on ports 5174-5285 (auto-calculated, paired with Netlify port)
+  - Automatic port configuration to prevent conflicts
+- **Backend**: Netlify Functions (serverless, no separate backend server)
+- **Git**: Local version control (auto-commit: Coming Soon)
+- **Node.js**: Required for Netlify CLI and dev servers
 
 ### Cloud Services
 
@@ -72,11 +86,11 @@ Supabase Auth (reads only) → JWT Token
     ↓
 MongoDB Atlas (reads user/subscription/templates)
     ↓
-Claude Code CLI (local) → Edits files
+Claude Code CLI (local) → Edits files (Coming Soon)
     ↓
-Dev Servers (local) → Preview
+Netlify Dev (local) → Proxies Vite + Functions → Preview
     ↓
-Netlify (deployment)
+Netlify (deployment - Coming Soon)
 
 Website (Separate)
     ↓
@@ -139,7 +153,11 @@ MongoDB Atlas (writes user/subscription data)
 29. Show preview with action bar
 ```
 
-**5. Editing Loop (Core Workflow)**
+**5. Editing Loop (Core Workflow)** ⚠️ **Coming Soon**
+
+> **Current Status:** Claude Code CLI integration not yet implemented. Terminal infrastructure (PTY, output streaming, aggregation) is complete and ready.
+
+**Planned Flow:**
 ```
 30. User types in action bar: "Change hero headline to 'Welcome to My App'"
 31. Click Send
@@ -147,55 +165,39 @@ MongoDB Atlas (writes user/subscription data)
 33. Main Process spawns Claude Code CLI via node-pty (if not already running)
 34. Write to PTY stdin: user's message + "\n"
 35. Claude Code CLI analyzes codebase + makes edits
-36. PTY streams output (stdout/stderr) → Main Process captures
-37. Main Process parses output:
-    - "📝 Editing src/components/Hero.tsx" → Extract file name
-    - Code diffs → Extract changes
-38. IPC events → Renderer receives parsed data
-39. Show in Chat Modal (xterm.js shows raw, UI sheet shows pretty cards)
-40. File changes detected (chokidar watching project directory)
-41. Restart dev servers (kill + restart Vite & Nodemon). 
-42. Check console errors:
-    - If errors: Send back to Claude Code CLI stdin: "/fix these errors: ..."
-    - Retry max 3 times
-43. If no errors OR fixes succeeded:
-    - Git commit: "Changed hero headline"
-    - Save commit to SQLite: chat_history
-44. BrowserView auto-refreshes
-45. User sees updated app
+36. PTY streams output → TerminalAggregator → Unified Terminal
+37. Main Process parses output for UI display
+38. File changes detected
+39. Restart Netlify Dev server
+40. Check for console errors → Auto-fix if needed (max 3 retries)
+41. Git auto-commit on success (Coming Soon)
+42. Preview auto-refreshes
+43. User sees updated app
 ```
 
-**6. Subsequent Edits**
+**6. Subsequent Edits** ⚠️ **Coming Soon**
 ```
 46. User types: "Add a pricing section below the hero"
-47. Repeat steps 31-45
+47. Repeat editing loop
 48. Each iteration: Prompt → Edit → Commit → Restart → Preview
-49. User can click "Show Terminal" to see raw Claude Code CLI output
-50. Or just see parsed UI: "✓ Added PricingSection.tsx", "✓ Updated Hero.tsx"
+49. User can view raw output in Unified Terminal
+50. Or see parsed UI showing changes
 ```
 
-**7. Deployment**
+**7. Deployment** ⚠️ **Coming Soon**
+
+> **Current Status:** Netlify deployment not yet implemented. Templates are ready for deployment (Netlify Functions, proper build configuration).
+
+**Planned Flow:**
 ```
 51. User clicks "Deploy" in action bar
-52. Check: Is Netlify connected?
-53. If NO:
-    - Show modal: "Connect Netlify"
-    - Click "Connect" → Opens system browser
-    - Netlify OAuth flow → User authorizes BeeSwarm
-    - Callback received → Store OAuth token encrypted
-54. Show deploy modal:
-    - Site name input (suggests project name)
-    - Deploy button
-55. User clicks "Deploy"
-56. Main Process:
-    - Run: npm run build (frontend)
-    - Spawn Netlify CLI: netlify deploy --prod --dir=frontend/dist
-    - Stream CLI output → Renderer
-57. Show in modal (xterm.js): "Building...", "Uploading...", "Deploying..."
-58. Netlify responds with URL
-59. Show success: "✓ Deployed to https://my-app.netlify.app"
-60. Save to SQLite: project.deploymentUrl, project.status = 'deployed'
-61. Copy URL button + Visit Site button
+52. Netlify OAuth flow (one-time setup)
+53. Deploy modal with site name input
+54. Run: npm run build (frontend)
+55. Deploy via Netlify CLI: netlify deploy --prod
+56. Stream deployment logs to Unified Terminal
+57. Save deployment URL to database
+58. Show success with visit/copy URL buttons
 ```
 
 **8. Subscription Management (Separate Flow)**
@@ -220,26 +222,35 @@ MongoDB Atlas (writes user/subscription data)
 beeswarm/
 ├── main/                           # Electron Main Process
 │   ├── index.ts                    # Entry point
-│   ├── ipc/                        # IPC handlers
-│   │   ├── auth.ts                 # Supabase auth + MongoDB user lookup
-│   │   ├── templates.ts            # Fetch from MongoDB, clone from GitHub
-│   │   ├── claude.ts               # Spawn Claude Code CLI via node-pty
-│   │   ├── processes.ts            # Dev server management
-│   │   ├── git.ts                  # Auto-commit after edits
-│   │   ├── deployment.ts           # Netlify OAuth + CLI deployment
-│   │   └── database.ts             # SQLite operations
+│   ├── handlers/                   # IPC handlers
+│   │   ├── authHandlers.ts         # Supabase auth + MongoDB user lookup
+│   │   ├── templateHandlers.ts     # Fetch from MongoDB, clone from GitHub
+│   │   ├── projectHandlers.ts      # Project CRUD, dependencies, env config
+│   │   ├── processHandlers.ts      # Netlify Dev server management
+│   │   ├── previewHandlers.ts      # BrowserView control (navigate, devtools)
+│   │   └── terminalHandlers.ts     # Terminal sessions (create, input, history)
+│   │   # Coming Soon:
+│   │   # ├── claudeHandlers.ts     # Claude Code CLI spawning
+│   │   # └── deploymentHandlers.ts # Netlify deployment
 │   │
 │   ├── services/
-│   │   ├── AuthService.ts          # Supabase JWT validation
+│   │   ├── AuthService.ts          # Supabase OAuth (Google, Facebook, GitHub)
 │   │   ├── MongoService.ts         # MongoDB Atlas queries (read-only)
 │   │   ├── DatabaseService.ts      # SQLite operations (local data)
-│   │   ├── ClaudeService.ts        # PTY management for Claude Code CLI
-│   │   ├── ProcessManager.ts       # Child process lifecycle
-│   │   ├── GitService.ts           # Git operations
-│   │   ├── TemplateService.ts      # Clone from GitHub
-│   │   ├── DeploymentService.ts    # Netlify integration
-│   │   ├── KeychainService.ts      # Encrypted storage (API keys, tokens)
-│   │   └── OutputParser.ts         # Parse Claude Code CLI output
+│   │   ├── ProcessManager.ts       # Netlify Dev server lifecycle
+│   │   ├── PortService.ts          # Dynamic port allocation (Netlify + Vite)
+│   │   ├── ProcessPersistence.ts   # PID tracking for orphan cleanup
+│   │   ├── TemplateService.ts      # Clone from GitHub + auto-config
+│   │   ├── TemplateValidator.ts    # Validate template structure
+│   │   ├── EnvService.ts           # Read/write .env files
+│   │   ├── DependencyService.ts    # npm install orchestration
+│   │   ├── TerminalService.ts      # PTY-based interactive shell sessions
+│   │   ├── TerminalAggregator.ts   # Unified output from all sources
+│   │   └── PreviewService.ts       # BrowserView management
+│   │   # Coming Soon:
+│   │   # ├── ClaudeService.ts      # PTY management for Claude Code CLI
+│   │   # ├── GitService.ts         # Git auto-commit
+│   │   # └── DeploymentService.ts  # Netlify deployment
 │   │
 │   └── utils/
 │       ├── paths.ts
@@ -298,9 +309,19 @@ beeswarm/
 ~/Library/Application Support/BeeSwarm/database.db
 
 Tables:
-- projects (id, name, path, templateId, status, deploymentUrl, createdAt, lastOpenedAt)
-- chat_history (id, projectId, role, message, timestamp)
-- git_commits (id, projectId, hash, message, timestamp)
+- projects
+  Current fields:
+    • id, name, path, templateId, templateName, status
+    • isFavorite, configCompleted, dependenciesInstalled
+    • envVars (JSON), createdAt, lastOpenedAt
+  Planned fields (Coming Soon):
+    • deploymentUrl, deployedAt, devServerPort
+
+- chat_history (Coming Soon)
+  Planned: id, projectId, role, message, timestamp
+
+- git_commits (Coming Soon)
+  Planned: id, projectId, hash, message, timestamp
 ```
 
 ### MongoDB Atlas Collections
@@ -342,15 +363,20 @@ templates {
 ~/Documents/BeeSwarm/Projects/my-saas-app/
 ├── frontend/                   # React + Vite
 │   ├── src/
-│   ├── .env                    # User's service keys
-│   └── package.json
-├── backend/                    # Node + Express
-│   ├── src/
-│   ├── .env
-│   └── package.json
-├── .config/                    # BeeSwarm metadata
-│   ├── manifest.json
-│   └── images.json
+│   ├── .env                    # Frontend env vars (VITE_ prefix)
+│   ├── package.json
+│   └── vite.config.ts          # Auto-configured with allocated port
+├── netlify/
+│   └── functions/              # Serverless functions (backend logic)
+│       ├── hello.ts
+│       └── users.ts
+├── .env                        # Function env vars (in root)
+├── .claude/                    # Claude Code instructions (optional)
+│   └── instructions.md
+├── config/                     # BeeSwarm metadata (optional)
+│   └── project-images.json
+├── netlify.toml                # Auto-configured with allocated ports
+├── package.json                # Root package.json (netlify-cli)
 └── .git/                       # Local git
 ```
 
@@ -366,13 +392,13 @@ templates {
 - Show "Upgrade to Pro" banner if free user
 - Store JWT encrypted locally
 
-### 2. Claude Code CLI Integration
-- Auto-install if not present (no permission, just notify)
-- Spawn via node-pty
+### 2. Claude Code CLI Integration ⚠️ **Coming Soon**
+- Auto-install will be implemented
+- Spawn via node-pty (infrastructure ready)
 - Write user prompts to stdin
-- Parse stdout/stderr in real-time
-- Display parsed output in beautiful UI
-- Keep raw terminal available in modal
+- Output streamed to Unified Terminal
+- Parse stdout/stderr for UI display
+- Infrastructure complete: TerminalService, TerminalAggregator, xterm.js
 
 ### 3. Template System
 - Fetch template list from MongoDB (filtered by user plan)
@@ -382,14 +408,15 @@ templates {
 - Configuration wizard for service credentials
 - Write to .env files
 
-### 4. Editing Workflow
+### 4. Editing Workflow ⚠️ **Coming Soon**
 - User types natural language
 - Send to Claude Code CLI stdin
-- Stream and parse output
+- Stream to Unified Terminal
+- Parse output for UI display
 - Detect file changes
-- Restart dev servers
+- Restart Netlify Dev server
 - Check console errors → Auto-fix (max 3 retries)
-- Git auto-commit on success
+- Git auto-commit on success (Coming Soon)
 - Preview auto-refreshes
 
 ### 5. Preview Window
@@ -416,18 +443,32 @@ templates {
 - Replace images in project
 - Auto-restart dev servers after changes
 
-### 9. Deployment
+### 9. Deployment ⚠️ **Coming Soon**
 - Netlify OAuth (one-time setup)
 - Site name input
 - Deploy button → Runs build + netlify deploy
-- Streams deployment logs
+- Stream deployment logs to Unified Terminal
 - Shows live URL on success
 
-### 10. Git Integration
+### 10. Git Integration ⚠️ **Coming Soon**
 - Auto-commit after each successful edit loop
-- Commit message: Brief description from Claude
+- Commit message from Claude's description
 - Store in SQLite for history
 - Rollback feature (future)
+
+### 11. Unified Terminal System ✅ **Implemented**
+- **TerminalService**: PTY-based interactive shell sessions (one per project)
+- **TerminalAggregator**: Merges output from multiple sources
+  - dev-server (Netlify Dev output) - Cyan
+  - shell (user commands) - Green
+  - npm (dependency installs) - Yellow
+  - git (version control) - Magenta
+  - claude (AI operations) - Blue (Coming Soon)
+  - system (app notifications) - Gray
+- **TerminalModal**: xterm.js frontend with color-coded source tags
+- Real-time streaming, timestamps, command input
+- Session history (1000 lines per project)
+- See `UNIFIED_TERMINAL.md` for complete documentation
 
 ---
 
@@ -555,78 +596,106 @@ templates {
 
 ## Development Phases
 
-### Phase 1: Foundation (Week 1-2)
-- Electron app boilerplate with React
-- IPC architecture
-- Supabase auth integration
-- MongoDB Atlas connection (read-only in app)
-- SQLite setup with tables
-- Login screen + JWT handling
-- Template selector (fetch from MongoDB)
+### Phase 1: Foundation ✅ **COMPLETE**
+- ✅ Electron app boilerplate with React
+- ✅ IPC architecture (handlers/ directory)
+- ✅ Supabase auth integration (Google, Facebook, GitHub)
+- ✅ MongoDB Atlas connection (read-only)
+- ✅ SQLite setup with projects table
+- ✅ Login screen + JWT handling
+- ✅ Template selector (fetch from MongoDB)
 
-### Phase 2: Claude Integration (Week 3-4)
-- Auto-install Claude Code CLI
-- API key setup + validation
-- Spawn Claude Code CLI via node-pty
-- Stream output to renderer
-- Basic output parsing
-- Chat interface with xterm.js
-- Stop/restart Claude process
+### Phase 2: Project Management ✅ **COMPLETE**
+- ✅ Template cloning from GitHub
+- ✅ Template validation system
+- ✅ Configuration wizard (dynamic env var collection)
+- ✅ Write to .env files (frontend + root)
+- ✅ npm install automation (root → frontend → backend)
+- ✅ Automatic port allocation (Netlify + Vite pairs)
+- ✅ Auto-configuration (vite.config.ts, netlify.toml)
 
-### Phase 3: Project Management (Week 5-6)
-- Template cloning from GitHub
-- Configuration wizard (service credentials)
-- Write to .env files
-- npm install automation
-- Dev server process management (Vite + Nodemon)
-- BrowserView preview window
-- Port auto-assignment
+### Phase 3: Dev Server Management ✅ **COMPLETE**
+- ✅ Netlify Dev process management
+- ✅ Process states (starting, running, crashed, error)
+- ✅ HTTP health checks (reliable server detection)
+- ✅ Port conflict handling (auto-retry, 3 attempts)
+- ✅ Orphaned process cleanup (PID tracking)
+- ✅ Output capture and streaming
+- ✅ Process crash recovery
 
-### Phase 4: Editing Loop (Week 7-8)
-- Complete editing workflow
-- File change detection
-- Dev server restart logic
-- Console error detection
-- Error auto-fix loop (max 3 retries)
-- Git auto-commit
-- Preview auto-refresh
-- Chat history in SQLite
+### Phase 4: Preview & Terminal ✅ **COMPLETE**
+- ✅ BrowserView preview window
+- ✅ DevTools integration (F12 toggle)
+- ✅ Console message capture
+- ✅ Navigation handling
+- ✅ TerminalService (PTY-based interactive shell)
+- ✅ TerminalAggregator (unified output from all sources)
+- ✅ TerminalModal (xterm.js with color-coded source tags)
+- ✅ Real-time output streaming to terminal
 
-### Phase 5: Advanced Features (Week 9-10)
-- Image management system
-- Image cropper with aspect ratio lock
-- images.json tracking
-- Git commit history viewer
-- Rollback functionality (future)
-- Settings modal
-- Theme switching
+### Phase 5: Claude Integration ⚠️ **NOT STARTED**
+- ⏳ Auto-install Claude Code CLI
+- ⏳ API key setup + validation
+- ⏳ Spawn Claude Code CLI via node-pty
+- ⏳ Output parsing for UI display
+- ⏳ Chat interface
+- ⏳ Stop/restart Claude process
+- Infrastructure ready: TerminalService, TerminalAggregator
 
-### Phase 6: Deployment (Week 11-12)
-- Netlify OAuth integration
-- Deploy button + modal
-- Build + deploy via Netlify CLI
-- Stream deployment logs
-- Save deployment URL to SQLite
-- Copy/visit URL buttons
+### Phase 6: Editing Loop ⚠️ **NOT STARTED**
+- ⏳ Complete editing workflow
+- ⏳ File change detection
+- ⏳ Dev server restart logic
+- ⏳ Console error detection
+- ⏳ Error auto-fix loop (max 3 retries)
+- ⏳ Git auto-commit
+- ⏳ Preview auto-refresh
+- ⏳ Chat history in SQLite
 
-### Phase 7: Polish & Testing (Week 13-14)
-- Improved output parsing (more patterns)
-- Better error messages
-- Loading states everywhere
-- Onboarding flow
-- Tutorial videos
-- Help documentation
-- Bug fixes
-- Performance optimization
+### Phase 7: Deployment ⚠️ **NOT STARTED**
+- ⏳ Netlify OAuth integration
+- ⏳ Deploy button + modal
+- ⏳ Build + deploy via Netlify CLI
+- ⏳ Stream deployment logs to Unified Terminal
+- ⏳ Save deployment URL to SQLite
+- ⏳ Copy/visit URL buttons
 
-### Phase 8: Website (Parallel or After)
+### Phase 8: Advanced Features ⚠️ **NOT STARTED**
+- ⏳ Image management system
+- ⏳ Image cropper with aspect ratio lock
+- ⏳ images.json tracking
+- ⏳ Git commit history viewer
+- ⏳ Rollback functionality
+- ⏳ Settings modal enhancements
+
+### Phase 9: Website (Separate Track)
 - Landing page
 - Pricing page
 - Stripe integration
 - Supabase auth
 - Customer portal
 - Email notifications
-- Analytics
+
+---
+
+## Current Status Summary
+
+**✅ Completed Features:**
+- Complete authentication system (Supabase + MongoDB)
+- Template management (fetch, clone, validate, auto-config)
+- Project management (CRUD, favorites, env vars)
+- Dev server management (Netlify Dev with auto-port allocation)
+- Live preview (BrowserView with DevTools)
+- Unified terminal system (aggregated output from all sources)
+- Configuration wizard (dynamic based on template requirements)
+- Dependency installation (orchestrated npm install)
+
+**⚠️ Coming Soon (Core Features):**
+- Claude Code CLI integration (the main editing capability)
+- Git auto-commit workflow
+- Netlify deployment
+
+**Status:** BeeSwarm has a complete project management shell ready for Phase 5 (Claude Code integration), which will enable the core AI editing functionality.
 
 ---
 
@@ -661,124 +730,53 @@ templates {
 
 ---
 
-## Next Steps: Detailed Implementation Guides
+## Available Documentation
 
-When ready to implement specific parts, generate these detailed MDs:
+### Implemented Systems
 
-### 1. **auth-system.md**
-- Supabase OAuth setup (Google, Facebook, Email)
-- JWT token handling and refresh
-- MongoDB user lookup queries
-- Subscription status checks
-- "Upgrade to Pro" banner logic
-- Token encryption with safeStorage
-- Session management
-- Website redirect for subscription management
+**UNIFIED_TERMINAL.md** ✅
+- Complete documentation of the terminal system
+- TerminalService, TerminalAggregator, TerminalModal
+- How to add terminal output from any source
+- Color-coded source types (dev-server, shell, npm, git, claude, system)
+- Implementation guide with examples
+- Best practices and troubleshooting
 
-### 2. **claude-integration.md**
-- Detecting if Claude Code CLI installed
-- Auto-install via npm (silent, with notification)
-- API key setup and validation flow
-- Spawning Claude Code CLI via node-pty
-- Writing to PTY stdin (user prompts, slash commands)
-- Reading from PTY stdout/stderr
-- Output parsing strategies (regex patterns, state machine)
-- Handling Claude Code CLI errors
-- Stop/restart logic
-- System prompts via .claude/ directory
+**TEMPLATE_GUIDE.md** ✅
+- Complete template structure requirements
+- Netlify Dev + Functions architecture
+- Automatic port allocation system
+- Configuration file examples
+- Validation requirements
+- Testing and troubleshooting
 
-### 3. **process-management.md**
-- Child process lifecycle (spawn, monitor, restart, kill)
-- Port detection and auto-assignment
-- Vite dev server management
-- Nodemon backend server management
-- Process crash recovery
-- Logging stdout/stderr
-- Console error detection (parsing error messages)
-- Health checks for dev servers
-- Graceful shutdown on app quit
+### Next Implementation Priorities
 
-### 4. **preview-system.md**
-- BrowserView creation and lifecycle
-- Embedding in Electron window
-- Bounds calculation for responsive preview
-- DevTools integration (F12 toggle)
-- Navigation handling (external links)
-- Reload/refresh logic
-- Viewport size controls (mobile/tablet/desktop)
-- Console log capturing
-- Error page handling
+1. **Claude Code CLI Integration** (Phase 5)
+   - Install/detect Claude Code CLI
+   - API key setup flow
+   - Spawn via node-pty
+   - Output streaming to Unified Terminal
+   - Parse output for UI display
+   - Infrastructure is ready
 
-### 5. **git-integration.md**
-- Auto-commit strategy (after each successful edit)
-- Commit message format (from Claude's description)
-- Storing commits in SQLite
-- Git history viewer UI
-- Commit diff viewer
-- Rollback/restore previous version
-- Git status monitoring
-- .gitignore handling
-- Branch management (future)
+2. **Editing Loop** (Phase 6)
+   - Complete workflow from prompt to preview
+   - File change detection
+   - Dev server restart
+   - Console error detection and auto-fix
+   - Preview auto-refresh
 
-### 6. **deployment-system.md**
-- Netlify OAuth flow (browser popup)
-- Storing OAuth tokens encrypted
-- Site name validation (check availability)
-- Build process (npm run build)
-- Deploying via Netlify CLI
-- Streaming deployment logs to UI
-- Parsing Netlify CLI output
-- Handling deployment errors
-- Environment variable deployment
-- Domain management (future)
+3. **Git Auto-Commit** (Phase 6)
+   - Commit after successful edits
+   - Store commit history
+   - Future: Commit viewer and rollback
 
-### 7. **image-management.md**
-- images.json schema and tracking
-- Detecting images in templates
-- Image grid UI
-- File picker integration
-- Image cropper component (aspect ratio lock)
-- Crop + resize logic
-- Replacing images in project
-- Updating images.json
-- Triggering dev server restart
-- AI image generation integration (future)
-
-### 8. **template-system.md**
-- Template manifest.json schema
-- Fetching templates from MongoDB
-- Filtering by user plan (free vs premium)
-- GitHub cloning logic
-- Template categories and tags
-- Configuration wizard (dynamic forms based on manifest)
-- Service credential validation
-- Writing to .env files
-- npm install automation
-- Template versioning
-- Creating custom templates (future)
-
-### 9. **database-system.md**
-- SQLite schema design
-- DatabaseService class implementation
-- Project CRUD operations
-- Chat history storage and retrieval
-- Git commit tracking
-- Querying recent projects
-- Full-text search
-- Database migrations
-- Backup/restore
-- MongoDB queries (read-only)
-
-### 10. **output-parsing.md**
-- Claude Code CLI output patterns
-- Parser state machine
-- Regex patterns for different message types
-- Extracting filenames, line numbers, errors
-- Building structured data from terminal output
-- UI component mapping
-- Real-time parsing during streaming
-- Handling multi-line output
-- ANSI color code handling
+4. **Netlify Deployment** (Phase 7)
+   - OAuth integration
+   - Build + deploy workflow
+   - Stream logs to Unified Terminal
+   - Save deployment URLs
 
 ---
 
