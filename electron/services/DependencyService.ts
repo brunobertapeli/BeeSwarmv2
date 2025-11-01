@@ -99,7 +99,8 @@ class DependencyService {
 
   /**
    * Install dependencies for fullstack projects
-   * Checks both frontend/ and backend/ directories
+   * Installs in order: root, frontend, backend
+   * Root dependencies (e.g., netlify-cli) must be installed first
    */
   async installFullstackDependencies(
     projectPath: string,
@@ -108,17 +109,29 @@ class DependencyService {
     const frontendPath = path.join(projectPath, 'frontend')
     const backendPath = path.join(projectPath, 'backend')
 
+    const hasRoot = this.hasPackageJson(projectPath)
     const hasFrontend = this.hasPackageJson(frontendPath)
     const hasBackend = this.hasPackageJson(backendPath)
 
-    if (!hasFrontend && !hasBackend) {
-      // No frontend or backend directories - try root
-      return this.installDependencies(projectPath, onProgress)
+    if (!hasRoot && !hasFrontend && !hasBackend) {
+      return {
+        success: false,
+        error: 'No package.json found in project'
+      }
+    }
+
+    // CRITICAL: Install root dependencies first (netlify-cli, etc.)
+    if (hasRoot) {
+      if (onProgress) onProgress('📦 Installing root dependencies (netlify-cli)...\n')
+      const rootResult = await this.installDependencies(projectPath, onProgress)
+      if (!rootResult.success) {
+        return rootResult
+      }
     }
 
     // Install frontend dependencies
     if (hasFrontend) {
-      if (onProgress) onProgress('📦 Installing frontend dependencies...\n')
+      if (onProgress) onProgress('\n📦 Installing frontend dependencies...\n')
       const frontendResult = await this.installDependencies(frontendPath, onProgress)
       if (!frontendResult.success) {
         return frontendResult

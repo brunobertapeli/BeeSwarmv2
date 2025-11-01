@@ -7,7 +7,7 @@ import { Template } from '../types/electron'
 interface TemplateSelectorProps {
   isOpen: boolean
   onClose: () => void
-  onCreateProject: (templateId: string, projectName: string, projectId: string) => void
+  onCreateProject: (template: Template, projectName: string) => void
 }
 
 // Tech configuration with required API keys
@@ -183,9 +183,7 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
   const [error, setError] = useState<string | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [projectName, setProjectName] = useState('')
-  const [creating, setCreating] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-  const { user, setNewProjectData, setProjectSetupMode, setShowProjectSettings } = useAppStore()
+  const { user } = useAppStore()
 
   // Check if user can access selected template
   const canAccess = selectedTemplate && user ? canAccessTemplate(user.plan, selectedTemplate.requiredPlan) : true
@@ -261,60 +259,15 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '')
 
-  const handleCreate = async () => {
+  const handleCreate = () => {
     if (!selectedTemplate || !projectName.trim()) return
 
-    try {
-      setCreating(true)
-      setCreateError(null)
+    // Just trigger the wizard - it will handle all the creation steps
+    onCreateProject(selectedTemplate, projectName.trim())
 
-      console.log('Creating project:', projectName, 'from template:', selectedTemplate.id)
-
-      // Create project via IPC
-      const result = await window.electronAPI?.projects.create(
-        selectedTemplate.id,
-        projectName.trim()
-      )
-
-      if (result?.success && result.project) {
-        console.log('Project created successfully:', result.project)
-
-        // Update lastOpenedAt for the new project
-        await window.electronAPI?.projects.updateLastOpened(result.project.id)
-
-        // Check if template requires configuration
-        const requiredTechConfigs = getRequiredTechConfigs(selectedTemplate.requiredServices || [])
-
-        // Call the parent callback with project ID FIRST
-        // Parent will refresh projects list and switch to this project
-        onCreateProject(selectedTemplate.id, projectName.trim(), result.project.id)
-
-        // Reset state
-        setProjectName('')
-        setCreating(false)
-        onClose()
-
-        // AFTER closing, set setup mode if needed
-        // This ensures ProjectView can react to the state change
-        if (requiredTechConfigs.length > 0) {
-          setTimeout(() => {
-            setNewProjectData({
-              templateId: selectedTemplate.id,
-              requiredTechConfigs
-            })
-            setProjectSetupMode(true)
-            setShowProjectSettings(true)
-          }, 150)
-        }
-      } else {
-        setCreateError(result?.error || 'Failed to create project')
-        setCreating(false)
-      }
-    } catch (err) {
-      console.error('Error creating project:', err)
-      setCreateError(err instanceof Error ? err.message : 'Unknown error')
-      setCreating(false)
-    }
+    // Reset state and close
+    setProjectName('')
+    onClose()
   }
 
   const handleUpgrade = () => {
@@ -507,12 +460,6 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
 
             {/* Footer - Create/Upgrade Button */}
             <div className="px-5 py-3 border-t border-dark-border/50 bg-dark-bg/20">
-              {createError && (
-                <div className="mb-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg">
-                  <p className="text-xs text-red-400">{createError}</p>
-                </div>
-              )}
-
               {!canAccess ? (
                 // Upgrade Button (when user cannot access template)
                 <button
@@ -530,24 +477,15 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
                 // Create Button (when user can access template)
                 <button
                   onClick={handleCreate}
-                  disabled={!projectName.trim() || creating}
+                  disabled={!projectName.trim()}
                   className={`w-full px-4 py-2 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all ${
-                    projectName.trim() && !creating
+                    projectName.trim()
                       ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20 hover:shadow-primary/40'
                       : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
                   }`}
                 >
-                  {creating ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={14} />
-                      Create Project
-                    </>
-                  )}
+                  <Sparkles size={14} />
+                  Create Project
                 </button>
               )}
             </div>

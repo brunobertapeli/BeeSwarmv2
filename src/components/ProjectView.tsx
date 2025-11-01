@@ -5,12 +5,13 @@ import ActionBar from './ActionBar'
 import ProjectHeader from './ProjectHeader'
 import ProjectSelector from './ProjectSelector'
 import TemplateSelector from './TemplateSelector'
+import { ProjectCreationWizard } from './ProjectCreationWizard'
 import ProjectSettings from './ProjectSettings'
 import TerminalModal from './TerminalModal'
 import DeviceFrame from './DeviceFrame'
 import DesktopPreviewFrame from './DesktopPreviewFrame'
 import DeviceSelector from './DeviceSelector'
-import { Project, ProcessState, ProcessOutput } from '../types/electron'
+import { Project, ProcessState, ProcessOutput, Template } from '../types/electron'
 
 function ProjectView() {
   const {
@@ -41,6 +42,9 @@ function ProjectView() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [showCreationWizard, setShowCreationWizard] = useState(false)
+  const [wizardProjectName, setWizardProjectName] = useState('')
+  const [wizardTemplate, setWizardTemplate] = useState<Template | null>(null)
 
   // Dev server and preview state
   const [serverStatus, setServerStatus] = useState<ProcessState>('stopped')
@@ -86,9 +90,20 @@ function ProjectView() {
 
     const startDevServer = async () => {
       try {
+        // Reset state when switching projects
+        setServerPort(null)
         setServerStatus('starting')
         setPreviewReady(false)
         setTerminalOutput([])
+
+        // Check if server is already running for this project
+        const statusResult = await window.electronAPI?.process.getStatus(currentProject.id)
+        if (statusResult?.success && statusResult.status === 'running' && statusResult.port) {
+          console.log(`Server already running for ${currentProject.id} on port ${statusResult.port}`)
+          setServerPort(statusResult.port)
+          setServerStatus('running')
+          return
+        }
 
         // Check if dependencies are installed
         if (!currentProject.dependenciesInstalled) {
@@ -97,8 +112,20 @@ function ProjectView() {
           if (!installResult?.success) {
             console.error('Failed to install dependencies:', installResult?.error)
             setServerStatus('error')
+            toast.error('Installation failed', installResult?.error || 'Could not install dependencies')
             return
           }
+
+          // Refresh project data to get updated dependenciesInstalled flag
+          const updatedProject = await window.electronAPI?.projects.getById(currentProject.id)
+          if (updatedProject?.success && updatedProject.project) {
+            // Update local projects list with new data
+            setProjects(prev => prev.map(p =>
+              p.id === currentProject.id ? updatedProject.project! : p
+            ))
+          }
+
+          toast.success('Dependencies installed!', 'Starting dev server...')
         }
 
         // Start the dev server
@@ -109,10 +136,12 @@ function ProjectView() {
         } else {
           console.error('Failed to start dev server:', result?.error)
           setServerStatus('error')
+          toast.error('Server failed to start', result?.error || 'Could not start dev server')
         }
       } catch (error) {
         console.error('Error starting dev server:', error)
         setServerStatus('error')
+        toast.error('Error', 'Failed to start project')
       }
     }
 
@@ -217,17 +246,37 @@ function ProjectView() {
     setShowTemplateSelector(true)
   }
 
-  const handleCreateFromTemplate = (templateId: string, projectName: string, projectId: string) => {
-    // Refresh projects list to include the newly created project
+  const handleCreateFromTemplate = (template: Template, projectName: string) => {
+    // Close template selector and open wizard
+    setShowTemplateSelector(false)
+    setWizardProjectName(projectName)
+    setWizardTemplate(template)
+    setShowCreationWizard(true)
+  }
+
+  const handleWizardComplete = async () => {
+    // Wizard is complete - refresh projects and open the new project
+    setShowCreationWizard(false)
     setRefreshKey(prev => prev + 1)
 
-    // Switch to the newly created project after a brief delay to ensure refresh completes
-    setTimeout(() => {
-      setCurrentProject(projectId)
-    }, 100)
+    // Wait for refresh then find and open the new project
+    setTimeout(async () => {
+      const result = await window.electronAPI?.projects.getAll()
+      if (result?.success) {
+        const newProject = result.projects.find(
+          (p: any) => p.name.toLowerCase() === wizardProjectName.toLowerCase()
+        )
+        if (newProject) {
+          setCurrentProject(newProject.id)
+        }
+      }
+    }, 500)
+  }
 
-    setShowTemplateSelector(false)
-    toast.success('Project created!', `${projectName} is ready to use`)
+  const handleWizardCancel = () => {
+    setShowCreationWizard(false)
+    setWizardProjectName('')
+    setWizardTemplateName('')
   }
 
   return (
@@ -254,6 +303,17 @@ function ProjectView() {
         onClose={() => setShowTemplateSelector(false)}
         onCreateProject={handleCreateFromTemplate}
       />
+
+      {/* Project Creation Wizard */}
+      {wizardTemplate && (
+        <ProjectCreationWizard
+          isOpen={showCreationWizard}
+          projectName={wizardProjectName}
+          template={wizardTemplate}
+          onComplete={handleWizardComplete}
+          onCancel={handleWizardCancel}
+        />
+      )}
 
       {/* Preview Area - Desktop or Mobile Mode */}
       <div className="w-full flex-1 relative overflow-hidden">
@@ -285,6 +345,7 @@ function ProjectView() {
             <DesktopPreviewFrame port={serverPort || undefined}>
               {serverPort && serverStatus === 'running' ? (
                 <iframe
+                  key={`${currentProject?.id}-${serverPort}`}
                   src={`http://localhost:${serverPort}`}
                   className="w-full h-full border-0 bg-white"
                   title="Desktop Preview"
@@ -336,6 +397,7 @@ function ProjectView() {
               {/* Preview content inside the device frame */}
               {serverPort && serverStatus === 'running' ? (
                 <iframe
+                  key={`${currentProject?.id}-${serverPort}`}
                   src={`http://localhost:${serverPort}`}
                   className="w-full h-full border-0 bg-white"
                   title="Mobile Preview"

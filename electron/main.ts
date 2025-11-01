@@ -15,6 +15,7 @@ import { registerShellHandlers } from './handlers/shellHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { previewService } from './services/PreviewService.js'
 import { processManager } from './services/ProcessManager.js'
+import { processPersistence } from './services/ProcessPersistence.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -194,8 +195,13 @@ function createWindow() {
 let handlersRegistered = false
 let authHandlersRegistered = false
 
-function initializeApp() {
+async function initializeApp() {
   if (!handlersRegistered) {
+    // CRITICAL: Clean up orphaned processes from previous session
+    // This must run before anything else to free ports and kill zombie processes
+    console.log('🧹 Cleaning up orphaned processes from previous session...')
+    await processPersistence.cleanupStaleProcesses()
+
     // Initialize database
     databaseService.init()
 
@@ -210,8 +216,8 @@ function initializeApp() {
   }
 }
 
-app.whenReady().then(() => {
-  initializeApp()
+app.whenReady().then(async () => {
+  await initializeApp()
   createMenu()
   createWindow()
 

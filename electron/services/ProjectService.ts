@@ -1,5 +1,7 @@
 import { databaseService, Project } from './DatabaseService'
 import { templateService } from './TemplateService'
+import { templateValidator } from './TemplateValidator'
+import { portService } from './PortService'
 import { Template } from './MongoService'
 import fs from 'fs'
 import path from 'path'
@@ -49,7 +51,48 @@ class ProjectService {
 
         console.log('✅ Template cloned to:', clonedPath)
 
-        // Step 4: Update project status to 'ready'
+        // Step 4: Validate template structure
+        const validationResult = templateValidator.validate(clonedPath)
+
+        if (!validationResult.valid) {
+          console.error('❌ Template validation failed:')
+          validationResult.errors.forEach(error => console.error(`   • ${error}`))
+
+          // Update status to error
+          databaseService.updateProjectStatus(project.id, 'error')
+
+          // Throw error with validation details
+          throw new Error(
+            `Template structure validation failed:\n${validationResult.errors.join('\n')}`
+          )
+        }
+
+        // Log warnings but don't fail
+        if (validationResult.warnings.length > 0) {
+          console.warn('⚠️ Template validation warnings:')
+          validationResult.warnings.forEach(warning => console.warn(`   • ${warning}`))
+        }
+
+        console.log('✅ Template structure validated')
+
+        // Step 5: Allocate ports and update configuration files
+        console.log('🔧 Allocating ports and updating configuration...')
+
+        // Allocate paired ports (Netlify + Vite)
+        const netlifyPort = await portService.findAvailablePort(project.id)
+        const vitePort = portService.getVitePort(netlifyPort)
+
+        console.log(`   Allocated: Netlify ${netlifyPort}, Vite ${vitePort}`)
+
+        // Update vite.config.ts with allocated Vite port
+        templateService.updateViteConfig(clonedPath, vitePort)
+
+        // Update netlify.toml with allocated Vite port
+        templateService.updateNetlifyToml(clonedPath, vitePort)
+
+        console.log('✅ Configuration files updated')
+
+        // Step 6: Update project status to 'ready'
         databaseService.updateProjectStatus(project.id, 'ready')
 
         console.log('✅ Project created successfully!')
@@ -96,6 +139,10 @@ class ProjectService {
         console.log('✅ Project deleted from filesystem:', project.path)
       }
     }
+
+    // Release allocated port
+    portService.releasePort(id)
+    console.log('✅ Port released for project:', id)
 
     // Delete from database
     databaseService.deleteProject(id)

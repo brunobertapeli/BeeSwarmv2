@@ -3,6 +3,17 @@
 ## Overview
 This guide explains how to structure templates for BeeSwarm v2 to ensure seamless local development and production deployment.
 
+**CRITICAL**: BeeSwarm now includes automatic template validation. Templates MUST follow this structure exactly or project creation will fail.
+
+**Production Improvements**:
+- ✅ Root dependencies are now installed first (netlify-cli required)
+- ✅ **Automatic port allocation** - each project gets unique Netlify + Vite port pair
+- ✅ **Auto-configuration** - vite.config.ts and netlify.toml updated with allocated ports
+- ✅ Port conflict auto-recovery (supports multiple simultaneous projects)
+- ✅ Orphaned process cleanup on app restart
+- ✅ HTTP health checks for reliable server detection
+- ✅ Template structure validation after cloning
+
 ---
 
 ## Required Directory Structure
@@ -172,7 +183,7 @@ export async function sayHello(name: string) {
 
 ## Root Configuration
 
-### package.json (Root)
+### package.json (Root) - **REQUIRED**
 ```json
 {
   "name": "beeswarm-template",
@@ -186,12 +197,18 @@ export async function sayHello(name: string) {
     "@netlify/functions": "^2.8.2"
   },
   "devDependencies": {
-    "netlify-cli": "^17.37.3"
+    "netlify-cli": "^17.37.3"  // CRITICAL: Required for dev server
   }
 }
 ```
 
-### netlify.toml
+**CRITICAL**:
+- Root package.json is **REQUIRED**
+- `netlify-cli` must be in devDependencies
+- BeeSwarm installs root dependencies FIRST (before frontend/backend)
+- Missing `netlify-cli` will cause dev server to fail
+
+### netlify.toml - **REQUIRED**
 ```toml
 [build]
   # Build command for deployment
@@ -202,7 +219,8 @@ export async function sayHello(name: string) {
   functions = "netlify/functions"
 
 [dev]
-  # Local dev server port
+  # Local dev server port (BeeSwarm allocates ports 8888-8999 automatically)
+  # Port conflicts are handled with auto-retry
   port = 8888
   # Frontend framework detection
   framework = "#custom"
@@ -220,6 +238,16 @@ export async function sayHello(name: string) {
   status = 200
 ```
 
+**Port Management**:
+- BeeSwarm automatically allocates unique port pairs for each project:
+  - Netlify Dev: 8888-8999 (primary proxy server)
+  - Vite Dev: 5174-5285 (frontend dev server)
+  - Port mapping: Netlify 8888 → Vite 5174, Netlify 8889 → Vite 5175, etc.
+- Supports up to 112 simultaneous projects
+- Automatic port conflict detection and retry (3 attempts)
+- **IMPORTANT**: BeeSwarm automatically updates `vite.config.ts` and `netlify.toml` with allocated ports after cloning
+- Templates should use port 5174 as the default base port (will be updated dynamically)
+
 **Important Notes:**
 - Use `npm --prefix frontend run dev` instead of `cd frontend && npm run dev`
 - The `--prefix` approach keeps the process running correctly within netlify dev
@@ -233,21 +261,41 @@ export async function sayHello(name: string) {
 
 1. **Project Creation:**
    - Clone template from GitHub
-   - Run `npm install` in root (installs netlify-cli)
+   - **Validate template structure** (CRITICAL: validates all required files)
+   - **Allocate unique port pair** (Netlify + Vite ports)
+   - **Automatically update** `frontend/vite.config.ts` with allocated Vite port
+   - **Automatically update** `netlify.toml` with allocated Vite port
+   - Run `npm install` in **root FIRST** (installs netlify-cli)
    - Run `npm install` in frontend/ (installs React, Vite)
+   - Run `npm install` in backend/ (if exists)
 
 2. **Starting Dev Server:**
-   - BeeSwarm runs: `npm run dev` (which runs `netlify dev`)
+   - Clean up orphaned processes from previous sessions
+   - Allocate available port (8888-8999)
+   - BeeSwarm runs: `npx netlify dev --port {allocated_port}`
    - Netlify CLI detects `frontend/` and starts Vite automatically
    - Functions server starts alongside
-   - Everything available at `localhost:8888`
+   - **HTTP health check** ensures server is actually ready
+   - If port conflict: auto-retry with new port (max 3 attempts)
 
 3. **Preview Window:**
-   - BeeSwarm opens BrowserView pointing to `localhost:8888`
+   - BeeSwarm opens iframe pointing to `localhost:{port}`
+   - Waits for HTTP 200 response before showing preview
    - User sees frontend running
    - API calls to functions work seamlessly
 
-4. **Deployment:**
+4. **Multiple Projects:**
+   - Run up to 112 projects simultaneously
+   - Each gets unique port automatically
+   - No manual port configuration needed
+   - Processes tracked with PID file for cleanup
+
+5. **Crash Recovery:**
+   - On app restart: kills orphaned processes
+   - Releases stale ports
+   - Ensures clean slate every time
+
+6. **Deployment:**
    - BeeSwarm runs: `netlify deploy --prod`
    - Netlify builds frontend (`npm run build`)
    - Uploads `frontend/dist` to CDN
@@ -522,7 +570,68 @@ saas-starter/
 
 ---
 
+## Template Validation
+
+BeeSwarm automatically validates template structure after cloning. Validation checks:
+
+**Required Files/Directories:**
+- ✅ `package.json` (root) - with netlify-cli
+- ✅ `netlify.toml` - configuration
+- ✅ `frontend/` - directory exists
+- ✅ `frontend/package.json` - with React, Vite
+
+**Optional But Recommended:**
+- ⚠️ `frontend/vite.config.ts` - port 5174 configuration
+- ⚠️ `netlify/functions/` - serverless functions
+
+**Validation Failures:**
+- Missing required files → Project creation fails
+- Missing optional files → Warning logged, project continues
+
+**Common Validation Errors:**
+```
+Missing required file: package.json
+Missing required file: netlify.toml
+Missing required directory: frontend
+Missing netlify-cli in dependencies
+```
+
+To avoid validation failures:
+1. Follow this structure exactly
+2. Include all required files
+3. Add `netlify-cli` to root package.json
+4. Use port 5174 in frontend/vite.config.ts
+
+---
+
 ## Troubleshooting
+
+### Project Creation Fails with "Template validation failed"
+**Cause**: Missing required files or incorrect structure
+
+**Fix**:
+1. Ensure root `package.json` exists
+2. Ensure `netlify.toml` exists
+3. Ensure `frontend/` directory exists
+4. Add `netlify-cli` to devDependencies
+5. Check console for specific missing files
+
+### Dev Server Fails to Start
+**Cause**: Missing netlify-cli or port conflict
+
+**Fix**:
+1. Verify netlify-cli in root package.json
+2. BeeSwarm retries 3 times automatically
+3. Check if ports 8888-8999 are available
+4. Restart BeeSwarm to clean orphaned processes
+
+### "Port already in use" Errors
+**Cause**: Orphaned processes from crash
+
+**Fix**:
+1. Restart BeeSwarm (auto-cleans orphaned processes)
+2. Manually kill processes on ports 8888-8999
+3. BeeSwarm auto-retries with next available port
 
 ### Functions not working locally
 - Check netlify.toml has correct `functions` path
@@ -547,6 +656,14 @@ saas-starter/
 - Check build command in netlify.toml
 - Verify `frontend/dist` created
 - Check for TypeScript errors
+
+### Multiple Projects Won't Start
+**Cause**: Port exhaustion or orphaned processes
+
+**Fix**:
+1. BeeSwarm supports up to 112 simultaneous projects
+2. Restart BeeSwarm to clean up orphaned processes
+3. Stop unused projects to free ports
 
 ---
 

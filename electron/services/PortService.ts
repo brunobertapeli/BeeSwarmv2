@@ -8,8 +8,17 @@ import detect from 'detect-port';
  */
 class PortService {
   private assignedPorts: Map<string, number> = new Map();
-  private readonly DEFAULT_PORT = 8888; // Netlify dev default port
-  private readonly MAX_PORT = 8999;
+  private readonly DEFAULT_NETLIFY_PORT = 8888;
+  private readonly MAX_NETLIFY_PORT = 8999;
+  private readonly DEFAULT_VITE_PORT = 5174;
+
+  /**
+   * Calculate Vite port based on Netlify port
+   * Keeps ports synchronized: Netlify 8888 → Vite 5174, Netlify 8889 → Vite 5175, etc.
+   */
+  private calculateVitePort(netlifyPort: number): number {
+    return this.DEFAULT_VITE_PORT + (netlifyPort - this.DEFAULT_NETLIFY_PORT);
+  }
 
   /**
    * Find an available port starting from the default port (8888)
@@ -30,17 +39,28 @@ class PortService {
     }
 
     // Find next available port
-    let port = this.DEFAULT_PORT;
+    let port = this.DEFAULT_NETLIFY_PORT;
 
-    while (port <= this.MAX_PORT) {
+    while (port <= this.MAX_NETLIFY_PORT) {
       const availablePort = await detect(port);
 
       // detect-port returns the requested port if available,
       // or the next available port if not
       if (availablePort === port) {
-        // Port is available
-        this.assignedPorts.set(projectId, port);
-        return port;
+        // Check if corresponding Vite port is also available
+        const vitePort = this.calculateVitePort(port);
+        const availableVitePort = await detect(vitePort);
+
+        if (availableVitePort === vitePort) {
+          // Both ports are available
+          this.assignedPorts.set(projectId, port);
+          console.log(`✅ Allocated ports for ${projectId}: Netlify ${port}, Vite ${vitePort}`);
+          return port;
+        } else {
+          console.log(`⚠️ Port ${port} available but Vite port ${vitePort} in use, trying next...`);
+          port++;
+          continue;
+        }
       }
 
       // Try the next port
@@ -48,8 +68,17 @@ class PortService {
     }
 
     throw new Error(
-      `No available ports found in range ${this.DEFAULT_PORT}-${this.MAX_PORT}`
+      `No available ports found in range ${this.DEFAULT_NETLIFY_PORT}-${this.MAX_NETLIFY_PORT}`
     );
+  }
+
+  /**
+   * Get the Vite port for a given Netlify port
+   * @param netlifyPort - Netlify dev port
+   * @returns Corresponding Vite port
+   */
+  getVitePort(netlifyPort: number): number {
+    return this.calculateVitePort(netlifyPort);
   }
 
   /**
