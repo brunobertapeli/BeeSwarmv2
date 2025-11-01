@@ -1,6 +1,7 @@
 import { ipcMain, WebContents } from 'electron';
 import { processManager, ProcessState } from '../services/ProcessManager';
 import { databaseService } from '../services/DatabaseService';
+import { terminalAggregator } from '../services/TerminalAggregator';
 
 let mainWindowContents: WebContents | null = null;
 
@@ -148,6 +149,11 @@ function setupProcessEventForwarding(): void {
 
   // Process output
   processManager.on('process-output', (projectId: string, output: any) => {
+    // Forward to terminal aggregator
+    console.log(`📡 Forwarding dev server output to aggregator for ${projectId}`);
+    terminalAggregator.addDevServerLine(projectId, output);
+
+    // Still send to renderer for backward compatibility
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
       mainWindowContents.send('process-output', projectId, output);
     }

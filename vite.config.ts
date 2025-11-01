@@ -22,6 +22,7 @@ export default defineConfig({
                 '@supabase/supabase-js',
                 'better-sqlite3',
                 'simple-git',
+                'node-pty',
                 // MongoDB optional dependencies
                 'kerberos',
                 'mongodb-client-encryption',

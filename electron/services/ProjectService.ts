@@ -46,7 +46,8 @@ class ProjectService {
         // Step 3: Clone template from GitHub
         const clonedPath = await templateService.cloneTemplate(
           template.githubUrl,
-          projectName
+          projectName,
+          project.id // Pass projectId for terminal output
         )
 
         console.log('✅ Template cloned to:', clonedPath)

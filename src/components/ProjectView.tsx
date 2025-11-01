@@ -96,6 +96,9 @@ function ProjectView() {
         setPreviewReady(false)
         setTerminalOutput([])
 
+        // Create terminal session for this project
+        await window.electronAPI?.terminal.createSession(currentProject.id)
+
         // Check if server is already running for this project
         const statusResult = await window.electronAPI?.process.getStatus(currentProject.id)
         if (statusResult?.success && statusResult.status === 'running' && statusResult.port) {
@@ -180,6 +183,11 @@ function ProjectView() {
       unsubOutput?.()
       unsubReady?.()
       unsubError?.()
+
+      // Destroy terminal session when switching projects or unmounting
+      if (currentProject) {
+        window.electronAPI?.terminal.destroySession(currentProject.id)
+      }
     }
   }, [currentProject?.id])
 
@@ -276,7 +284,7 @@ function ProjectView() {
   const handleWizardCancel = () => {
     setShowCreationWizard(false)
     setWizardProjectName('')
-    setWizardTemplateName('')
+    setWizardTemplate(null)
   }
 
   return (
@@ -480,17 +488,18 @@ function ProjectView() {
       />
 
       {/* Terminal Modal */}
-      <TerminalModal
-        isOpen={showTerminal}
-        onClose={() => setShowTerminal(false)}
-        onStop={() => {
-          if (currentProject) {
+      {currentProject && (
+        <TerminalModal
+          isOpen={showTerminal}
+          onClose={() => setShowTerminal(false)}
+          onStop={() => {
             window.electronAPI?.process.stopDevServer(currentProject.id)
             toast.info('Stopping dev server...')
-          }
-        }}
-        output={terminalOutput}
-      />
+          }}
+          projectId={currentProject.id}
+          projectName={currentProject.name}
+        />
+      )}
     </div>
   )
 }

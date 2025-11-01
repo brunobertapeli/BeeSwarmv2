@@ -36,6 +36,14 @@ export interface ProcessOutput {
   raw: string
 }
 
+export interface TerminalLine {
+  timestamp: Date
+  source: 'dev-server' | 'shell' | 'npm' | 'git' | 'claude' | 'system'
+  type: 'stdout' | 'stderr'
+  message: string
+  raw?: string
+}
+
 export interface PreviewBounds {
   x: number
   y: number
@@ -215,6 +223,37 @@ export interface ElectronAPI {
 
   shell: {
     openExternal: (url: string) => Promise<void>
+  }
+
+  terminal: {
+    createSession: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    writeInput: (projectId: string, input: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    resize: (projectId: string, cols: number, rows: number) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    getHistory: (projectId: string, limit?: number) => Promise<{
+      success: boolean
+      lines?: TerminalLine[]
+      error?: string
+    }>
+    clear: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    destroySession: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    onLine: (callback: (projectId: string, line: TerminalLine) => void) => () => void
+    onCleared: (callback: (projectId: string) => void) => () => void
+    onExit: (callback: (projectId: string, exitCode: number, signal?: number) => void) => () => void
   }
 }
 

@@ -245,7 +245,8 @@ export function registerProjectHandlers() {
         (data: string) => {
           // Stream output to renderer
           event.sender.send('dependency-install-progress', data)
-        }
+        },
+        projectId // Pass projectId for terminal output
       )
 
       if (result.success) {

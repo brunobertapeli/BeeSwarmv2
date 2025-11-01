@@ -1,6 +1,7 @@
 import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import { terminalAggregator } from './TerminalAggregator'
 
 /**
  * Service for managing npm dependencies in project directories
@@ -18,11 +19,13 @@ class DependencyService {
    * Install dependencies using npm install
    * @param projectPath - Absolute path to project directory
    * @param onProgress - Callback for streaming output
+   * @param projectId - Optional project ID for terminal output
    * @returns Promise that resolves when installation completes
    */
   async installDependencies(
     projectPath: string,
-    onProgress?: (data: string) => void
+    onProgress?: (data: string) => void,
+    projectId?: string
   ): Promise<{ success: boolean; error?: string }> {
     return new Promise((resolve) => {
       try {
@@ -36,6 +39,10 @@ class DependencyService {
         }
 
         console.log(`📦 Installing dependencies in: ${projectPath}`)
+
+        if (projectId) {
+          terminalAggregator.addNpmLine(projectId, `Installing dependencies in ${path.basename(projectPath)}...\n`)
+        }
 
         // Spawn npm install process
         const npmProcess = spawn('npm', ['install'], {
@@ -54,6 +61,10 @@ class DependencyService {
           if (onProgress) {
             onProgress(text)
           }
+          // Also send to terminal
+          if (projectId) {
+            terminalAggregator.addNpmLine(projectId, text)
+          }
         })
 
         // Capture stderr
@@ -63,15 +74,25 @@ class DependencyService {
           if (onProgress) {
             onProgress(text)
           }
+          // Also send to terminal
+          if (projectId) {
+            terminalAggregator.addNpmLine(projectId, text, 'stderr')
+          }
         })
 
         // Handle process completion
         npmProcess.on('close', (code) => {
           if (code === 0) {
             console.log('✅ Dependencies installed successfully')
+            if (projectId) {
+              terminalAggregator.addNpmLine(projectId, `✓ Dependencies installed successfully\n`)
+            }
             resolve({ success: true })
           } else {
             console.error('❌ npm install failed with code:', code)
+            if (projectId) {
+              terminalAggregator.addNpmLine(projectId, `✗ npm install failed with code ${code}\n`, 'stderr')
+            }
             resolve({
               success: false,
               error: errorOutput || `npm install exited with code ${code}`
@@ -82,6 +103,9 @@ class DependencyService {
         // Handle process errors
         npmProcess.on('error', (error) => {
           console.error('❌ Failed to spawn npm install:', error)
+          if (projectId) {
+            terminalAggregator.addNpmLine(projectId, `✗ Failed to spawn npm install: ${error.message}\n`, 'stderr')
+          }
           resolve({
             success: false,
             error: error.message
@@ -89,6 +113,9 @@ class DependencyService {
         })
       } catch (error) {
         console.error('❌ Error during dependency installation:', error)
+        if (projectId) {
+          terminalAggregator.addNpmLine(projectId, `✗ Error during installation: ${error instanceof Error ? error.message : 'Unknown error'}\n`, 'stderr')
+        }
         resolve({
           success: false,
           error: error instanceof Error ? error.message : 'Unknown error'
@@ -104,7 +131,8 @@ class DependencyService {
    */
   async installFullstackDependencies(
     projectPath: string,
-    onProgress?: (data: string) => void
+    onProgress?: (data: string) => void,
+    projectId?: string
   ): Promise<{ success: boolean; error?: string }> {
     const frontendPath = path.join(projectPath, 'frontend')
     const backendPath = path.join(projectPath, 'backend')
@@ -123,7 +151,10 @@ class DependencyService {
     // CRITICAL: Install root dependencies first (netlify-cli, etc.)
     if (hasRoot) {
       if (onProgress) onProgress('📦 Installing root dependencies (netlify-cli)...\n')
-      const rootResult = await this.installDependencies(projectPath, onProgress)
+      if (projectId) {
+        terminalAggregator.addNpmLine(projectId, '📦 Installing root dependencies (netlify-cli)...\n')
+      }
+      const rootResult = await this.installDependencies(projectPath, onProgress, projectId)
       if (!rootResult.success) {
         return rootResult
       }
@@ -132,7 +163,10 @@ class DependencyService {
     // Install frontend dependencies
     if (hasFrontend) {
       if (onProgress) onProgress('\n📦 Installing frontend dependencies...\n')
-      const frontendResult = await this.installDependencies(frontendPath, onProgress)
+      if (projectId) {
+        terminalAggregator.addNpmLine(projectId, '\n📦 Installing frontend dependencies...\n')
+      }
+      const frontendResult = await this.installDependencies(frontendPath, onProgress, projectId)
       if (!frontendResult.success) {
         return frontendResult
       }
@@ -141,7 +175,10 @@ class DependencyService {
     // Install backend dependencies
     if (hasBackend) {
       if (onProgress) onProgress('\n📦 Installing backend dependencies...\n')
-      const backendResult = await this.installDependencies(backendPath, onProgress)
+      if (projectId) {
+        terminalAggregator.addNpmLine(projectId, '\n📦 Installing backend dependencies...\n')
+      }
+      const backendResult = await this.installDependencies(backendPath, onProgress, projectId)
       if (!backendResult.success) {
         return backendResult
       }

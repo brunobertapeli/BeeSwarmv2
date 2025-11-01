@@ -2,6 +2,7 @@ import { simpleGit, SimpleGit, CleanOptions } from 'simple-git'
 import path from 'path'
 import fs from 'fs'
 import { app } from 'electron'
+import { terminalAggregator } from './TerminalAggregator'
 
 class TemplateService {
   private git: SimpleGit
@@ -34,9 +35,10 @@ class TemplateService {
    * Clone a template from GitHub
    * @param githubUrl - GitHub repository URL
    * @param projectName - Name of the project (will be sanitized for directory name)
+   * @param projectId - Optional project ID for terminal output
    * @returns Full path to the cloned project
    */
-  async cloneTemplate(githubUrl: string, projectName: string): Promise<string> {
+  async cloneTemplate(githubUrl: string, projectName: string, projectId?: string): Promise<string> {
     try {
       // Ensure projects directory exists
       this.ensureProjectsDir()
@@ -54,6 +56,11 @@ class TemplateService {
       console.log('   GitHub URL:', githubUrl)
       console.log('   Destination:', projectPath)
 
+      // Send to terminal if projectId provided
+      if (projectId) {
+        terminalAggregator.addGitLine(projectId, `Cloning template from ${githubUrl}...\n`)
+      }
+
       // Clone the repository
       await this.git.clone(githubUrl, projectPath, {
         '--depth': 1 // Shallow clone for faster cloning
@@ -61,11 +68,19 @@ class TemplateService {
 
       console.log('✅ Template cloned successfully')
 
+      if (projectId) {
+        terminalAggregator.addGitLine(projectId, `✓ Template cloned successfully to ${projectPath}\n`)
+      }
+
       // Remove .git directory to detach from template repo
       const gitDir = path.join(projectPath, '.git')
       if (fs.existsSync(gitDir)) {
         fs.rmSync(gitDir, { recursive: true, force: true })
         console.log('✅ Removed .git directory')
+
+        if (projectId) {
+          terminalAggregator.addGitLine(projectId, `✓ Removed template .git directory\n`)
+        }
       }
 
       // Initialize new git repository
@@ -73,9 +88,18 @@ class TemplateService {
       await projectGit.init()
       console.log('✅ Initialized new git repository')
 
+      if (projectId) {
+        terminalAggregator.addGitLine(projectId, `✓ Initialized new git repository\n`)
+      }
+
       return projectPath
     } catch (error) {
       console.error('❌ Failed to clone template:', error)
+
+      if (projectId) {
+        terminalAggregator.addGitLine(projectId, `✗ Failed to clone template: ${error instanceof Error ? error.message : 'Unknown error'}\n`, 'stderr')
+      }
+
       throw error
     }
   }

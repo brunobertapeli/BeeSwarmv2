@@ -1,92 +1,241 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Square, Trash2, Minimize2, Maximize2, Terminal as TerminalIcon, Copy, Check } from 'lucide-react'
-import { ProcessOutput } from '../types/electron'
-import Convert from 'ansi-to-html'
+import { X, Square, Trash2, Minimize2, Maximize2, Terminal as TerminalIcon, Copy, Check, Send } from 'lucide-react'
+import { Terminal } from 'xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import 'xterm/css/xterm.css'
 
 interface TerminalLine {
-  type: 'stdout' | 'stderr' | 'info'
-  content: string
-  raw: string
   timestamp: Date
+  source: 'dev-server' | 'shell' | 'npm' | 'git' | 'claude' | 'system'
+  type: 'stdout' | 'stderr'
+  message: string
+  raw?: string
 }
 
 interface TerminalModalProps {
   isOpen: boolean
   onClose: () => void
   onStop?: () => void
-  output?: ProcessOutput[]
+  projectId: string
+  projectName: string
 }
 
-const ansiConverter = new Convert({
-  fg: '#fff',
-  bg: '#0a0e14',
-  newline: false,
-  escapeXML: true,
-  stream: false,
-  colors: {
-    0: '#0a0e14',
-    1: '#ff6b6b',
-    2: '#10B981',
-    3: '#ffd93d',
-    4: '#6495ED',
-    5: '#f472b6',
-    6: '#06b6d4',
-    7: '#e5e7eb',
-  }
-})
-
-function TerminalModal({ isOpen, onClose, onStop, output = [] }: TerminalModalProps) {
-  const [history, setHistory] = useState<TerminalLine[]>([])
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: TerminalModalProps) {
   const [isMaximized, setIsMaximized] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
-  const terminalEndRef = useRef<HTMLDivElement>(null)
-  const terminalContentRef = useRef<HTMLDivElement>(null)
+  const [commandInput, setCommandInput] = useState('')
+  const [lineCount, setLineCount] = useState(0)
 
-  // Convert ProcessOutput to TerminalLine format
-  useEffect(() => {
-    const lines: TerminalLine[] = output.map(item => ({
-      type: item.type,
-      content: item.message,
-      raw: item.raw,
-      timestamp: item.timestamp instanceof Date ? item.timestamp : new Date(item.timestamp)
-    }))
+  const terminalRef = useRef<HTMLDivElement>(null)
+  const xtermRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
 
-    // Add initial message if no output yet
-    if (lines.length === 0) {
-      lines.push({
-        type: 'info',
-        content: '$ Waiting for dev server output...',
-        raw: '$ Waiting for dev server output...',
-        timestamp: new Date()
-      })
+  // Helper functions for formatting
+  const formatTimestamp = (date: Date | string) => {
+    const d = date instanceof Date ? date : new Date(date)
+    return d.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+  }
+
+  const formatSourceTag = (source: string): string => {
+    const tags: Record<string, string> = {
+      'dev-server': '[Dev Server]',
+      'shell': '[Shell]',
+      'npm': '[NPM]',
+      'git': '[Git]',
+      'claude': '[Claude]',
+      'system': '[System]',
+    }
+    return tags[source] || `[${source}]`
+  }
+
+  const getSourceColor = (source: string): string => {
+    const colors: Record<string, string> = {
+      'dev-server': '\x1b[36m', // Cyan
+      'shell': '\x1b[32m',      // Green
+      'npm': '\x1b[33m',        // Yellow
+      'git': '\x1b[35m',        // Magenta
+      'claude': '\x1b[34m',     // Blue
+      'system': '\x1b[90m',     // Gray
+    }
+    return colors[source] || '\x1b[37m' // White
+  }
+
+  // Write a line to the terminal with source tag
+  const writeLineToTerminal = (line: TerminalLine) => {
+    console.log('✍️ TerminalModal: Writing line to xterm:', line.source, line.message.substring(0, 50))
+
+    if (!xtermRef.current) {
+      console.warn('⚠️ TerminalModal: xterm ref is null, cannot write')
+      return
     }
 
-    setHistory(lines)
-  }, [output])
+    const terminal = xtermRef.current
 
-  // Auto-scroll to bottom when new lines added (only if user hasn't scrolled up)
-  useEffect(() => {
-    if (shouldAutoScroll && terminalEndRef.current) {
-      terminalEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    // Get source color
+    const sourceColor = getSourceColor(line.source)
+    const sourceTag = formatSourceTag(line.source)
+
+    // Format: [HH:MM:SS] [Source] message
+    const timestamp = formatTimestamp(line.timestamp)
+    const timeColor = '\x1b[90m' // Gray
+    const reset = '\x1b[0m'
+
+    // Write formatted line
+    terminal.write(`${timeColor}[${timestamp}]${reset} ${sourceColor}${sourceTag}${reset} `)
+    terminal.write(line.message)
+
+    // Ensure newline if not present
+    if (!line.message.endsWith('\n')) {
+      terminal.write('\r\n')
     }
-  }, [history, shouldAutoScroll])
 
-  // Detect if user scrolled up manually
+    setLineCount(prev => prev + 1)
+  }
+
+  // Load terminal history from backend
+  const loadTerminalHistory = async () => {
+    try {
+      const result = await window.electronAPI.terminal.getHistory(projectId)
+
+      if (result.success && result.lines) {
+        result.lines.forEach((line: TerminalLine) => {
+          writeLineToTerminal(line)
+        })
+      }
+    } catch (error) {
+      console.error('Failed to load terminal history:', error)
+    }
+  }
+
+  // Initialize xterm.js terminal
   useEffect(() => {
-    const handleScroll = () => {
-      if (!terminalContentRef.current) return
+    console.log('🔍 Terminal init effect running. isOpen:', isOpen, 'terminalRef:', !!terminalRef.current, 'xtermRef:', !!xtermRef.current)
 
-      const { scrollTop, scrollHeight, clientHeight } = terminalContentRef.current
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
-
-      setShouldAutoScroll(isNearBottom)
+    if (!isOpen) return
+    if (!terminalRef.current) {
+      console.warn('⚠️ terminalRef.current is null, waiting for DOM to mount')
+      return
+    }
+    if (xtermRef.current) {
+      console.log('✅ xterm already initialized')
+      return
     }
 
-    const contentRef = terminalContentRef.current
-    contentRef?.addEventListener('scroll', handleScroll)
-    return () => contentRef?.removeEventListener('scroll', handleScroll)
-  }, [])
+    console.log('🖥️ Initializing xterm.js terminal')
+
+    // Create terminal instance
+    const terminal = new Terminal({
+      cursorBlink: false,
+      fontSize: 13,
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      theme: {
+        background: '#0a0e14',
+        foreground: '#e5e7eb',
+        cursor: '#FFD700',
+        black: '#0a0e14',
+        red: '#ff6b6b',
+        green: '#10B981',
+        yellow: '#ffd93d',
+        blue: '#6495ED',
+        magenta: '#f472b6',
+        cyan: '#06b6d4',
+        white: '#e5e7eb',
+        brightBlack: '#6b7280',
+        brightRed: '#fca5a5',
+        brightGreen: '#34d399',
+        brightYellow: '#fde047',
+        brightBlue: '#93c5fd',
+        brightMagenta: '#f9a8d4',
+        brightCyan: '#67e8f9',
+        brightWhite: '#ffffff',
+      },
+      allowProposedApi: true,
+      scrollback: 1000,
+      convertEol: true,
+    })
+
+    // Create fit addon
+    const fitAddon = new FitAddon()
+    terminal.loadAddon(fitAddon)
+
+    // Open terminal in DOM
+    terminal.open(terminalRef.current)
+    fitAddon.fit()
+
+    // Store refs
+    xtermRef.current = terminal
+    fitAddonRef.current = fitAddon
+
+    // Write welcome message
+    terminal.writeln('\x1b[90m╭─────────────────────────────────────────────────────────────╮\x1b[0m')
+    terminal.writeln(`\x1b[90m│\x1b[0m \x1b[33m🐝 ${projectName}\x1b[0m - Unified Terminal${' '.repeat(Math.max(0, 40 - projectName.length))}\x1b[90m│\x1b[0m`)
+    terminal.writeln('\x1b[90m│\x1b[0m \x1b[90mDev Server, Shell, NPM, Git, Claude Code...\x1b[0m            \x1b[90m│\x1b[0m')
+    terminal.writeln('\x1b[90m╰─────────────────────────────────────────────────────────────╯\x1b[0m')
+    terminal.writeln('')
+
+    // Load history if exists
+    loadTerminalHistory()
+
+    // Cleanup
+    return () => {
+      console.log('🧹 Cleaning up xterm terminal')
+      terminal.dispose()
+      xtermRef.current = null
+      fitAddonRef.current = null
+    }
+  }, [isOpen, projectId])
+
+  // Listen for new terminal lines
+  useEffect(() => {
+    if (!isOpen) return
+
+    console.log('🎧 TerminalModal: Setting up event listeners for', projectId)
+
+    const handleTerminalLine = (receivedProjectId: string, line: TerminalLine) => {
+      console.log('📨 TerminalModal: Received line for', receivedProjectId, 'source:', line.source)
+      if (receivedProjectId !== projectId) return
+
+      writeLineToTerminal(line)
+    }
+
+    const handleTerminalCleared = (receivedProjectId: string) => {
+      console.log('🧹 TerminalModal: Terminal cleared for', receivedProjectId)
+      if (receivedProjectId !== projectId) return
+
+      xtermRef.current?.clear()
+      setLineCount(0)
+    }
+
+    const unsubLine = window.electronAPI.terminal.onLine(handleTerminalLine)
+    const unsubCleared = window.electronAPI.terminal.onCleared(handleTerminalCleared)
+
+    return () => {
+      console.log('🔌 TerminalModal: Cleaning up event listeners')
+      unsubLine?.()
+      unsubCleared?.()
+    }
+  }, [isOpen, projectId])
+
+  // Handle window resize
+  useEffect(() => {
+    if (!isOpen || !fitAddonRef.current) return
+
+    const handleResize = () => {
+      setTimeout(() => {
+        fitAddonRef.current?.fit()
+      }, 100)
+    }
+
+    window.addEventListener('resize', handleResize)
+    handleResize() // Fit on open
+
+    return () => window.removeEventListener('resize', handleResize)
+  }, [isOpen, isMaximized])
 
   // Handle ESC key to close
   useEffect(() => {
@@ -100,44 +249,53 @@ function TerminalModal({ isOpen, onClose, onStop, output = [] }: TerminalModalPr
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, onClose])
 
-  const handleClear = () => {
-    setHistory([
-      {
-        type: 'info',
-        content: '$ Terminal cleared',
-        raw: '$ Terminal cleared',
-        timestamp: new Date(),
-      },
-    ])
+  // Handle clear
+  const handleClear = async () => {
+    xtermRef.current?.clear()
+    setLineCount(0)
+
+    // Clear backend buffer
+    await window.electronAPI.terminal.clear(projectId)
   }
 
+  // Handle copy
   const handleCopy = () => {
-    const text = history.map((line) => line.content).join('\n')
-    navigator.clipboard.writeText(text)
-    setIsCopied(true)
-    setTimeout(() => setIsCopied(false), 2000)
-  }
+    if (!xtermRef.current) return
 
-  const getLineColor = (type: TerminalLine['type']) => {
-    switch (type) {
-      case 'stdout':
-        return 'text-gray-200'
-      case 'stderr':
-        return 'text-red-400'
-      case 'info':
-        return 'text-gray-500'
-      default:
-        return 'text-gray-300'
+    const selection = xtermRef.current.getSelection()
+    if (selection) {
+      navigator.clipboard.writeText(selection)
+      setIsCopied(true)
+      setTimeout(() => setIsCopied(false), 2000)
     }
   }
 
-  const formatTimestamp = (date: Date) => {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
-    })
+  // Handle command input submit
+  const handleCommandSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!commandInput.trim()) return
+
+    // Write command to terminal (echo)
+    if (xtermRef.current) {
+      const prompt = '\x1b[32m$\x1b[0m '
+      xtermRef.current.writeln(prompt + commandInput)
+    }
+
+    // Send to backend
+    await window.electronAPI.terminal.writeInput(projectId, commandInput)
+
+    // Clear input
+    setCommandInput('')
+  }
+
+  // Handle command input key down
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Prevent ESC from closing modal when in input
+    if (e.key === 'Escape') {
+      e.stopPropagation()
+      setCommandInput('')
+    }
   }
 
   if (!isOpen) return null
@@ -165,8 +323,10 @@ function TerminalModal({ isOpen, onClose, onStop, output = [] }: TerminalModalPr
               <TerminalIcon size={16} className="text-primary" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-white">Terminal</h2>
-              <p className="text-[10px] text-gray-500">Dev Server Output</p>
+              <h2 className="text-sm font-semibold text-white">
+                Unified Terminal - <span className="text-primary">{projectName}</span>
+              </h2>
+              <p className="text-[10px] text-gray-500">All Operations - Dev Server, Shell, NPM, Git</p>
             </div>
           </div>
 
@@ -176,7 +336,7 @@ function TerminalModal({ isOpen, onClose, onStop, output = [] }: TerminalModalPr
             <button
               onClick={handleCopy}
               className="p-2 hover:bg-dark-bg/70 rounded-lg transition-all group relative"
-              title="Copy all output"
+              title="Copy selection"
             >
               {isCopied ? (
                 <Check size={14} className="text-primary" />
@@ -199,7 +359,7 @@ function TerminalModal({ isOpen, onClose, onStop, output = [] }: TerminalModalPr
               <button
                 onClick={onStop}
                 className="p-2 hover:bg-red-500/10 rounded-lg transition-all group"
-                title="Stop execution"
+                title="Stop dev server"
               >
                 <Square size={14} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
               </button>
@@ -229,69 +389,47 @@ function TerminalModal({ isOpen, onClose, onStop, output = [] }: TerminalModalPr
           </div>
         </div>
 
-        {/* Terminal Content */}
-        <div className="flex-1 overflow-hidden bg-[#0a0e14] font-mono">
-          <div
-            ref={terminalContentRef}
-            className="h-full overflow-y-auto p-4 space-y-1 terminal-scrollbar"
-          >
-            {history.map((line, idx) => (
-              <div key={idx} className="flex items-start gap-3 group">
-                {/* Timestamp */}
-                <span className="text-[10px] text-gray-600 font-normal select-none flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {formatTimestamp(line.timestamp)}
-                </span>
-
-                {/* Content with ANSI colors */}
-                <div
-                  className={`text-[13px] leading-relaxed flex-1 ${getLineColor(line.type)}`}
-                  dangerouslySetInnerHTML={{
-                    __html: ansiConverter.toHtml(line.raw)
-                  }}
-                />
-              </div>
-            ))}
-
-            {/* Auto-scroll anchor */}
-            <div ref={terminalEndRef} />
-
-            {/* Cursor */}
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-primary text-sm">$</span>
-              <div className="w-2 h-4 bg-primary animate-pulse" />
-            </div>
-          </div>
+        {/* Terminal Content (xterm.js) */}
+        <div className="flex-1 overflow-hidden bg-[#0a0e14]">
+          <div ref={terminalRef} className="h-full w-full p-2" />
         </div>
+
+        {/* Command Input */}
+        <form onSubmit={handleCommandSubmit} className="border-t border-dark-border bg-dark-bg/30">
+          <div className="flex items-center gap-2 px-4 py-2">
+            <span className="text-green-400 text-sm font-mono">$</span>
+            <input
+              type="text"
+              value={commandInput}
+              onChange={(e) => setCommandInput(e.target.value)}
+              onKeyDown={handleInputKeyDown}
+              placeholder="Type a command and press Enter..."
+              className="flex-1 bg-transparent text-white text-sm font-mono outline-none placeholder:text-gray-600"
+              autoComplete="off"
+            />
+            <button
+              type="submit"
+              disabled={!commandInput.trim()}
+              className="p-1.5 hover:bg-primary/10 rounded transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              title="Run command"
+            >
+              <Send size={14} className="text-primary" />
+            </button>
+          </div>
+        </form>
 
         {/* Terminal Footer - Info Bar */}
         <div className="flex items-center justify-between px-4 py-2 border-t border-dark-border bg-dark-bg/30">
           <div className="flex items-center gap-4 text-[10px]">
-            <span className="text-gray-500">Lines: <span className="text-white">{history.length}</span></span>
+            <span className="text-gray-500">Lines: <span className="text-white">{lineCount}</span></span>
             <span className="text-gray-500">•</span>
-            <span className="text-gray-500">Status: <span className="text-primary">Connected</span></span>
+            <span className="text-gray-500">Project: <span className="text-primary">{projectId}</span></span>
           </div>
           <div className="text-[10px] text-gray-500">
             Press <kbd className="px-1.5 py-0.5 bg-dark-bg border border-dark-border rounded text-[9px]">Esc</kbd> to close
           </div>
         </div>
       </div>
-
-      {/* Custom scrollbar styles */}
-      <style>{`
-        .terminal-scrollbar::-webkit-scrollbar {
-          width: 8px;
-        }
-        .terminal-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .terminal-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.1);
-          border-radius: 4px;
-        }
-        .terminal-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.15);
-        }
-      `}</style>
     </div>
   )
 }

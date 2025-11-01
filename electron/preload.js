@@ -146,5 +146,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Shell methods
   shell: {
     openExternal: (url) => ipcRenderer.invoke('shell:open-external', url)
+  },
+
+  // Terminal methods
+  terminal: {
+    createSession: (projectId) => ipcRenderer.invoke('terminal:create-session', projectId),
+    writeInput: (projectId, input) => ipcRenderer.invoke('terminal:write-input', projectId, input),
+    resize: (projectId, cols, rows) => ipcRenderer.invoke('terminal:resize', projectId, cols, rows),
+    getHistory: (projectId, limit) => ipcRenderer.invoke('terminal:get-history', projectId, limit),
+    clear: (projectId) => ipcRenderer.invoke('terminal:clear', projectId),
+    destroySession: (projectId) => ipcRenderer.invoke('terminal:destroy-session', projectId),
+
+    // Terminal event listeners
+    onLine: (callback) => {
+      const listener = (_event, projectId, line) => callback(projectId, line)
+      ipcRenderer.on('terminal:line', listener)
+      return () => ipcRenderer.removeListener('terminal:line', listener)
+    },
+    onCleared: (callback) => {
+      const listener = (_event, projectId) => callback(projectId)
+      ipcRenderer.on('terminal:cleared', listener)
+      return () => ipcRenderer.removeListener('terminal:cleared', listener)
+    },
+    onExit: (callback) => {
+      const listener = (_event, projectId, exitCode, signal) => callback(projectId, exitCode, signal)
+      ipcRenderer.on('terminal:exit', listener)
+      return () => ipcRenderer.removeListener('terminal:exit', listener)
+    }
   }
 })

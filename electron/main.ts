@@ -12,10 +12,12 @@ import { registerProjectHandlers } from './handlers/projectHandlers.js'
 import { registerProcessHandlers, setProcessHandlersWindow } from './handlers/processHandlers.js'
 import { registerPreviewHandlers, setPreviewHandlersWindow } from './handlers/previewHandlers.js'
 import { registerShellHandlers } from './handlers/shellHandlers.js'
+import { registerTerminalHandlers, setTerminalHandlersWindow } from './handlers/terminalHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { previewService } from './services/PreviewService.js'
 import { processManager } from './services/ProcessManager.js'
 import { processPersistence } from './services/ProcessPersistence.js'
+import { terminalService } from './services/TerminalService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -189,6 +191,7 @@ function createWindow() {
   // Set up event forwarding windows
   setProcessHandlersWindow(mainWindow.webContents)
   setPreviewHandlersWindow(mainWindow.webContents)
+  setTerminalHandlersWindow(mainWindow.webContents)
 }
 
 // Initialize database and register IPC handlers only once
@@ -211,6 +214,7 @@ async function initializeApp() {
     registerProcessHandlers()
     registerPreviewHandlers()
     registerShellHandlers()
+    registerTerminalHandlers()
 
     handlersRegistered = true
   }
@@ -242,6 +246,9 @@ app.on('window-all-closed', () => {
   processManager.stopAll().catch((error) => {
     console.error('Error stopping processes:', error)
   })
+
+  // Destroy all terminal sessions
+  terminalService.destroyAllSessions()
 
   // Destroy all previews
   previewService.destroyAll()
