@@ -1,16 +1,99 @@
-import { Mail } from 'lucide-react'
+import { Mail, Loader2 } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
+import { useState, useEffect } from 'react'
 
 interface LoginProps {
-  onLoginSuccess: () => void
+  onLoginSuccess: (user: any) => void
 }
 
 function Login({ onLoginSuccess }: LoginProps) {
   const toast = useToast()
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
 
-  const handleLogin = (provider: string) => {
-    toast.success('Welcome back!', `Logging in with ${provider}...`)
-    onLoginSuccess()
+  useEffect(() => {
+    // Listen for auth success from popup window
+    if (window.electronAPI?.auth) {
+      const cleanupSuccess = window.electronAPI.auth.onAuthSuccess((result: any) => {
+        setIsLoading(false)
+        setLoadingProvider(null)
+        toast.success('Welcome!', `Successfully logged in as ${result.user.name}`)
+        onLoginSuccess(result.user)
+      })
+
+      const cleanupError = window.electronAPI.auth.onAuthError((result: any) => {
+        setIsLoading(false)
+        setLoadingProvider(null)
+        toast.error('Login failed', result.error || 'An unknown error occurred')
+      })
+
+      return () => {
+        cleanupSuccess?.()
+        cleanupError?.()
+      }
+    }
+  }, [onLoginSuccess, toast])
+
+  const handleGoogleLogin = async () => {
+    try {
+      setIsLoading(true)
+      setLoadingProvider('Google')
+
+      const result = await window.electronAPI?.auth.signInWithGoogle()
+
+      if (!result?.success) {
+        toast.error('Login failed', result?.error || 'Failed to initiate Google login')
+        setIsLoading(false)
+        setLoadingProvider(null)
+      }
+      // Don't show toast here - popup window will handle auth
+    } catch (error: any) {
+      toast.error('Login failed', error.message || 'An error occurred')
+      setIsLoading(false)
+      setLoadingProvider(null)
+    }
+  }
+
+  const handleFacebookLogin = async () => {
+    try {
+      setIsLoading(true)
+      setLoadingProvider('Facebook')
+
+      const result = await window.electronAPI?.auth.signInWithFacebook()
+
+      if (!result?.success) {
+        toast.error('Login failed', result?.error || 'Failed to initiate Facebook login')
+        setIsLoading(false)
+        setLoadingProvider(null)
+      }
+    } catch (error: any) {
+      toast.error('Login failed', error.message || 'An error occurred')
+      setIsLoading(false)
+      setLoadingProvider(null)
+    }
+  }
+
+  const handleGithubLogin = async () => {
+    try {
+      setIsLoading(true)
+      setLoadingProvider('GitHub')
+
+      const result = await window.electronAPI?.auth.signInWithGithub()
+
+      if (!result?.success) {
+        toast.error('Login failed', result?.error || 'Failed to initiate GitHub login')
+        setIsLoading(false)
+        setLoadingProvider(null)
+      }
+    } catch (error: any) {
+      toast.error('Login failed', error.message || 'An error occurred')
+      setIsLoading(false)
+      setLoadingProvider(null)
+    }
+  }
+
+  const handleEmailLogin = () => {
+    toast.info('Coming soon', 'Email login will be available in a future update')
   }
 
   return (
@@ -42,8 +125,9 @@ function Login({ onLoginSuccess }: LoginProps) {
         <div className="space-y-3">
           {/* Google Login */}
           <button
-            onClick={() => handleLogin('Google')}
-            className="w-full bg-white hover:bg-gray-50 text-gray-800 font-medium py-3.5 px-4 rounded-lg flex items-center justify-center gap-3 transition-all duration-200 shadow-sm hover:shadow-md"
+            onClick={handleGoogleLogin}
+            disabled={isLoading}
+            className="w-full bg-white hover:bg-gray-50 text-gray-800 font-medium py-3.5 px-4 rounded-lg flex items-center justify-center gap-3 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M19.9895 10.1871C19.9895 9.36767 19.9214 8.76973 19.7742 8.14966H10.1992V11.848H15.8195C15.7062 12.7671 15.0943 14.1512 13.7346 15.0813L13.7155 15.2051L16.7429 17.4969L16.9527 17.5174C18.879 15.7789 19.9895 13.221 19.9895 10.1871Z" fill="#4285F4"/>
@@ -51,18 +135,40 @@ function Login({ onLoginSuccess }: LoginProps) {
               <path d="M4.39748 11.9366C4.18219 11.3166 4.05759 10.6521 4.05759 9.96565C4.05759 9.27909 4.18219 8.61473 4.38615 7.99466L4.38045 7.8626L1.19304 5.44366L1.08875 5.49214C0.397576 6.84305 0.000976562 8.36008 0.000976562 9.96565C0.000976562 11.5712 0.397576 13.0882 1.08875 14.4391L4.39748 11.9366Z" fill="#FBBC05"/>
               <path d="M10.1993 3.85336C12.1142 3.85336 13.406 4.66168 14.1425 5.33717L17.0207 2.59107C15.253 0.985496 12.9527 0 10.1993 0C6.2106 0 2.76588 2.23672 1.08887 5.49214L4.38626 7.99466C5.21352 5.59183 7.50242 3.85336 10.1993 3.85336Z" fill="#EB4335"/>
             </svg>
+            {loadingProvider === 'Google' ? (
+              <Loader2 className="animate-spin" size={20} />
+            ) : null}
             <span>Continue with Google</span>
           </button>
 
           {/* Facebook Login */}
           <button
-            onClick={() => handleLogin('Facebook')}
-            className="w-full bg-[#1877F2] hover:bg-[#0C63D4] text-white font-medium py-3.5 px-4 rounded-lg flex items-center justify-center gap-3 transition-all duration-200 shadow-sm hover:shadow-md"
+            onClick={handleFacebookLogin}
+            disabled={isLoading}
+            className="w-full bg-[#1877F2] hover:bg-[#0C63D4] text-white font-medium py-3.5 px-4 rounded-lg flex items-center justify-center gap-3 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M20 10C20 4.477 15.523 0 10 0S0 4.477 0 10c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V10h2.54V7.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V10h2.773l-.443 2.89h-2.33v6.988C16.343 19.128 20 14.991 20 10z" fill="white"/>
             </svg>
+            {loadingProvider === 'Facebook' ? (
+              <Loader2 className="animate-spin" size={20} />
+            ) : null}
             <span>Continue with Facebook</span>
+          </button>
+
+          {/* GitHub Login */}
+          <button
+            onClick={handleGithubLogin}
+            disabled={isLoading}
+            className="w-full bg-[#24292e] hover:bg-[#1b1f23] text-white font-medium py-3.5 px-4 rounded-lg flex items-center justify-center gap-3 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path fillRule="evenodd" clipRule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.163 20 14.418 20 10c0-5.523-4.477-10-10-10z" fill="white"/>
+            </svg>
+            {loadingProvider === 'GitHub' ? (
+              <Loader2 className="animate-spin" size={20} />
+            ) : null}
+            <span>Continue with GitHub</span>
           </button>
         </div>
 
@@ -75,8 +181,9 @@ function Login({ onLoginSuccess }: LoginProps) {
 
         {/* Email Login */}
         <button
-          onClick={() => handleLogin('Email')}
-          className="w-full bg-dark-bg border border-dark-border hover:border-primary/50 text-white font-medium py-3.5 px-4 rounded-lg flex items-center justify-center gap-3 transition-all duration-200"
+          onClick={handleEmailLogin}
+          disabled={isLoading}
+          className="w-full bg-dark-bg border border-dark-border hover:border-primary/50 text-white font-medium py-3.5 px-4 rounded-lg flex items-center justify-center gap-3 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Mail size={20} className="text-gray-400" />
           <span>Continue with Email</span>

@@ -1,13 +1,40 @@
+// IMPORTANT: Load environment variables FIRST before any other imports
+import dotenv from 'dotenv'
+dotenv.config()
+
+// Now import everything else
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { registerAuthHandlers } from './handlers/authHandlers'
+import { registerTemplateHandlers } from './handlers/templateHandlers'
+import { registerProjectHandlers } from './handlers/projectHandlers'
+import { databaseService } from './services/DatabaseService'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// Debug: Log if environment variables are loaded
 const isDev = process.env.NODE_ENV !== 'production'
+console.log('\n🔧 BeeSwarm Starting...')
+console.log('🔧 Development mode:', isDev)
+console.log('📁 CWD:', process.cwd())
+console.log('📁 __dirname:', __dirname)
+console.log('✅ VITE_SUPABASE_URL:', !!process.env.VITE_SUPABASE_URL)
+console.log('✅ MONGODB_URI:', !!process.env.MONGODB_URI)
+console.log('')
+
 
 let mainWindow: BrowserWindow | null = null
+
+// Register custom protocol for OAuth callback
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('beeswarm', process.execPath, [path.resolve(process.argv[1])])
+  }
+} else {
+  app.setAsDefaultProtocolClient('beeswarm')
+}
 
 function createMenu() {
   const template: any[] = [
@@ -116,12 +143,27 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: '#0F1116',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: false, // Needed for some Electron features
     },
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 15, y: 15 },
+  })
+
+  // Set Content Security Policy
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          isDev
+            ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; img-src 'self' https://* data:; connect-src 'self' http://localhost:* ws://localhost:*"
+            : "default-src 'self'; img-src 'self' https://* data:; connect-src 'self'"
+        ]
+      }
+    })
   })
 
   if (isDev) {
@@ -134,6 +176,14 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  // Initialize database
+  databaseService.init()
+
+  // Register IPC handlers
+  registerAuthHandlers(mainWindow)
+  registerTemplateHandlers()
+  registerProjectHandlers()
 }
 
 app.whenReady().then(() => {
@@ -152,3 +202,36 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+// Handle OAuth callback URLs (macOS)
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+
+  if (url.startsWith('beeswarm://auth/callback')) {
+    // Send the callback URL to the renderer process
+    if (mainWindow) {
+      mainWindow.webContents.send('auth:callback', url)
+    }
+  }
+})
+
+// Handle OAuth callback URLs (Windows/Linux)
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+
+      // Check for auth callback in command line
+      const url = commandLine.find(arg => arg.startsWith('beeswarm://'))
+      if (url && url.startsWith('beeswarm://auth/callback')) {
+        mainWindow.webContents.send('auth:callback', url)
+      }
+    }
+  })
+}

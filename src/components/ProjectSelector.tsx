@@ -13,17 +13,7 @@ import {
   Globe
 } from 'lucide-react'
 import TechIcon from './TechIcon'
-
-interface Project {
-  id: string
-  name: string
-  path: string
-  lastAccessed: Date
-  isFavorite: boolean
-  techStack: string[]
-  isDeployed?: boolean
-  deploymentUrl?: string
-}
+import { Project, Template } from '../types/electron'
 
 interface ProjectSelectorProps {
   isOpen: boolean
@@ -31,71 +21,16 @@ interface ProjectSelectorProps {
   onClose: () => void
   onSelectProject: (projectId: string) => void
   onCreateProject: () => void
+  onProjectUpdated?: () => void
 }
 
-// Mock projects with random tech stacks
-const mockProjects: Project[] = [
-  {
-    id: '1',
-    name: 'E-commerce Dashboard',
-    path: '~/Documents/BeeSwarm/Projects/ecommerce-dashboard',
-    lastAccessed: new Date(Date.now() - 1000 * 60 * 30),
-    isFavorite: true,
-    techStack: ['react', 'materialui', 'node', 'mongodb', 'stripe'],
-    isDeployed: true,
-    deploymentUrl: 'https://ecommerce-dash.netlify.app',
-  },
-  {
-    id: '2',
-    name: 'SaaS Landing Page',
-    path: '~/Documents/BeeSwarm/Projects/saas-landing',
-    lastAccessed: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    isFavorite: true,
-    techStack: ['react', 'supabase', 'stripe'],
-  },
-  {
-    id: '3',
-    name: 'Portfolio Website',
-    path: '~/Documents/BeeSwarm/Projects/portfolio',
-    lastAccessed: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    isFavorite: false,
-    techStack: ['react', 'materialui', 'node'],
-    isDeployed: true,
-    deploymentUrl: 'https://myportfolio.netlify.app',
-  },
-  {
-    id: '4',
-    name: 'Blog Platform',
-    path: '~/Documents/BeeSwarm/Projects/blog-platform',
-    lastAccessed: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3),
-    isFavorite: false,
-    techStack: ['react', 'node', 'mongodb'],
-  },
-  {
-    id: '5',
-    name: 'Task Management App',
-    path: '~/Documents/BeeSwarm/Projects/task-manager',
-    lastAccessed: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5),
-    isFavorite: false,
-    techStack: ['react', 'supabase'],
-  },
-  {
-    id: '6',
-    name: 'Social Media Dashboard',
-    path: '~/Documents/BeeSwarm/Projects/social-dashboard',
-    lastAccessed: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7),
-    isFavorite: false,
-    techStack: ['react', 'node', 'mongodb'],
-  },
-  {
-    id: '7',
-    name: 'Weather Forecast App',
-    path: '~/Documents/BeeSwarm/Projects/weather-app',
-    lastAccessed: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10),
-    isFavorite: false,
-    techStack: ['react', 'node'],
-  },
-]
+// Extended project type with UI-specific fields
+interface ProjectWithMeta extends Project {
+  isFavorite?: boolean
+  techStack?: string[]
+  isDeployed?: boolean
+  deploymentUrl?: string
+}
 
 function ProjectSelector({
   isOpen,
@@ -103,9 +38,72 @@ function ProjectSelector({
   onClose,
   onSelectProject,
   onCreateProject,
+  onProjectUpdated,
 }: ProjectSelectorProps) {
-  const [projects, setProjects] = useState<Project[]>(mockProjects)
+  const [projects, setProjects] = useState<ProjectWithMeta[]>([])
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null)
+  const [deletingProject, setDeletingProject] = useState<ProjectWithMeta | null>(null)
+  const [deleteConfirmName, setDeleteConfirmName] = useState('')
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
+
+  const handleMenuOpen = (projectId: string, buttonRect: DOMRect) => {
+    setMenuPosition({
+      top: buttonRect.bottom + 4,
+      right: window.innerWidth - buttonRect.right
+    })
+    setActiveMenu(projectId)
+  }
+
+  const handleMenuClose = () => {
+    setActiveMenu(null)
+    setMenuPosition(null)
+  }
+
+  // Fetch projects and templates from database
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isOpen) return
+
+      try {
+        setLoading(true)
+        setError(null)
+
+        // Fetch projects and templates in parallel
+        const [projectsResult, templatesResult] = await Promise.all([
+          window.electronAPI?.projects.getAll(),
+          window.electronAPI?.templates.fetch()
+        ])
+
+        if (projectsResult?.success && projectsResult.projects) {
+          // Map template tech stacks to projects
+          const projectsWithTech = projectsResult.projects.map(project => {
+            const template = templatesResult?.templates?.find(t => t.id === project.templateId)
+            return {
+              ...project,
+              techStack: template?.techStack || [],
+              isDeployed: false, // TODO: Check deployment status
+              deploymentUrl: undefined
+            }
+          })
+          setProjects(projectsWithTech)
+          setTemplates(templatesResult?.templates || [])
+        } else {
+          setError(projectsResult?.error || 'Failed to fetch projects')
+        }
+      } catch (err) {
+        console.error('Error fetching projects:', err)
+        setError(err instanceof Error ? err.message : 'Unknown error')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [isOpen])
 
   useEffect(() => {
     if (!isOpen) {
@@ -116,22 +114,89 @@ function ProjectSelector({
   const favoriteProjects = projects.filter((p) => p.isFavorite)
   const recentProjects = projects.filter((p) => !p.isFavorite)
 
-  const formatLastAccessed = (date: Date) => {
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
+  const formatLastAccessed = (timestamp: number | null) => {
+    if (!timestamp) return 'Never'
+
+    const now = Date.now()
+    const diff = now - timestamp
     const minutes = Math.floor(diff / 1000 / 60)
     const hours = Math.floor(minutes / 60)
     const days = Math.floor(hours / 24)
 
+    if (minutes < 1) return 'Just now'
     if (minutes < 60) return `${minutes}m ago`
     if (hours < 24) return `${hours}h ago`
     return `${days}d ago`
   }
 
-  const toggleFavorite = (projectId: string) => {
-    setProjects(projects.map(p =>
-      p.id === projectId ? { ...p, isFavorite: !p.isFavorite } : p
-    ))
+  const toggleFavorite = async (projectId: string) => {
+    try {
+      const result = await window.electronAPI?.projects.toggleFavorite(projectId)
+      if (result?.success) {
+        // Update local state with the new favorite status
+        setProjects(projects.map(p =>
+          p.id === projectId ? { ...p, isFavorite: result.isFavorite || false } : p
+        ))
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error)
+    }
+  }
+
+  const handleDeleteStart = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId)
+    if (!project) return
+
+    setDeletingProject(project)
+    setDeleteConfirmName('')
+    setActiveMenu(null)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingProject) return
+
+    try {
+      const result = await window.electronAPI?.projects.delete(deletingProject.id)
+      if (result?.success) {
+        // Remove from local state
+        setProjects(projects.filter(p => p.id !== deletingProject.id))
+        setDeletingProject(null)
+        setDeleteConfirmName('')
+
+        // Notify parent to refresh
+        onProjectUpdated?.()
+      }
+    } catch (error) {
+      console.error('Error deleting project:', error)
+    }
+  }
+
+  const handleRename = async (projectId: string, newName: string) => {
+    if (!newName.trim()) return
+
+    try {
+      const result = await window.electronAPI?.projects.rename(projectId, newName.trim())
+      if (result?.success && result.project) {
+        // Update local state
+        setProjects(projects.map(p =>
+          p.id === projectId ? { ...p, name: result.project!.name, path: result.project!.path } : p
+        ))
+
+        // Notify parent to refresh
+        onProjectUpdated?.()
+      }
+    } catch (error) {
+      console.error('Error renaming project:', error)
+    }
+  }
+
+  const handleShowInFinder = async (projectId: string) => {
+    try {
+      await window.electronAPI?.projects.showInFinder(projectId)
+      setActiveMenu(null)
+    } catch (error) {
+      console.error('Error showing in Finder:', error)
+    }
   }
 
   if (!isOpen) return null
@@ -145,7 +210,7 @@ function ProjectSelector({
       />
 
       {/* Modal */}
-      <div className="relative w-[520px] max-h-[70vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden">
+      <div className="relative w-[520px] max-h-[70vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-visible">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border/50">
           <div>
@@ -163,9 +228,35 @@ function ProjectSelector({
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(70vh-140px)]">
-          {/* Favorites Section */}
-          {favoriteProjects.length > 0 && (
+        <div className="overflow-y-auto max-h-[calc(70vh-140px)] overflow-x-visible">
+          {/* Loading State */}
+          {loading && (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="w-8 h-8 border-2 border-primary-blue border-t-transparent rounded-full animate-spin mb-3" />
+              <p className="text-xs text-gray-400">Loading projects...</p>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && !loading && (
+            <div className="flex flex-col items-center justify-center py-12 px-4">
+              <p className="text-xs text-red-400 mb-2">Failed to load projects</p>
+              <p className="text-[10px] text-gray-500 text-center">{error}</p>
+            </div>
+          )}
+
+          {/* Empty State - No Projects */}
+          {!loading && !error && projects.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 px-4">
+              <p className="text-xs text-gray-500">No projects in database</p>
+            </div>
+          )}
+
+          {/* Projects List */}
+          {!loading && !error && projects.length > 0 && (
+            <>
+              {/* Favorites Section */}
+              {favoriteProjects.length > 0 && (
             <div className="px-4 py-3">
               <div className="flex items-center gap-1.5 mb-2">
                 <Star size={12} className="text-yellow-500 fill-yellow-500" />
@@ -179,11 +270,18 @@ function ProjectSelector({
                     key={project.id}
                     project={project}
                     isActive={project.id === currentProjectId}
+                    isEditing={editingProjectId === project.id}
                     onSelect={() => onSelectProject(project.id)}
                     onToggleFavorite={() => toggleFavorite(project.id)}
                     formatLastAccessed={formatLastAccessed}
                     activeMenu={activeMenu}
-                    setActiveMenu={setActiveMenu}
+                    onMenuOpen={handleMenuOpen}
+                    onMenuClose={handleMenuClose}
+                    onDelete={handleDeleteStart}
+                    onRename={handleRename}
+                    onShowInFinder={handleShowInFinder}
+                    onStartRename={() => setEditingProjectId(project.id)}
+                    onCancelRename={() => setEditingProjectId(null)}
                   />
                 ))}
               </div>
@@ -212,15 +310,24 @@ function ProjectSelector({
                     key={project.id}
                     project={project}
                     isActive={project.id === currentProjectId}
+                    isEditing={editingProjectId === project.id}
                     onSelect={() => onSelectProject(project.id)}
                     onToggleFavorite={() => toggleFavorite(project.id)}
                     formatLastAccessed={formatLastAccessed}
                     activeMenu={activeMenu}
-                    setActiveMenu={setActiveMenu}
+                    onMenuOpen={handleMenuOpen}
+                    onMenuClose={handleMenuClose}
+                    onDelete={handleDeleteStart}
+                    onRename={handleRename}
+                    onShowInFinder={handleShowInFinder}
+                    onStartRename={() => setEditingProjectId(project.id)}
+                    onCancelRename={() => setEditingProjectId(null)}
                   />
                 ))}
               </div>
             </div>
+          )}
+            </>
           )}
         </div>
 
@@ -235,29 +342,123 @@ function ProjectSelector({
           </button>
         </div>
       </div>
+
+      {/* Project Row Menu - rendered with fixed positioning */}
+      {activeMenu && (
+        <ProjectRowMenu
+          project={projects.find(p => p.id === activeMenu)!}
+          isOpen={true}
+          position={menuPosition}
+          onClose={handleMenuClose}
+          onStartRename={() => {
+            setEditingProjectId(activeMenu)
+          }}
+          onShowInFinder={() => {
+            handleShowInFinder(activeMenu)
+          }}
+          onDelete={() => {
+            handleDeleteStart(activeMenu)
+          }}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingProject && (
+        <div className="absolute inset-0 z-[110] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => {
+              setDeletingProject(null)
+              setDeleteConfirmName('')
+            }}
+          />
+          <div className="relative w-[420px] bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-2">Delete Project</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              This will permanently delete <span className="text-white font-medium">"{deletingProject.name}"</span> and remove the project folder from your computer. This action cannot be undone.
+            </p>
+            <div className="mb-4">
+              <label className="text-xs text-gray-400 mb-2 block">
+                Type <span className="text-white font-medium">{deletingProject.name}</span> to confirm:
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmName}
+                onChange={(e) => setDeleteConfirmName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && deleteConfirmName === deletingProject.name) {
+                    handleDeleteConfirm()
+                  }
+                  if (e.key === 'Escape') {
+                    setDeletingProject(null)
+                    setDeleteConfirmName('')
+                  }
+                }}
+                className="w-full px-4 py-2 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+                placeholder={deletingProject.name}
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setDeletingProject(null)
+                  setDeleteConfirmName('')
+                }}
+                className="flex-1 px-4 py-2 bg-dark-bg hover:bg-dark-bg/70 text-gray-300 text-sm font-medium rounded-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleteConfirmName !== deletingProject.name}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Delete Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 interface ProjectRowProps {
-  project: Project
+  project: ProjectWithMeta
   isActive: boolean
+  isEditing: boolean
   onSelect: () => void
   onToggleFavorite: () => void
-  formatLastAccessed: (date: Date) => string
+  formatLastAccessed: (timestamp: number | null) => string
   activeMenu: string | null
-  setActiveMenu: (id: string | null) => void
+  onMenuOpen: (projectId: string, buttonRect: DOMRect) => void
+  onMenuClose: () => void
+  onDelete: (projectId: string) => void
+  onRename: (projectId: string, newName: string) => void
+  onShowInFinder: (projectId: string) => void
+  onStartRename: (projectId: string) => void
+  onCancelRename: () => void
 }
 
 function ProjectRow({
   project,
   isActive,
+  isEditing,
   onSelect,
   onToggleFavorite,
   formatLastAccessed,
   activeMenu,
-  setActiveMenu,
+  onMenuOpen,
+  onMenuClose,
+  onDelete,
+  onRename,
+  onShowInFinder,
+  onStartRename,
+  onCancelRename,
 }: ProjectRowProps) {
+  const [editValue, setEditValue] = useState(project.name)
+
   return (
     <div
       className={`relative group rounded-lg border transition-all cursor-pointer ${
@@ -265,13 +466,46 @@ function ProjectRow({
           ? 'border-primary/60 bg-primary/5'
           : 'border-transparent hover:border-dark-border hover:bg-dark-bg/30'
       }`}
-      onClick={onSelect}
+      onClick={!isEditing ? onSelect : undefined}
     >
       <div className="flex items-center gap-2.5 px-3 py-2">
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h4 className="text-[13px] font-medium text-white truncate">{project.name}</h4>
+            {isEditing ? (
+              <input
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.stopPropagation()
+                    if (editValue.trim() && editValue !== project.name) {
+                      onRename(project.id, editValue.trim())
+                    }
+                    onCancelRename()
+                  }
+                  if (e.key === 'Escape') {
+                    e.stopPropagation()
+                    setEditValue(project.name)
+                    onCancelRename()
+                  }
+                }}
+                onBlur={() => {
+                  if (editValue.trim() && editValue !== project.name) {
+                    onRename(project.id, editValue.trim())
+                  } else {
+                    setEditValue(project.name)
+                  }
+                  onCancelRename()
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="text-[13px] font-medium text-white bg-dark-bg border border-primary rounded px-2 py-0.5 focus:outline-none"
+                autoFocus
+              />
+            ) : (
+              <h4 className="text-[13px] font-medium text-white truncate">{project.name}</h4>
+            )}
             {isActive && (
               <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse flex-shrink-0" />
             )}
@@ -286,13 +520,17 @@ function ProjectRow({
           <div className="flex items-center gap-2 mt-1">
             {/* Tech Stack Icons */}
             <div className="flex items-center gap-1.5">
-              {project.techStack.map((tech) => (
-                <TechIcon key={tech} name={tech} label={tech.charAt(0).toUpperCase() + tech.slice(1)} />
-              ))}
+              {project.techStack && project.techStack.length > 0 ? (
+                project.techStack.map((tech) => (
+                  <TechIcon key={tech} name={tech} />
+                ))
+              ) : (
+                <span className="text-[10px] text-gray-600">No tech stack</span>
+              )}
             </div>
             <span className="text-[11px] text-gray-600">•</span>
             <span className="text-[11px] text-gray-500 flex-shrink-0">
-              {formatLastAccessed(project.lastAccessed)}
+              {formatLastAccessed(project.lastOpenedAt)}
             </span>
           </div>
         </div>
@@ -318,36 +556,106 @@ function ProjectRow({
           <button
             onClick={(e) => {
               e.stopPropagation()
-              setActiveMenu(activeMenu === project.id ? null : project.id)
+              if (activeMenu === project.id) {
+                onMenuClose()
+              } else {
+                const rect = e.currentTarget.getBoundingClientRect()
+                onMenuOpen(project.id, rect)
+              }
             }}
-            className="p-1 hover:bg-dark-card rounded transition-all relative"
+            className="p-1 hover:bg-dark-card rounded transition-all"
           >
             <MoreVertical size={12} className="text-gray-500" />
-            {activeMenu === project.id && (
-              <div className="absolute right-0 top-full mt-1 w-44 bg-dark-card border border-dark-border rounded-lg shadow-xl overflow-hidden z-50">
-                <button className="w-full px-3 py-2 text-left text-[12px] text-white hover:bg-dark-bg/50 flex items-center gap-2 transition-colors">
-                  <Settings size={12} />
-                  Project Settings
-                </button>
-                <button className="w-full px-3 py-2 text-left text-[12px] text-white hover:bg-dark-bg/50 flex items-center gap-2 transition-colors">
-                  <Edit3 size={12} />
-                  Rename
-                </button>
-                <button className="w-full px-3 py-2 text-left text-[12px] text-white hover:bg-dark-bg/50 flex items-center gap-2 transition-colors">
-                  <ExternalLink size={12} />
-                  Show in Finder
-                </button>
-                <div className="border-t border-dark-border" />
-                <button className="w-full px-3 py-2 text-left text-[12px] text-red-400 hover:bg-red-500/10 flex items-center gap-2 transition-colors">
-                  <Trash2 size={12} />
-                  Delete
-                </button>
-              </div>
-            )}
           </button>
         </div>
       </div>
     </div>
+  )
+}
+
+// Dropdown menu rendered as a portal outside the scrollable container
+function ProjectRowMenu({
+  project,
+  isOpen,
+  position,
+  onClose,
+  onStartRename,
+  onShowInFinder,
+  onDelete,
+}: {
+  project: ProjectWithMeta
+  isOpen: boolean
+  position: { top: number; right: number } | null
+  onClose: () => void
+  onStartRename: () => void
+  onShowInFinder: () => void
+  onDelete: () => void
+}) {
+  if (!isOpen || !position) return null
+
+  return (
+    <>
+      {/* Invisible overlay to close menu */}
+      <div
+        className="fixed inset-0 z-[150]"
+        onClick={(e) => {
+          e.stopPropagation()
+          onClose()
+        }}
+      />
+      {/* Menu */}
+      <div
+        className="fixed w-44 bg-dark-card border border-dark-border rounded-lg shadow-xl overflow-hidden z-[200]"
+        style={{ top: position.top, right: position.right }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            // TODO: Open project settings
+            onClose()
+          }}
+          className="w-full px-3 py-2 text-left text-[12px] text-white hover:bg-dark-bg/50 flex items-center gap-2 transition-colors"
+        >
+          <Settings size={12} />
+          Project Settings
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onStartRename()
+            onClose()
+          }}
+          className="w-full px-3 py-2 text-left text-[12px] text-white hover:bg-dark-bg/50 flex items-center gap-2 transition-colors"
+        >
+          <Edit3 size={12} />
+          Rename
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onShowInFinder()
+            onClose()
+          }}
+          className="w-full px-3 py-2 text-left text-[12px] text-white hover:bg-dark-bg/50 flex items-center gap-2 transition-colors"
+        >
+          <ExternalLink size={12} />
+          Show in Finder
+        </button>
+        <div className="border-t border-dark-border" />
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+            onClose()
+          }}
+          className="w-full px-3 py-2 text-left text-[12px] text-red-400 hover:bg-red-500/10 flex items-center gap-2 transition-colors"
+        >
+          <Trash2 size={12} />
+          Delete
+        </button>
+      </div>
+    </>
   )
 }
 

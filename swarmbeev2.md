@@ -1,17 +1,19 @@
 # BeeSwarm 🐝 - Technical Architecture Document
 
-**Version:** 1.0  
-**Purpose:** Visual wrapper for Claude Code SDK - enables non-technical users to build/edit web apps through natural language
+**Version:** 2.0  
+**Purpose:** Visual wrapper for Claude Code CLI - enables non-technical users to build/edit web apps through natural language
 
 ---
 
 ## Core Concept
 
-**What it is:** Electron desktop app that abstracts Claude Code SDK into a visual interface with templates.
+**What it is:** Electron desktop app that provides a visual interface for Claude Code CLI with pre-built templates.
 
-**Business Model:** Flat fee subscription (your server) + users bring own Anthropic API key
+**Business Model:** Subscription-based (managed via web app) - Electron app reads subscription status from MongoDB
 
-**Key Principle:** Everything runs locally on user's machine except auth/payment/license validation
+**Key Principle:** Everything runs locally on user's machine. Authentication and subscription management happen on the website. Electron app only reads user/subscription data from MongoDB.
+
+**Claude Code Integration:** BeeSwarm spawns the Claude Code CLI (NOT the SDK) via node-pty and streams its output to a visual interface. Users don't need to learn terminal commands - they just chat naturally.
 
 ---
 
@@ -21,49 +23,193 @@
 - **Electron + Chromium** (like VS Code, Cursor)
 - **Main Process:** Node.js backend (IPC handlers, services, process management)
 - **Renderer Process:** React + TypeScript + TailwindCSS + Zustand
-- **Terminal:** node-pty for Claude Code SDK + xterm.js for display
+- **Terminal:** node-pty for Claude Code CLI + xterm.js for display/parsing
 - **Preview:** BrowserView (embedded Chromium)
 - **Security:** safeStorage for API key encryption
 
 ### User's Local Environment
-- **Claude Code SDK** (via node-pty, uses user's Anthropic key)
-- **Dev Servers:** Vite (frontend) + Nodemon (backend) as child processes
-- **Git:** simple-git for local version control
-- **Ports:** Auto-assigned via detect-port
+- **Claude Code CLI**: Terminal application installed automatically by BeeSwarm
+  - Installed via: `npm install -g @anthropic-ai/claude-code` 
+  - Spawned via node-pty from BeeSwarm's main process
+- **Anthropic API Key**: User provides their own, stored encrypted locally
+- **Dev Servers**: Vite dev server (frontend) + Nodemon (backend)
+- **Git**: Local version control, auto-commit after each successful edit
+- **Node.js**: Required for Claude Code CLI and dev servers
 
-### Your Backend Server
-- **Node.js + Express + MongoDB**
-- **Purpose:** Auth (JWT), Stripe subscriptions, license validation ONLY
-- **Does NOT handle:** Code, files, edits, or any project data
+### Cloud Services
+
+#### Your Website/Web App
+- **Frontend**: React for marketing + subscription management
+- **Purpose**: User registration, Stripe checkout, subscription management
+- **Auth**: Supabase (Google, Facebook, email/password)
+- **Payment**: Stripe integration (checkout, webhooks, portal)
+
+#### Your Backend (MongoDB Atlas)
+- **Database**: MongoDB Atlas
+- **Collections**:
+  - `users`: userId, email, auth provider, plan, subscription status, createdAt
+  - `subscriptions`: userId, stripeSubscriptionId, plan, status, validUntil
+  - `templates`: id, name, category, requiredServices, githubUrl, allowedPlans
+- **Purpose**: User data, subscription status, template catalog
+
+#### Supabase
+- **Auth Only**: Google OAuth, Facebook OAuth, Email/Password
+- **Returns**: JWT token for session management
+
+### Deployment Integration
+- **Platform**: Netlify (primary deployment target)
+- **Method**: Netlify CLI + OAuth
+- **Runs**: Locally on user's machine
 
 ---
 
 ## Architecture Flow
 
 ```
-User → Electron UI → Local Node Backend → Claude Code SDK → Local Files → Live Preview
-                 ↓
-          Your Server (Auth/Payment/License only)
+Electron App (Local)
+    ↓
+Supabase Auth (reads only) → JWT Token
+    ↓
+MongoDB Atlas (reads user/subscription/templates)
+    ↓
+Claude Code CLI (local) → Edits files
+    ↓
+Dev Servers (local) → Preview
+    ↓
+Netlify (deployment)
+
+Website (Separate)
+    ↓
+Supabase Auth + Stripe → Manages subscriptions
+    ↓
+MongoDB Atlas (writes user/subscription data)
 ```
 
-### Data Flow: Making Changes
-1. User types in chat → IPC to Main Process
-2. Main spawns Claude Code SDK via node-pty (uses user's API key)
-3. Claude analyzes/edits files locally
-4. Main streams PTY output → Renderer displays in xterm.js
-5. File changes detected → Restart dev servers
-6. Check console errors → If errors, send back to Claude (max 3 retries)
-7. Success → Git commit → BrowserView auto-refreshes
-8. User sees changes in preview
+### Complete User Flow
 
-### Authentication Flow
-1. App launch → Check stored token → Validate with your server
-2. No/invalid token → Show login/register
-3. After auth → Check subscription (Stripe)
-4. No subscription → Show payment screen
-5. Active subscription → Request Anthropic API key
-6. Validate key with Anthropic → Store encrypted
-7. License check runs every 24h in background
+**1. Installation & Authentication**
+```
+1. User downloads BeeSwarm.dmg/.exe
+2. Install electron app
+3. Launch app → Login screen
+4. Click "Login with Google" (or Facebook/Email)
+5. Supabase auth popup → User authorizes
+6. App receives JWT token
+7. App queries MongoDB: GET user by email
+8. MongoDB returns: { plan: 'free', subscriptionStatus: 'active' }
+9. We have a free plan, plus and premium. When user wants to change subscription → Links to website
+10. macOS shows permission dialog: "BeeSwarm wants to access your Documents folder" → User clicks Allow
+```
+
+**2. Claude Code CLI Setup**
+```
+11. App checks: Is Claude Code CLI installed?
+12. If NO:
+    - Show sheet: "Installing Claude Code CLI..."
+    - Run: npm install -g @anthropic-ai/claude-code
+    - No permission asked, just notify
+    - Installation completes
+13. Prompt user for Anthropic API key OR oauth2. I think claude code returns a link where user can click and authorize on their website. We need to check how to parse this and show beautifuly to the frontend.
+14. User enters key → Validate by spawning Claude Code CLI with test message 
+15. Store key encrypted in OS keychain (safeStorage)
+```
+
+**3. Template Selection**
+```
+16. Fetch templates from MongoDB 
+17. Free users see: all plans, but cant use templates above their plan
+18. Premium templates show "Pro" badge + "Upgrade" link
+19. User selects template (e.g., "SaaS Starter")
+20. User enters project name
+21. Clone template from GitHub to: ~/Documents/BeeSwarm/Projects/project-name/
+22. Save to SQLite: project metadata (id, name, path, templateId, status). 
+```
+
+**4. Configuration Wizard**
+```
+23. Show configuration wizard (dynamic based on manifest.json)
+24. User enters required service credentials:
+    - Supabase URL + Anon Key
+    - Stripe Public + Secret Key
+    - MongoDB Connection String
+25. App writes to .env.frontend and .env.backend
+26. Run npm install (both frontend & backend)
+27. Start dev servers (Vite + Nodemon)
+28. Create BrowserView → Load localhost:5173
+29. Show preview with action bar
+```
+
+**5. Editing Loop (Core Workflow)**
+```
+30. User types in action bar: "Change hero headline to 'Welcome to My App'"
+31. Click Send
+32. IPC: Renderer → Main Process
+33. Main Process spawns Claude Code CLI via node-pty (if not already running)
+34. Write to PTY stdin: user's message + "\n"
+35. Claude Code CLI analyzes codebase + makes edits
+36. PTY streams output (stdout/stderr) → Main Process captures
+37. Main Process parses output:
+    - "📝 Editing src/components/Hero.tsx" → Extract file name
+    - Code diffs → Extract changes
+38. IPC events → Renderer receives parsed data
+39. Show in Chat Modal (xterm.js shows raw, UI sheet shows pretty cards)
+40. File changes detected (chokidar watching project directory)
+41. Restart dev servers (kill + restart Vite & Nodemon). 
+42. Check console errors:
+    - If errors: Send back to Claude Code CLI stdin: "/fix these errors: ..."
+    - Retry max 3 times
+43. If no errors OR fixes succeeded:
+    - Git commit: "Changed hero headline"
+    - Save commit to SQLite: chat_history
+44. BrowserView auto-refreshes
+45. User sees updated app
+```
+
+**6. Subsequent Edits**
+```
+46. User types: "Add a pricing section below the hero"
+47. Repeat steps 31-45
+48. Each iteration: Prompt → Edit → Commit → Restart → Preview
+49. User can click "Show Terminal" to see raw Claude Code CLI output
+50. Or just see parsed UI: "✓ Added PricingSection.tsx", "✓ Updated Hero.tsx"
+```
+
+**7. Deployment**
+```
+51. User clicks "Deploy" in action bar
+52. Check: Is Netlify connected?
+53. If NO:
+    - Show modal: "Connect Netlify"
+    - Click "Connect" → Opens system browser
+    - Netlify OAuth flow → User authorizes BeeSwarm
+    - Callback received → Store OAuth token encrypted
+54. Show deploy modal:
+    - Site name input (suggests project name)
+    - Deploy button
+55. User clicks "Deploy"
+56. Main Process:
+    - Run: npm run build (frontend)
+    - Spawn Netlify CLI: netlify deploy --prod --dir=frontend/dist
+    - Stream CLI output → Renderer
+57. Show in modal (xterm.js): "Building...", "Uploading...", "Deploying..."
+58. Netlify responds with URL
+59. Show success: "✓ Deployed to https://my-app.netlify.app"
+60. Save to SQLite: project.deploymentUrl, project.status = 'deployed'
+61. Copy URL button + Visit Site button
+```
+
+**8. Subscription Management (Separate Flow)**
+```
+- User wants to upgrade/cancel/manage subscription
+- Clicks "Manage Subscription" in settings
+- Opens system browser → your website
+- Website: User logs in with same Supabase auth
+- Website: Stripe Customer Portal OR custom subscription UI
+- User upgrades/cancels
+- Website updates MongoDB: subscriptions collection
+- Next time user opens Electron app → Reads new subscription status from MongoDB
+- App now shows premium templates (if upgraded)
+```
 
 ---
 
@@ -72,382 +218,590 @@ User → Electron UI → Local Node Backend → Claude Code SDK → Local Files 
 ### Electron App
 ```
 beeswarm/
-├── main/                    # Electron Main Process (Node.js)
-│   ├── index.ts            # Entry point
-│   ├── ipc/                # IPC handlers (auth, templates, claude, git, etc.)
-│   ├── services/           # AuthService, ClaudeService, ProcessManager, etc.
-│   └── utils/              # Helpers, encryption, logging
+├── main/                           # Electron Main Process
+│   ├── index.ts                    # Entry point
+│   ├── ipc/                        # IPC handlers
+│   │   ├── auth.ts                 # Supabase auth + MongoDB user lookup
+│   │   ├── templates.ts            # Fetch from MongoDB, clone from GitHub
+│   │   ├── claude.ts               # Spawn Claude Code CLI via node-pty
+│   │   ├── processes.ts            # Dev server management
+│   │   ├── git.ts                  # Auto-commit after edits
+│   │   ├── deployment.ts           # Netlify OAuth + CLI deployment
+│   │   └── database.ts             # SQLite operations
+│   │
+│   ├── services/
+│   │   ├── AuthService.ts          # Supabase JWT validation
+│   │   ├── MongoService.ts         # MongoDB Atlas queries (read-only)
+│   │   ├── DatabaseService.ts      # SQLite operations (local data)
+│   │   ├── ClaudeService.ts        # PTY management for Claude Code CLI
+│   │   ├── ProcessManager.ts       # Child process lifecycle
+│   │   ├── GitService.ts           # Git operations
+│   │   ├── TemplateService.ts      # Clone from GitHub
+│   │   ├── DeploymentService.ts    # Netlify integration
+│   │   ├── KeychainService.ts      # Encrypted storage (API keys, tokens)
+│   │   └── OutputParser.ts         # Parse Claude Code CLI output
+│   │
+│   └── utils/
+│       ├── paths.ts
+│       ├── encryption.ts
+│       └── logger.ts
 │
-├── renderer/               # React UI
-│   ├── components/         # Auth, TemplateSelector, ActionBar, Modals, etc.
-│   ├── hooks/              # useAuth, useClaude, useIPC, etc.
-│   ├── store/              # Zustand stores (auth, project, preview)
-│   └── services/           # IPC wrappers
+├── renderer/                       # React UI
+│   ├── components/
+│   │   ├── Auth/
+│   │   │   ├── Login.tsx           # Supabase auth buttons
+│   │   │   ├── ApiKeySetup.tsx     # Anthropic key input
+│   │   │   └── SubscriptionBanner.tsx  # "Upgrade to Pro" banner
+│   │   │
+│   │   ├── TemplateSelector/
+│   │   │   ├── TemplateSelector.tsx    # Grid with free/premium badges
+│   │   │   └── TemplateCard.tsx
+│   │   │
+│   │   ├── ConfigurationWizard/
+│   │   │   └── ConfigurationWizard.tsx # Service inputs
+│   │   │
+│   │   ├── ActionBar/
+│   │   │   ├── ActionBar.tsx       # Chat input + action buttons
+│   │   │   └── ChatInput.tsx
+│   │   │
+│   │   ├── Preview/
+│   │   │   └── PreviewContainer.tsx    # BrowserView wrapper
+│   │   │
+│   │   ├── Modals/
+│   │   │   ├── ChatModal.tsx       # Parsed Claude output
+│   │   │   ├── TerminalModal.tsx   # Raw xterm.js output
+│   │   │   ├── ImagesModal.tsx
+│   │   │   ├── DeployModal.tsx
+│   │   │   └── SettingsModal.tsx
+│   │   │
+│   │   └── ImageManager/
+│   │       ├── ImageGrid.tsx
+│   │       └── ImageCropper.tsx
+│   │
+│   ├── hooks/
+│   │   ├── useAuth.ts              # Supabase auth
+│   │   ├── useClaude.ts            # Claude streaming
+│   │   ├── useSubscription.ts      # Read from MongoDB
+│   │   └── useIPC.ts
+│   │
+│   └── store/
+│       ├── authStore.ts
+│       ├── projectStore.ts
+│       └── subscriptionStore.ts
 │
-├── preload/                # Security bridge
-│   └── index.ts            # Exposes safe IPC API
-│
-└── assets/                 # Icons, tutorial videos
+└── preload/
+    └── index.ts                    # IPC bridge
 ```
 
-### Your Server
+### Local Storage (SQLite)
 ```
-beeswarm-server/
-├── src/
-│   ├── routes/             # auth, subscription, license
-│   ├── controllers/        # Business logic
-│   ├── models/             # User, Subscription (MongoDB)
-│   └── middleware/         # JWT auth, rate limiting
-```
+~/Library/Application Support/BeeSwarm/database.db
 
-### User Projects (Local)
-```
-~/Documents/BeeSwarm/Projects/project-name/
-├── frontend/               # React + Vite
-├── backend/                # Node + Express (optional)
-├── .config/                # manifest.json, images.json
-├── .env files              # Service credentials
-└── .git/                   # Local version control
+Tables:
+- projects (id, name, path, templateId, status, deploymentUrl, createdAt, lastOpenedAt)
+- chat_history (id, projectId, role, message, timestamp)
+- git_commits (id, projectId, hash, message, timestamp)
 ```
 
----
-
-## Core Components Overview
-
-### 1. Authentication System
-- Login/Register screens
-- Payment screen (Stripe Checkout in browser)
-- API key setup (Anthropic)
-- Background license validation (24h intervals)
-
-### 2. Template Selector
-- Grid of templates from your GitHub
-- Search/filter by category
-- Preview and clone to local disk
-- Project name input
-
-### 3. Configuration Wizard
-- Dynamic form based on template's manifest.json
-- Input fields for required services (MongoDB, Stripe, Supabase, etc.)
-- Video tutorials for each service
-- Writes to .env files → npm install → start dev servers
-
-### 4. Main Workspace
-- Full-screen BrowserView (preview of running app)
-- Floating action bar (chat input + action buttons)
-- Everything overlays on preview
-
-### 5. Action Bar
-- **Chat Input:** Text field for Claude commands
-- **Working Indicator:** Shows Claude status (clickable for full terminal)
-- **Images Button:** Opens image management modal
-- **API Keys Button:** Opens .env editor
-- **Settings Button:** Opens app settings
-- **Deploy Button:** Opens Netlify deployment
-
-### 6. Chat Modal
-- Full terminal view (xterm.js)
-- Streams Claude Code SDK output in real-time
-- Shows files being edited, diffs, progress
-- Draggable/resizable
-- Stop button to kill Claude process
-
-### 7. Image Management Modal
-- Grid of all images from images.json
-- Each card: thumbnail, path, dimensions, replace button
-- Image cropper for uploaded images (locked aspect ratio)
-- Save → Updates files → Restarts servers → Refreshes preview
-
-### 8. API Keys Modal
-- Tabs for Frontend/Backend .env files
-- List all variables with edit/delete buttons
-- Add new variables
-- Password masking for sensitive values
-- Save → Restarts dev servers
-
-### 9. Deploy Modal
-- Connect Netlify via OAuth
-- Site name input with availability check
-- Deploy button → Streams build/upload logs (xterm.js)
-- Success → Shows live URL with copy/visit buttons
-- Auto-deploys frontend .env to Netlify
-
-### 10. Version History Modal
-- List of Git commits (from simple-git)
-- Each commit: message, timestamp, hash
-- Click to view diff
-- Rollback button to restore previous version
-
-### 11. Settings Modal
-- General: theme, language, auto-save interval
-- Claude: max retries, show terminal by default
-- Project: default directory, auto-start servers
-- Account: email, subscription status, logout
-
----
-
-## Template Structure
-
-### Template Repository (Your GitHub)
+### MongoDB Atlas Collections
 ```
-template-name/
-├── frontend/               # Complete React app
-├── backend/                # Complete Node.js app (optional)
-├── .config/
-│   ├── manifest.json       # Metadata: name, services, ports, hasBackend
-│   └── images.json         # Image inventory: id, path, width, height
-└── README.md
-```
+users {
+  _id: ObjectId,
+  email: string,
+  authProvider: 'google' | 'facebook' | 'email',
+  plan: 'free' | 'pro' | 'enterprise',
+  subscriptionStatus: 'active' | 'expired' | 'canceled',
+  stripeCustomerId: string,
+  createdAt: Date
+}
 
-### manifest.json Schema
-```json
-{
-  "name": "SaaS Starter",
-  "description": "...",
-  "thumbnail": "preview.png",
-  "category": "saas",
-  "requiredServices": ["mongodb", "stripe"],
-  "optionalServices": ["supabase"],
-  "hasBackend": true,
-  "ports": {
-    "frontend": 5173,
-    "backend": 3000
-  }
+subscriptions {
+  _id: ObjectId,
+  userId: ObjectId,
+  stripeSubscriptionId: string,
+  plan: 'pro' | 'enterprise',
+  status: 'active' | 'past_due' | 'canceled',
+  currentPeriodEnd: Date
+}
+
+templates {
+  _id: ObjectId,
+  id: string,
+  name: string,
+  description: string,
+  category: 'frontend' | 'fullstack' | 'saas',
+  githubUrl: string,
+  isPremium: boolean,
+  requiredServices: ['supabase', 'stripe', 'mongodb'],
+  thumbnail: string
 }
 ```
 
-### images.json Schema
-```json
-[
-  {
-    "id": "hero-bg",
-    "path": "frontend/public/hero.jpg",
-    "width": 1920,
-    "height": 1080,
-    "currentSrc": "/hero.jpg"
-  }
-]
+### User Project Structure (Local)
 ```
-
-### System Prompt for Claude
-When Claude Code SDK runs, include in system prompt:
-- Update images.json when adding/removing images
-- Follow project's existing code style
-- Test changes before finishing
-- Commit message format: Brief description of change
+~/Documents/BeeSwarm/Projects/my-saas-app/
+├── frontend/                   # React + Vite
+│   ├── src/
+│   ├── .env                    # User's service keys
+│   └── package.json
+├── backend/                    # Node + Express
+│   ├── src/
+│   ├── .env
+│   └── package.json
+├── .config/                    # BeeSwarm metadata
+│   ├── manifest.json
+│   └── images.json
+└── .git/                       # Local git
+```
 
 ---
 
-## User Flows
+## Core Components
 
-### First Launch → Editing
-1. Launch app → Check license
-2. Not authenticated → Login/Register
-3. No subscription → Payment (Stripe)
-4. No API key → Enter Anthropic key
-5. Select template → Enter project name
-6. Clone template → Configure services (.env)
-7. npm install + start dev servers
-8. Show preview with action bar
-9. User types change → Claude edits → Preview updates
+### 1. Authentication System
+- Login via Supabase (Google/Facebook/Email OAuth)
+- JWT token received from Supabase
+- Query MongoDB for user + subscription status
+- No payment in app - redirect to website for subscription management
+- Show "Upgrade to Pro" banner if free user
+- Store JWT encrypted locally
 
-### Error Recovery Loop
-1. Claude makes changes
-2. Restart dev servers
-3. Check console for errors
-4. If errors: Send to Claude → Fix → Retry (max 3x)
-5. If no errors: Git commit → Done
+### 2. Claude Code CLI Integration
+- Auto-install if not present (no permission, just notify)
+- Spawn via node-pty
+- Write user prompts to stdin
+- Parse stdout/stderr in real-time
+- Display parsed output in beautiful UI
+- Keep raw terminal available in modal
 
-### Deployment Flow
-1. Connect Netlify (OAuth)
-2. Enter site name
-3. Deploy → Build + upload (streamed logs)
-4. Success → Show URL
+### 3. Template System
+- Fetch template list from MongoDB (filtered by user plan)
+- Free users see free templates only
+- Premium templates show badge + upgrade link
+- Clone from GitHub when selected
+- Configuration wizard for service credentials
+- Write to .env files
+
+### 4. Editing Workflow
+- User types natural language
+- Send to Claude Code CLI stdin
+- Stream and parse output
+- Detect file changes
+- Restart dev servers
+- Check console errors → Auto-fix (max 3 retries)
+- Git auto-commit on success
+- Preview auto-refreshes
+
+### 5. Preview Window
+- BrowserView embedding localhost
+- F12 opens DevTools
+- Viewport size controls (mobile/tablet/desktop)
+- External links open in system browser
+
+### 6. Action Bar
+- Chat input for natural language
+- Images button → Image management modal
+- Deploy button → Netlify deployment
+- Settings button → App settings
+
+### 7. Chat Interface
+- Parsed view (default): Pretty UI cards showing what Claude is doing
+- Raw terminal view (optional): xterm.js showing full Claude Code CLI output
+- User can toggle between views
+- Stop button to kill Claude process
+
+### 8. Image Management
+- Grid of images from images.json
+- Upload + crop to exact dimensions
+- Replace images in project
+- Auto-restart dev servers after changes
+
+### 9. Deployment
+- Netlify OAuth (one-time setup)
+- Site name input
+- Deploy button → Runs build + netlify deploy
+- Streams deployment logs
+- Shows live URL on success
+
+### 10. Git Integration
+- Auto-commit after each successful edit loop
+- Commit message: Brief description from Claude
+- Store in SQLite for history
+- Rollback feature (future)
+
+---
+
+## Data Storage Strategy
+
+### SQLite (Local - User's Machine)
+**Location:** `~/Library/Application Support/BeeSwarm/database.db`
+**Purpose:** Fast local queries, offline access
+**Data:**
+- Projects (id, name, path, status, deploymentUrl, createdAt, lastOpenedAt)
+- Chat history per project
+- Git commit history
+- Last opened templates
+- App preferences (theme, viewport size)
+
+### MongoDB Atlas (Cloud - Your Database)
+**Purpose:** User accounts, subscriptions, template catalog
+**Data:**
+- Users (email, plan, subscriptionStatus, authProvider)
+- Subscriptions (stripeSubscriptionId, status, currentPeriodEnd)
+- Templates (name, category, githubUrl, isPremium, requiredServices)
+- (Optional) Project cloud backups for premium users
+
+### OS Keychain (Encrypted)
+**Purpose:** Maximum security for sensitive data
+**Data:**
+- Anthropic API key
+- Supabase JWT token
+- Netlify OAuth token
+
+### File System
+**Purpose:** Template cache, user projects
+**Data:**
+- Cloned templates from GitHub
+- User's project files (in ~/Documents/BeeSwarm/Projects/)
+
+---
+
+## Output Parsing Strategy
+
+### Claude Code CLI Output Examples
+```
+📝 Editing src/components/Hero.tsx
+   - Changed headline text
+   - Updated button color
+
+🔄 Running tests...
+
+✅ All tests passed
+```
+
+### Parser Logic
+**Detect patterns:**
+- `📝 Editing {filename}` → Show file card with editing status
+- `✅` → Success state
+- `❌` → Error state
+- `🔄` → Loading state
+- File paths → Make clickable in UI
+- Code blocks → Syntax highlight
+
+**Transform to UI:**
+```json
+{
+  "type": "file_edit",
+  "filename": "Hero.tsx",
+  "status": "editing",
+  "changes": [
+    "Changed headline text",
+    "Updated button color"
+  ]
+}
+```
+
+**Display in UI:**
+```
+┌────────────────────────────────┐
+│ 📝 Editing Hero.tsx            │
+│ • Changed headline text        │
+│ • Updated button color         │
+│ [View Changes]                 │
+└────────────────────────────────┘
+```
+
+---
+
+## Subscription Flow (Website)
+
+### On Your Website/Web App
+
+**Tech Stack:**
+- Next.js or React SPA
+- Supabase Auth (same config as Electron app)
+- Stripe Checkout + Customer Portal
+- MongoDB Atlas (same database)
+
+**User Journey:**
+```
+1. User clicks "Upgrade to Pro" in Electron app
+2. Opens system browser → your-website.com/pricing
+3. User logs in with same Supabase account (Google/Facebook/Email)
+4. Shows pricing plans
+5. User clicks "Subscribe to Pro - $20/month"
+6. Stripe Checkout modal opens
+7. User enters payment info
+8. Stripe processes payment
+9. Stripe webhook → Your server
+10. Server updates MongoDB: 
+    - users.plan = 'pro'
+    - users.subscriptionStatus = 'active'
+    - Create subscription document with stripeSubscriptionId
+11. Website shows: "✅ You're now a Pro user!"
+12. User returns to Electron app
+13. App fetches user data from MongoDB
+14. Now shows premium templates
+```
+
+**Website Pages:**
+- `/` - Landing page
+- `/pricing` - Pricing plans + Stripe checkout
+- `/login` - Supabase auth
+- `/dashboard` - Account management
+- `/billing` - Stripe Customer Portal iframe (manage/cancel subscription)
 
 ---
 
 ## Development Phases
 
-### Phase 1: Foundation
-- Electron app setup with React
+### Phase 1: Foundation (Week 1-2)
+- Electron app boilerplate with React
 - IPC architecture
-- Auth screens + your server integration
-- API key storage (encrypted)
-- Template selector (hardcoded list initially)
+- Supabase auth integration
+- MongoDB Atlas connection (read-only in app)
+- SQLite setup with tables
+- Login screen + JWT handling
+- Template selector (fetch from MongoDB)
 
-### Phase 2: Core Editing
-- Template cloning from GitHub
-- Configuration wizard
-- Dev server process management
-- Claude Code SDK integration via node-pty
+### Phase 2: Claude Integration (Week 3-4)
+- Auto-install Claude Code CLI
+- API key setup + validation
+- Spawn Claude Code CLI via node-pty
+- Stream output to renderer
+- Basic output parsing
 - Chat interface with xterm.js
-- BrowserView preview
+- Stop/restart Claude process
 
-### Phase 3: Advanced Features
-- Error detection and auto-fix loop
-- Git integration (commits, history, rollback)
+### Phase 3: Project Management (Week 5-6)
+- Template cloning from GitHub
+- Configuration wizard (service credentials)
+- Write to .env files
+- npm install automation
+- Dev server process management (Vite + Nodemon)
+- BrowserView preview window
+- Port auto-assignment
+
+### Phase 4: Editing Loop (Week 7-8)
+- Complete editing workflow
+- File change detection
+- Dev server restart logic
+- Console error detection
+- Error auto-fix loop (max 3 retries)
+- Git auto-commit
+- Preview auto-refresh
+- Chat history in SQLite
+
+### Phase 5: Advanced Features (Week 9-10)
 - Image management system
-- API keys (.env) editor
+- Image cropper with aspect ratio lock
+- images.json tracking
+- Git commit history viewer
+- Rollback functionality (future)
 - Settings modal
+- Theme switching
 
-### Phase 4: Deployment
+### Phase 6: Deployment (Week 11-12)
 - Netlify OAuth integration
-- Deployment flow with logs
-- Environment variable deployment
+- Deploy button + modal
+- Build + deploy via Netlify CLI
+- Stream deployment logs
+- Save deployment URL to SQLite
+- Copy/visit URL buttons
 
-### Phase 5: Polish
+### Phase 7: Polish & Testing (Week 13-14)
+- Improved output parsing (more patterns)
+- Better error messages
+- Loading states everywhere
 - Onboarding flow
 - Tutorial videos
-- Error handling and user feedback
+- Help documentation
+- Bug fixes
 - Performance optimization
-- Testing and bug fixes
+
+### Phase 8: Website (Parallel or After)
+- Landing page
+- Pricing page
+- Stripe integration
+- Supabase auth
+- Customer portal
+- Email notifications
+- Analytics
 
 ---
 
 ## Security Considerations
 
-### Local Security
-- API keys encrypted with Electron safeStorage
-- .env files never transmitted
-- JWT tokens encrypted locally
-- No code/project data leaves user's machine
-
-### Server Security
-- JWT authentication for all endpoints
-- Rate limiting on API
-- Stripe webhook signature verification
-- MongoDB connection with auth
-- HTTPS only
-- Input validation and sanitization
-
-### Electron Security
+### Electron App Security
 - contextIsolation: true
 - nodeIntegration: false in renderer
-- Preload script for safe IPC exposure
+- Preload script for safe IPC
 - Content Security Policy headers
+- API keys encrypted with safeStorage
+- JWT tokens encrypted
 - External links open in system browser only
+- No eval() or remote code execution
+
+### MongoDB Security
+- Read-only access from Electron app
+- Connection string stored encrypted
+- No sensitive data in MongoDB (payment info stays in Stripe)
+- Proper indexes for query performance
+
+### Supabase Security
+- OAuth only (no password storage in app)
+- JWT tokens short-lived
+- Refresh token flow
+- Proper RLS policies (if using Supabase database later)
+
+### Claude Code CLI
+- Uses user's own API key (they control costs)
+- No code sent to your servers
+- Everything local
 
 ---
 
-## API Endpoints (Your Server)
+## Next Steps: Detailed Implementation Guides
 
-### Authentication
-- POST /auth/register → Create account
-- POST /auth/login → Get JWT token
-- GET /auth/validate → Verify JWT
+When ready to implement specific parts, generate these detailed MDs:
 
-### Subscription
-- POST /subscription/create → Create Stripe checkout session
-- GET /subscription/status → Check if active
-- POST /webhook/stripe → Handle payment events
+### 1. **auth-system.md**
+- Supabase OAuth setup (Google, Facebook, Email)
+- JWT token handling and refresh
+- MongoDB user lookup queries
+- Subscription status checks
+- "Upgrade to Pro" banner logic
+- Token encryption with safeStorage
+- Session management
+- Website redirect for subscription management
 
-### License
-- GET /license/validate → Check if app license valid
-- POST /license/revoke → Admin endpoint to revoke access
+### 2. **claude-integration.md**
+- Detecting if Claude Code CLI installed
+- Auto-install via npm (silent, with notification)
+- API key setup and validation flow
+- Spawning Claude Code CLI via node-pty
+- Writing to PTY stdin (user prompts, slash commands)
+- Reading from PTY stdout/stderr
+- Output parsing strategies (regex patterns, state machine)
+- Handling Claude Code CLI errors
+- Stop/restart logic
+- System prompts via .claude/ directory
+
+### 3. **process-management.md**
+- Child process lifecycle (spawn, monitor, restart, kill)
+- Port detection and auto-assignment
+- Vite dev server management
+- Nodemon backend server management
+- Process crash recovery
+- Logging stdout/stderr
+- Console error detection (parsing error messages)
+- Health checks for dev servers
+- Graceful shutdown on app quit
+
+### 4. **preview-system.md**
+- BrowserView creation and lifecycle
+- Embedding in Electron window
+- Bounds calculation for responsive preview
+- DevTools integration (F12 toggle)
+- Navigation handling (external links)
+- Reload/refresh logic
+- Viewport size controls (mobile/tablet/desktop)
+- Console log capturing
+- Error page handling
+
+### 5. **git-integration.md**
+- Auto-commit strategy (after each successful edit)
+- Commit message format (from Claude's description)
+- Storing commits in SQLite
+- Git history viewer UI
+- Commit diff viewer
+- Rollback/restore previous version
+- Git status monitoring
+- .gitignore handling
+- Branch management (future)
+
+### 6. **deployment-system.md**
+- Netlify OAuth flow (browser popup)
+- Storing OAuth tokens encrypted
+- Site name validation (check availability)
+- Build process (npm run build)
+- Deploying via Netlify CLI
+- Streaming deployment logs to UI
+- Parsing Netlify CLI output
+- Handling deployment errors
+- Environment variable deployment
+- Domain management (future)
+
+### 7. **image-management.md**
+- images.json schema and tracking
+- Detecting images in templates
+- Image grid UI
+- File picker integration
+- Image cropper component (aspect ratio lock)
+- Crop + resize logic
+- Replacing images in project
+- Updating images.json
+- Triggering dev server restart
+- AI image generation integration (future)
+
+### 8. **template-system.md**
+- Template manifest.json schema
+- Fetching templates from MongoDB
+- Filtering by user plan (free vs premium)
+- GitHub cloning logic
+- Template categories and tags
+- Configuration wizard (dynamic forms based on manifest)
+- Service credential validation
+- Writing to .env files
+- npm install automation
+- Template versioning
+- Creating custom templates (future)
+
+### 9. **database-system.md**
+- SQLite schema design
+- DatabaseService class implementation
+- Project CRUD operations
+- Chat history storage and retrieval
+- Git commit tracking
+- Querying recent projects
+- Full-text search
+- Database migrations
+- Backup/restore
+- MongoDB queries (read-only)
+
+### 10. **output-parsing.md**
+- Claude Code CLI output patterns
+- Parser state machine
+- Regex patterns for different message types
+- Extracting filenames, line numbers, errors
+- Building structured data from terminal output
+- UI component mapping
+- Real-time parsing during streaming
+- Handling multi-line output
+- ANSI color code handling
 
 ---
 
-## Error Handling Strategy
+## Critical Notes
 
-### Console Error Detection
-- Monitor stdout/stderr of dev servers
-- Parse for common error patterns (syntax, runtime, compile)
-- Extract error message, file, line number
+### Claude Code CLI vs SDK
+**BeeSwarm uses Claude Code CLI (the interactive terminal tool), NOT the SDK:**
+- CLI is installed via: `npm install -g @anthropic-ai/claude-code`
+- Launched via: `claude` command
+- We spawn this via node-pty and control via stdin/stdout
+- SDK is a different library for programmatic agent building
+- We want the full interactive experience, not programmatic control
 
-### Claude Retry Logic
-- Max 3 attempts to fix errors
-- Each retry includes error details
-- If all retries fail, show error to user with option to:
-  - Try again manually
-  - Rollback to last working version
-  - Edit code directly (opens in system editor)
+### Why This Architecture Works
+- Users get full Claude Code CLI features (file ops, bash, web search, MCP)
+- Authentication handled by Claude Code CLI itself (uses user's API key)
+- No need to reimplement agent logic
+- System prompts configurable via `.claude/` directory
+- Terminal output is parseable and can be displayed beautifully
+- Users can always see raw terminal if needed
 
-### User-Facing Errors
-- Network errors (your server unreachable)
-- Authentication failures
-- Subscription expired
-- Invalid API key
-- Template clone failures
-- Dev server crash
-- Deployment failures
+### Subscription Separation
+- **Electron app**: Reads subscription status from MongoDB (read-only)
+- **Website**: Manages subscriptions (Stripe checkout, webhooks, customer portal)
+- **Communication**: Same Supabase auth, same MongoDB, seamless experience
 
-For each: Clear error message + actionable next steps
-
----
-
-## Performance Considerations
-
-### Optimization Targets
-- App launch < 3 seconds
-- Template clone < 30 seconds
-- npm install progress feedback
-- Dev server start < 10 seconds
-- Claude response streaming (no buffering)
-- Preview refresh < 1 second
-- BrowserView smooth at 60fps
-
-### Resource Management
-- Kill child processes on app quit
-- Clean up PTY sessions
-- Limit log file sizes
-- Cache template list locally
-- Lazy load preview until servers ready
-
----
-
-## Future Enhancements
-
-### V2 Features
-- AI image generation (DALL-E integration)
-- Multiple projects open (tabs)
-- Collaboration (real-time with other users)
-- GitHub integration (push to remote)
-- More deployment targets (Vercel, Railway)
-- Template marketplace (community templates)
-- Custom template creation tool
-- Plugin system for extensions
-
----
-
-## Notes for Implementation
-
-### Critical Paths
-1. Auth must work before anything else
-2. API key must validate before accessing Claude
-3. Dev servers must start before showing preview
-4. Error detection must work before auto-fix loop
-
-### Testing Priorities
-1. Auth flow end-to-end
-2. Claude Code SDK integration
-3. Process management (start/stop/restart)
-4. Error detection and retry logic
-5. Git operations
-6. Deployment flow
-
-### Documentation Needed
-- User guide (how to use app)
-- Template creation guide (for your templates)
-- API documentation (your server)
-- Troubleshooting guide (common issues)
-
----
-
-## Next Steps for Detailed Implementation
-
-When ready to implement specific parts, create detailed MD for:
-1. **auth-system.md** - Complete auth flow, JWT handling, license validation
-2. **claude-integration.md** - PTY setup, streaming, parsing, system prompts
-3. **process-management.md** - Child process lifecycle, port management, error detection
-4. **preview-system.md** - BrowserView setup, DevTools, navigation handling
-5. **git-integration.md** - Commit strategy, history, rollback, diff viewing
-6. **deployment-system.md** - Netlify OAuth, build process, log streaming
-7. **image-management.md** - Detection, tracking, cropping, replacement
-8. **template-system.md** - Structure, manifest, cloning, configuration
-
-Each detailed MD will contain:
-- Step-by-step implementation instructions
-- Code patterns and examples
-- Edge cases and error handling
-- Testing approach
-- UI/UX specifications

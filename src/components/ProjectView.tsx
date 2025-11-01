@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 import { useToast } from '../hooks/useToast'
 import ActionBar from './ActionBar'
@@ -9,14 +9,7 @@ import ProjectSettings from './ProjectSettings'
 import TerminalModal from './TerminalModal'
 import DeviceFrame from './DeviceFrame'
 import DeviceSelector from './DeviceSelector'
-
-// Mock projects data
-const MOCK_PROJECTS = [
-  { id: '1', name: 'E-commerce Dashboard', isDeployed: true },
-  { id: '2', name: 'SaaS Landing Page', isDeployed: false },
-  { id: '3', name: 'Portfolio Website', isDeployed: true },
-  { id: '4', name: 'Blog Platform', isDeployed: false },
-]
+import { Project } from '../types/electron'
 
 function ProjectView() {
   const {
@@ -44,8 +37,51 @@ function ProjectView() {
 
   const toast = useToast()
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'apikeys' | 'deployment'>('general')
+  const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
 
-  const currentProject = MOCK_PROJECTS.find((p) => p.id === currentProjectId)
+  // Fetch projects and auto-open last project
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setLoading(true)
+        const result = await window.electronAPI?.projects.getAll()
+
+        if (result?.success && result.projects) {
+          setProjects(result.projects)
+
+          // Auto-open the last project (most recent lastOpenedAt)
+          if (result.projects.length > 0 && !currentProjectId) {
+            const lastProject = result.projects[0] // Already sorted by lastOpenedAt DESC
+            setCurrentProject(lastProject.id)
+          } else if (result.projects.length === 0) {
+            // No projects - open template selector
+            setShowTemplateSelector(true)
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching projects:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProjects()
+  }, [refreshKey])
+
+  const currentProject = projects.find((p) => p.id === currentProjectId)
+
+  // Determine project name for header
+  const getProjectName = () => {
+    if (loading) {
+      return 'Loading...'
+    }
+    if (currentProject) {
+      return currentProject.name
+    }
+    return 'Untitled Project'
+  }
 
   const handleChatClick = () => {
     toast.info('Starting conversation...', 'Claude is ready to help you build!')
@@ -80,11 +116,17 @@ function ProjectView() {
     console.log('Project setup completed!')
   }
 
-  const handleSelectProject = (projectId: string) => {
-    const project = MOCK_PROJECTS.find((p) => p.id === projectId)
+  const handleSelectProject = async (projectId: string) => {
+    const project = projects.find((p) => p.id === projectId)
+
+    // Update lastOpenedAt in database
+    await window.electronAPI?.projects.updateLastOpened(projectId)
+
     setCurrentProject(projectId)
     setShowProjectSelector(false)
-    toast.success('Project switched', `Now viewing ${project?.name}`)
+    if (project) {
+      toast.success('Project switched', `Now viewing ${project.name}`)
+    }
     console.log('Switched to project:', projectId)
   }
 
@@ -93,20 +135,24 @@ function ProjectView() {
     setShowTemplateSelector(true)
   }
 
-  const handleCreateFromTemplate = (templateId: string, projectName: string) => {
-    toast.success('Project created!', `${projectName} is being set up...`)
-    console.log('Creating project from template:', templateId, projectName)
-    // TODO: Implement actual project creation logic
-    // For now, just close the template selector
+  const handleCreateFromTemplate = (templateId: string, projectName: string, projectId: string) => {
+    // Refresh projects list to include the newly created project
+    setRefreshKey(prev => prev + 1)
+
+    // Switch to the newly created project after a brief delay to ensure refresh completes
+    setTimeout(() => {
+      setCurrentProject(projectId)
+    }, 100)
+
     setShowTemplateSelector(false)
-    // In future, this will create the project and switch to it
+    toast.success('Project created!', `${projectName} is ready to use`)
   }
 
   return (
     <div className="w-full h-full relative">
       {/* Project Header */}
       <ProjectHeader
-        projectName={currentProject?.name || 'Untitled Project'}
+        projectName={getProjectName()}
         onOpenProjectSelector={() => setShowProjectSelector(true)}
       />
 
@@ -117,6 +163,7 @@ function ProjectView() {
         onClose={() => setShowProjectSelector(false)}
         onSelectProject={handleSelectProject}
         onCreateProject={handleCreateProject}
+        onProjectUpdated={() => setRefreshKey(prev => prev + 1)}
       />
 
       {/* Template Selector Modal */}
@@ -128,7 +175,29 @@ function ProjectView() {
 
       {/* Preview Area - Desktop or Mobile Mode */}
       <div className="w-full h-full relative">
-        {viewMode === 'desktop' ? (
+        {projects.length === 0 && !loading ? (
+          // No Projects State
+          <div className="w-full h-full bg-gradient-to-br from-gray-900 via-dark-bg to-gray-900 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-32 h-32 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"/>
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">No Projects Yet</h2>
+              <p className="text-gray-400 mb-8">Create your first project to get started</p>
+              <button
+                onClick={() => setShowTemplateSelector(true)}
+                className="px-6 py-3 bg-primary hover:bg-primary-dark text-white font-medium rounded-lg transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 flex items-center gap-2 mx-auto"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Create Project
+              </button>
+            </div>
+          </div>
+        ) : viewMode === 'desktop' ? (
           // Desktop Mode: Full screen preview
           <div className="w-full h-full bg-gradient-to-br from-gray-900 via-dark-bg to-gray-900 flex items-center justify-center transition-all duration-500 animate-fadeIn">
             {/* Placeholder content */}

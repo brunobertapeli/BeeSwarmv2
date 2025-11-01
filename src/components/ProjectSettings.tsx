@@ -53,6 +53,8 @@ function ProjectSettings({
   const [apiKeyValues, setApiKeyValues] = useState<ApiKeyValues>({})
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState<'general' | 'apikeys' | 'deployment'>(initialTab)
+  const [isInstallingDeps, setIsInstallingDeps] = useState(false)
+  const [installProgress, setInstallProgress] = useState<string[]>([])
 
   // Update active tab when initialTab changes
   useEffect(() => {
@@ -434,25 +436,66 @@ function ProjectSettings({
               </button>
             )}
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (isSetupMode && onSetupComplete) {
-                  onSetupComplete()
+                  // Save environment configuration
+                  try {
+                    setIsInstallingDeps(true)
+                    setInstallProgress([])
+
+                    const result = await window.electronAPI?.projects.saveEnvConfig(projectId, apiKeyValues)
+
+                    if (result?.success) {
+                      toast.success('Configuration saved!', 'Environment variables written to .env')
+
+                      // Start npm install
+                      toast.info('Installing dependencies...', 'This may take a few minutes')
+
+                      // Listen for progress
+                      window.electronAPI?.onDependencyProgress?.((data: string) => {
+                        setInstallProgress(prev => [...prev, data])
+                      })
+
+                      const installResult = await window.electronAPI?.projects.installDependencies(projectId)
+
+                      setIsInstallingDeps(false)
+
+                      if (installResult?.success) {
+                        toast.success('Setup complete!', 'Dependencies installed successfully')
+                        onSetupComplete()
+                      } else {
+                        toast.error('Dependency installation failed', installResult?.error || 'Unknown error')
+                      }
+                    } else {
+                      setIsInstallingDeps(false)
+                      toast.error('Failed to save configuration', result?.error || 'Unknown error')
+                    }
+                  } catch (error) {
+                    setIsInstallingDeps(false)
+                    console.error('Error during setup:', error)
+                    toast.error('Setup failed', error instanceof Error ? error.message : 'Unknown error')
+                  }
                 } else {
                   toast.success('Settings saved', 'Your changes have been applied')
                   console.log('Save settings:', { projectName: editedName })
                   onClose()
                 }
               }}
-              disabled={isSetupMode && !isSetupComplete}
+              disabled={(isSetupMode && !isSetupComplete) || isInstallingDeps}
               className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                isSetupMode && !isSetupComplete
+                (isSetupMode && !isSetupComplete) || isInstallingDeps
                   ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
                   : isSetupMode
                   ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
                   : 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
               }`}
             >
-              {isSetupMode ? 'Complete Setup' : 'Save Changes'}
+              {isInstallingDeps ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-2" />
+                  Installing Dependencies...
+                </>
+              ) : isSetupMode ? 'Complete Setup' : 'Save Changes'}
             </button>
           </div>
         </div>

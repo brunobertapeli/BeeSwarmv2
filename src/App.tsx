@@ -11,22 +11,16 @@ function App() {
     // Listen for check-updates event from Electron menu
     if (window.electronAPI) {
       window.electronAPI.receive('check-updates', () => {
-        console.log('Checking for updates...')
+        // Check for updates
       })
     }
   }, [])
 
-  const handleLoginSuccess = () => {
-    // Mock user login - will be replaced with real Supabase auth
-    const mockUser = {
-      id: '1',
-      email: 'user@example.com',
-      name: 'John Doe'
-    }
-    setUser(mockUser)
+  const handleLoginSuccess = (user: any) => {
+    setUser(user)
 
     // Store in localStorage
-    localStorage.setItem('beeswarm_auth', JSON.stringify({ user: mockUser }))
+    localStorage.setItem('beeswarm_auth', JSON.stringify({ user }))
   }
 
   return (

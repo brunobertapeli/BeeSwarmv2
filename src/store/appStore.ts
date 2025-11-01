@@ -18,6 +18,8 @@ interface User {
   id: string
   email: string
   name: string
+  photoUrl?: string
+  plan: 'free' | 'plus' | 'premium'
 }
 
 export type DeploymentStatus = 'idle' | 'creating' | 'building' | 'finalizing' | 'setting-keys' | 'live'
@@ -70,10 +72,13 @@ export const useAppStore = create<AppState>((set) => ({
   logout: () => set({ user: null, isAuthenticated: false }),
 
   // Project state
-  currentProjectId: '1', // Default to first project
-  lastProjectId: '1',
-  setCurrentProject: (projectId) =>
-    set({ currentProjectId: projectId, lastProjectId: projectId }),
+  currentProjectId: null,
+  lastProjectId: null,
+  setCurrentProject: (projectId) => {
+    // Persist to localStorage
+    localStorage.setItem('beeswarm_currentProjectId', projectId)
+    set({ currentProjectId: projectId, lastProjectId: projectId })
+  },
   netlifyConnected: true, // Set to true for demo purposes
   setNetlifyConnected: (connected) => set({ netlifyConnected: connected }),
   deploymentStatus: 'idle',
@@ -111,9 +116,26 @@ if (typeof window !== 'undefined') {
   if (storedAuth) {
     try {
       const { user } = JSON.parse(storedAuth)
-      useAppStore.setState({ user, isAuthenticated: true })
+      // Only restore session if user has required fields (photoUrl, plan)
+      // This prevents old mock data from being loaded
+      if (user && user.plan && user.email) {
+        useAppStore.setState({ user, isAuthenticated: true })
+        console.log('✅ Restored session for:', user.email)
+      } else {
+        // Clear invalid/old session data
+        localStorage.removeItem('beeswarm_auth')
+        console.log('🧹 Cleared old session data')
+      }
     } catch (e) {
       console.error('Failed to parse stored auth:', e)
+      localStorage.removeItem('beeswarm_auth')
     }
+  }
+
+  // Initialize current project from localStorage
+  const storedProjectId = localStorage.getItem('beeswarm_currentProjectId')
+  if (storedProjectId) {
+    useAppStore.setState({ currentProjectId: storedProjectId, lastProjectId: storedProjectId })
+    console.log('✅ Restored project:', storedProjectId)
   }
 }

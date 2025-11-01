@@ -1,140 +1,14 @@
-import { useState } from 'react'
-import { X, Sparkles, ExternalLink } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Sparkles, ExternalLink, Crown } from 'lucide-react'
 import TechIcon from './TechIcon'
 import { useAppStore } from '../store/appStore'
-
-interface Template {
-  id: string
-  name: string
-  description: string
-  category: string
-  techStack: string[]
-  demoUrl: string
-}
+import { Template } from '../types/electron'
 
 interface TemplateSelectorProps {
   isOpen: boolean
   onClose: () => void
-  onCreateProject: (templateId: string, projectName: string) => void
+  onCreateProject: (templateId: string, projectName: string, projectId: string) => void
 }
-
-// Mock templates organized by category
-const templates: Template[] = [
-  {
-    id: 'webapp-1',
-    name: 'React Node Lite',
-    description: 'React + NodeJS Lite, with MaterialUI, Supabase for Authentication and MongoDB for the database.',
-    category: 'E-commerce',
-    techStack: ['react', 'node', 'supabase', 'mongodb'],
-    demoUrl: 'https://demo.example.com/react-node-lite',
-  },
-  {
-    id: 'webapp-2',
-    name: 'React Node Lite + Stripe',
-    description: 'React + NodeJS Lite with Stripe payment integration, MaterialUI, Supabase for Authentication and MongoDB.',
-    category: 'E-commerce',
-    techStack: ['react', 'node', 'supabase', 'mongodb', 'stripe'],
-    demoUrl: 'https://demo.example.com/react-node-stripe',
-  },
-  {
-    id: 'webapp-3',
-    name: 'Marketplace Platform',
-    description: 'Multi-vendor marketplace where sellers can list products and buyers can purchase from multiple vendors.',
-    category: 'E-commerce',
-    techStack: ['react', 'node', 'mongodb', 'stripe'],
-    demoUrl: 'https://demo.example.com/marketplace',
-  },
-  {
-    id: 'webapp-4',
-    name: 'Product Catalog',
-    description: 'Simple product catalog with shopping cart and checkout integration.',
-    category: 'E-commerce',
-    techStack: ['react', 'materialui', 'stripe'],
-    demoUrl: 'https://demo.example.com/product-catalog',
-  },
-  {
-    id: 'saas-1',
-    name: 'SaaS Dashboard',
-    description: 'Modern SaaS application dashboard with user management, subscription billing, and analytics.',
-    category: 'SaaS',
-    techStack: ['react', 'materialui', 'supabase', 'stripe'],
-    demoUrl: 'https://demo.example.com/saas-dashboard',
-  },
-  {
-    id: 'saas-2',
-    name: 'Project Management',
-    description: 'Collaborative project management tool with task boards, team chat, and file sharing capabilities.',
-    category: 'SaaS',
-    techStack: ['react', 'materialui', 'node', 'mongodb'],
-    demoUrl: 'https://demo.example.com/project-mgmt',
-  },
-  {
-    id: 'saas-3',
-    name: 'CRM System',
-    description: 'Customer relationship management system with contact management and sales pipeline tracking.',
-    category: 'SaaS',
-    techStack: ['react', 'node', 'mongodb'],
-    demoUrl: 'https://demo.example.com/crm',
-  },
-  {
-    id: 'landing-1',
-    name: 'Startup Landing',
-    description: 'High-converting landing page for startups with hero section, features showcase, and pricing tables.',
-    category: 'Landing Pages',
-    techStack: ['react', 'materialui'],
-    demoUrl: 'https://demo.example.com/startup-landing',
-  },
-  {
-    id: 'landing-2',
-    name: 'Product Launch',
-    description: 'Launch page for new products with countdown timer, email collection, and pre-order functionality.',
-    category: 'Landing Pages',
-    techStack: ['react', 'supabase'],
-    demoUrl: 'https://demo.example.com/product-launch',
-  },
-  {
-    id: 'landing-3',
-    name: 'App Landing Page',
-    description: 'Mobile app landing page with app store links, feature highlights, and testimonials.',
-    category: 'Landing Pages',
-    techStack: ['react', 'materialui'],
-    demoUrl: 'https://demo.example.com/app-landing',
-  },
-  {
-    id: 'blog-1',
-    name: 'Personal Blog',
-    description: 'Clean and minimalist blog platform with markdown support, categories, tags, and comment system.',
-    category: 'Blog',
-    techStack: ['react', 'node', 'mongodb'],
-    demoUrl: 'https://demo.example.com/personal-blog',
-  },
-  {
-    id: 'blog-2',
-    name: 'Tech Blog',
-    description: 'Technical blog with code highlighting, search functionality, and RSS feed support.',
-    category: 'Blog',
-    techStack: ['react', 'node', 'mongodb'],
-    demoUrl: 'https://demo.example.com/tech-blog',
-  },
-  {
-    id: 'portfolio-1',
-    name: 'Developer Portfolio',
-    description: 'Showcase your projects and skills with this elegant portfolio template featuring project galleries.',
-    category: 'Portfolio',
-    techStack: ['react', 'node'],
-    demoUrl: 'https://demo.example.com/dev-portfolio',
-  },
-  {
-    id: 'portfolio-2',
-    name: 'Designer Portfolio',
-    description: 'Creative portfolio for designers with image galleries, case studies, and contact integration.',
-    category: 'Portfolio',
-    techStack: ['react', 'materialui'],
-    demoUrl: 'https://demo.example.com/designer-portfolio',
-  },
-]
-
-const categories = ['E-commerce', 'SaaS', 'Landing Pages', 'Blog', 'Portfolio']
 
 // Tech configuration with required API keys
 export interface TechApiKey {
@@ -217,15 +91,51 @@ const TECH_CONFIGS: Record<string, TechConfig> = {
   },
 }
 
-// Get required tech configs based on tech stack
-const getRequiredTechConfigs = (techStack: string[]): TechConfig[] => {
+// Get required tech configs based on required services
+const getRequiredTechConfigs = (requiredServices: string[]): TechConfig[] => {
   const configs: TechConfig[] = []
-  techStack.forEach((tech) => {
-    if (TECH_CONFIGS[tech]) {
-      configs.push(TECH_CONFIGS[tech])
+  requiredServices.forEach((service) => {
+    if (TECH_CONFIGS[service]) {
+      configs.push(TECH_CONFIGS[service])
     }
   })
   return configs
+}
+
+// Plan hierarchy
+const PLAN_HIERARCHY = {
+  free: 0,
+  plus: 1,
+  premium: 2,
+}
+
+// Check if user can access a template
+const canAccessTemplate = (userPlan: 'free' | 'plus' | 'premium', requiredPlan: 'free' | 'plus' | 'premium'): boolean => {
+  return PLAN_HIERARCHY[userPlan] >= PLAN_HIERARCHY[requiredPlan]
+}
+
+// Get plan badge color (matching UserProfile design)
+const getPlanBadgeColor = (plan: 'free' | 'plus' | 'premium') => {
+  switch (plan) {
+    case 'premium':
+      return 'bg-gradient-to-r from-yellow-400 to-yellow-600'
+    case 'plus':
+      return 'bg-primary'
+    default:
+      return 'bg-gray-500'
+  }
+}
+
+// Get plan label
+const getPlanLabel = (plan: 'free' | 'plus' | 'premium') => {
+  switch (plan) {
+    case 'premium':
+      return 'Premium'
+    case 'plus':
+      return 'Plus'
+    default:
+      return 'Free'
+  }
 }
 
 // Mini tech icon component for the list (with hover effects)
@@ -268,9 +178,82 @@ function MiniTechIcon({ tech }: { tech: string }) {
 }
 
 function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelectorProps) {
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(templates[0])
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [projectName, setProjectName] = useState('')
-  const { setNewProjectData, setProjectSetupMode, setShowProjectSettings } = useAppStore()
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const { user, setNewProjectData, setProjectSetupMode, setShowProjectSettings } = useAppStore()
+
+  // Check if user can access selected template
+  const canAccess = selectedTemplate && user ? canAccessTemplate(user.plan, selectedTemplate.requiredPlan) : true
+
+  // Refresh user session when modal opens (to get latest plan data)
+  useEffect(() => {
+    const refreshUserSession = async () => {
+      try {
+        const result = await window.electronAPI?.auth.getSession()
+
+        if (result?.success && result.user) {
+          // Update user in store with fresh data from Supabase
+          const { setUser } = useAppStore.getState()
+          setUser(result.user)
+
+          // Update localStorage to stay in sync
+          const storedAuth = localStorage.getItem('beeswarm_auth')
+          if (storedAuth) {
+            const parsed = JSON.parse(storedAuth)
+            parsed.user = result.user
+            localStorage.setItem('beeswarm_auth', JSON.stringify(parsed))
+          }
+
+          console.log('✅ Refreshed user session, plan:', result.user.plan)
+        }
+      } catch (err) {
+        console.error('Error refreshing user session:', err)
+      }
+    }
+
+    if (isOpen) {
+      refreshUserSession()
+    }
+  }, [isOpen])
+
+  // Fetch templates from MongoDB
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        const result = await window.electronAPI?.templates.fetch()
+
+        if (result?.success && result.templates) {
+          setTemplates(result.templates)
+          // Set first template as default selection
+          if (result.templates.length > 0) {
+            setSelectedTemplate(result.templates[0])
+          }
+        } else {
+          setError(result?.error || 'Failed to fetch templates')
+        }
+      } catch (err) {
+        console.error('Error fetching templates:', err)
+        setError(err instanceof Error ? err.message : 'Unknown error')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (isOpen) {
+      fetchTemplates()
+    }
+  }, [isOpen])
+
+  // Get unique categories from templates
+  const categories = Array.from(new Set(templates.map(t => t.category)))
 
   // Convert project name to project ID (lowercase, spaces to dashes)
   const projectId = projectName
@@ -278,29 +261,71 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '')
 
-  const handleCreate = () => {
-    if (selectedTemplate && projectName.trim()) {
-      // Get required tech configs for this template
-      const requiredTechConfigs = getRequiredTechConfigs(selectedTemplate.techStack)
+  const handleCreate = async () => {
+    if (!selectedTemplate || !projectName.trim()) return
 
-      // Store new project data and trigger setup mode
-      setNewProjectData({
-        templateId: selectedTemplate.id,
-        requiredTechConfigs,
-      })
+    try {
+      setCreating(true)
+      setCreateError(null)
 
-      // Create the project
-      onCreateProject(selectedTemplate.id, projectName.trim())
+      console.log('Creating project:', projectName, 'from template:', selectedTemplate.id)
 
-      // If the template requires API keys, trigger setup mode
-      if (requiredTechConfigs.length > 0) {
-        setProjectSetupMode(true)
-        setShowProjectSettings(true)
+      // Create project via IPC
+      const result = await window.electronAPI?.projects.create(
+        selectedTemplate.id,
+        projectName.trim()
+      )
+
+      if (result?.success && result.project) {
+        console.log('Project created successfully:', result.project)
+
+        // Update lastOpenedAt for the new project
+        await window.electronAPI?.projects.updateLastOpened(result.project.id)
+
+        // Check if template requires configuration
+        const requiredTechConfigs = getRequiredTechConfigs(selectedTemplate.requiredServices || [])
+
+        // Call the parent callback with project ID FIRST
+        // Parent will refresh projects list and switch to this project
+        onCreateProject(selectedTemplate.id, projectName.trim(), result.project.id)
+
+        // Reset state
+        setProjectName('')
+        setCreating(false)
+        onClose()
+
+        // AFTER closing, set setup mode if needed
+        // This ensures ProjectView can react to the state change
+        if (requiredTechConfigs.length > 0) {
+          setTimeout(() => {
+            setNewProjectData({
+              templateId: selectedTemplate.id,
+              requiredTechConfigs
+            })
+            setProjectSetupMode(true)
+            setShowProjectSettings(true)
+          }, 150)
+        }
+      } else {
+        setCreateError(result?.error || 'Failed to create project')
+        setCreating(false)
       }
-
-      setProjectName('')
-      onClose()
+    } catch (err) {
+      console.error('Error creating project:', err)
+      setCreateError(err instanceof Error ? err.message : 'Unknown error')
+      setCreating(false)
     }
+  }
+
+  const handleUpgrade = () => {
+    if (!selectedTemplate) return
+
+    // Open subscription page in browser
+    const upgradeUrl = `https://beeswarm.app/upgrade?plan=${selectedTemplate.requiredPlan}`
+    window.open(upgradeUrl, '_blank')
+
+    // Close the modal
+    onClose()
   }
 
   if (!isOpen) return null
@@ -319,7 +344,9 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
         <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border/50">
           <div>
             <h2 className="text-sm font-semibold text-white">Create New Project</h2>
-            <p className="text-[11px] text-gray-500 mt-0.5">{templates.length} templates available</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {loading ? 'Loading templates...' : `${templates.length} templates available`}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -331,6 +358,29 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
 
         {/* Content - Two Columns */}
         <div className="flex flex-1 overflow-hidden">
+          {/* Loading State */}
+          {loading && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-8 h-8 border-2 border-primary-blue border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <p className="text-xs text-gray-400">Loading templates...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && !loading && (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center px-4">
+                <p className="text-xs text-red-400 mb-2">Failed to load templates</p>
+                <p className="text-[10px] text-gray-500">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Templates Content */}
+          {!loading && !error && templates.length > 0 && (
+            <>
           {/* Left Column - Templates List */}
           <div className="w-[320px] border-r border-dark-border flex flex-col">
             {/* Templates List by Category with Scrollbar */}
@@ -354,7 +404,16 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
                                 : 'border-transparent hover:border-dark-border hover:bg-dark-bg/30'
                             }`}
                           >
-                            <h4 className="text-[12px] font-medium text-white mb-1.5">{template.name}</h4>
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <h4 className="text-[12px] font-medium text-white">{template.name}</h4>
+                              {template.requiredPlan !== 'free' && (
+                                <span
+                                  className={`inline-flex items-center ${getPlanBadgeColor(template.requiredPlan)} rounded px-1.5 py-0.5 text-[9px] font-semibold text-white uppercase tracking-wide`}
+                                >
+                                  {getPlanLabel(template.requiredPlan)}
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-1.5">
                               {template.techStack.slice(0, 5).map((tech) => (
                                 <MiniTechIcon key={tech} tech={tech} />
@@ -380,7 +439,16 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
               <div className="flex-1 overflow-y-auto p-5">
                 {/* Template Title */}
                 <div className="mb-4">
-                  <h1 className="text-lg font-bold text-white mb-2">{selectedTemplate.name}</h1>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h1 className="text-lg font-bold text-white">{selectedTemplate.name}</h1>
+                    {selectedTemplate.requiredPlan !== 'free' && (
+                      <span
+                        className={`inline-flex items-center ${getPlanBadgeColor(selectedTemplate.requiredPlan)} rounded-md px-2 py-0.5 text-[10px] font-semibold text-white uppercase tracking-wide`}
+                      >
+                        {getPlanLabel(selectedTemplate.requiredPlan)}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[13px] text-gray-400 leading-relaxed">{selectedTemplate.description}</p>
                 </div>
 
@@ -437,22 +505,55 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
               </div>
             )}
 
-            {/* Footer - Create Button */}
+            {/* Footer - Create/Upgrade Button */}
             <div className="px-5 py-3 border-t border-dark-border/50 bg-dark-bg/20">
-              <button
-                onClick={handleCreate}
-                disabled={!projectName.trim()}
-                className={`w-full px-4 py-2 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all ${
-                  projectName.trim()
-                    ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20 hover:shadow-primary/40'
-                    : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                }`}
-              >
-                <Sparkles size={14} />
-                Create Project
-              </button>
+              {createError && (
+                <div className="mb-2 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-xs text-red-400">{createError}</p>
+                </div>
+              )}
+
+              {!canAccess ? (
+                // Upgrade Button (when user cannot access template)
+                <button
+                  onClick={handleUpgrade}
+                  className={`w-full px-4 py-2 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all text-white shadow-lg ${
+                    selectedTemplate?.requiredPlan === 'premium'
+                      ? 'bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 shadow-yellow-400/20 hover:shadow-yellow-400/40'
+                      : 'bg-primary hover:bg-primary-dark shadow-primary/20 hover:shadow-primary/40'
+                  }`}
+                >
+                  <Crown size={14} />
+                  Upgrade to {getPlanLabel(selectedTemplate?.requiredPlan || 'plus')}
+                </button>
+              ) : (
+                // Create Button (when user can access template)
+                <button
+                  onClick={handleCreate}
+                  disabled={!projectName.trim() || creating}
+                  className={`w-full px-4 py-2 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all ${
+                    projectName.trim() && !creating
+                      ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20 hover:shadow-primary/40'
+                      : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  {creating ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={14} />
+                      Create Project
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
+import UserProfile from './UserProfile'
 
 interface ProjectHeaderProps {
   projectName: string
@@ -11,7 +12,7 @@ function ProjectHeader({ projectName, onOpenProjectSelector }: ProjectHeaderProp
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 border-b border-dark-border/30" style={{ WebkitAppRegion: 'drag' } as any}>
-      <div className="flex items-center h-12 pl-20 pr-4">
+      <div className="flex items-center justify-between h-12 pl-20 pr-4">
         {/* Back Arrow and Project Name */}
         <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as any}>
           {/* Back Arrow Button */}
@@ -33,6 +34,11 @@ function ProjectHeader({ projectName, onOpenProjectSelector }: ProjectHeaderProp
           <span className="text-sm font-medium text-gray-300">
             {projectName}
           </span>
+        </div>
+
+        {/* User Profile - Right Side */}
+        <div style={{ WebkitAppRegion: 'no-drag' } as any}>
+          <UserProfile />
         </div>
       </div>
     </div>

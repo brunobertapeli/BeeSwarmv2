@@ -1,27 +1,20 @@
 import { useState } from 'react'
+import { getTechConfig } from '../config/techStack'
 
 interface TechIconProps {
   name: string
-  label: string
-}
-
-// Tech icon configuration with colors and display names
-const TECH_CONFIG: Record<string, { color: string; displayName: string }> = {
-  react: { color: '#61DAFB', displayName: 'React' },
-  node: { color: '#339933', displayName: 'Node.js' },
-  mongodb: { color: '#47A248', displayName: 'MongoDB' },
-  stripe: { color: '#635BFF', displayName: 'Stripe' },
-  supabase: { color: '#3ECF8E', displayName: 'Supabase' },
-  materialui: { color: '#007FFF', displayName: 'Material UI' },
+  label?: string
 }
 
 function TechIcon({ name, label }: TechIconProps) {
   const [isHovered, setIsHovered] = useState(false)
-  const techKey = name.toLowerCase()
-  const config = TECH_CONFIG[techKey] || { color: '#888888', displayName: label }
+  const config = getTechConfig(name)
 
-  // Get the SVG path
-  const svgPath = `/src/assets/tech-icons/${techKey}.svg`
+  // Use display name from config or provided label
+  const displayName = label || config.displayName
+
+  // Get the SVG path using icon filename from config
+  const svgPath = `/src/assets/tech-icons/${config.iconFileName}`
 
   return (
     <div
@@ -41,7 +34,7 @@ function TechIcon({ name, label }: TechIconProps) {
         {/* SVG Icon */}
         <img
           src={svgPath}
-          alt={config.displayName}
+          alt={displayName}
           className="w-4 h-4 transition-all duration-200"
           style={{
             filter: isHovered ? 'none' : 'grayscale(100%) brightness(0.4) opacity(0.8)',
@@ -54,7 +47,7 @@ function TechIcon({ name, label }: TechIconProps) {
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none">
           <div className="px-2 py-1 bg-dark-bg/95 backdrop-blur-sm border border-dark-border rounded shadow-xl">
             <span className="text-[10px] text-white whitespace-nowrap font-medium">
-              {config.displayName}
+              {displayName}
             </span>
           </div>
           {/* Arrow */}
