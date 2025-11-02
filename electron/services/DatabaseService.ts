@@ -14,6 +14,8 @@ export interface Project {
   configCompleted: boolean
   envVars: string | null // JSON string
   dependenciesInstalled: boolean
+  claudeSessionId: string | null // Claude session ID for resume
+  claudeContext: string | null // Claude context (JSON string with tokens, cost, etc.)
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -118,6 +120,22 @@ class DatabaseService {
         console.log('✅ Migration complete: dependenciesInstalled column added')
       }
 
+      // Migration 5: Add claudeSessionId column if it doesn't exist
+      const hasClaudeSessionId = tableInfo.some(col => col.name === 'claudeSessionId')
+      if (!hasClaudeSessionId) {
+        console.log('📦 Running migration: Adding claudeSessionId column...')
+        this.db.exec('ALTER TABLE projects ADD COLUMN claudeSessionId TEXT')
+        console.log('✅ Migration complete: claudeSessionId column added')
+      }
+
+      // Migration 6: Add claudeContext column if it doesn't exist
+      const hasClaudeContext = tableInfo.some(col => col.name === 'claudeContext')
+      if (!hasClaudeContext) {
+        console.log('📦 Running migration: Adding claudeContext column...')
+        this.db.exec('ALTER TABLE projects ADD COLUMN claudeContext TEXT')
+        console.log('✅ Migration complete: claudeContext column added')
+      }
+
       // Future migrations can be added here
     } catch (error) {
       console.error('❌ Migration failed:', error)
@@ -128,7 +146,7 @@ class DatabaseService {
   /**
    * Create a new project
    */
-  createProject(project: Omit<Project, 'id' | 'createdAt' | 'lastOpenedAt' | 'isFavorite' | 'configCompleted' | 'envVars' | 'dependenciesInstalled'>): Project {
+  createProject(project: Omit<Project, 'id' | 'createdAt' | 'lastOpenedAt' | 'isFavorite' | 'configCompleted' | 'envVars' | 'dependenciesInstalled' | 'claudeSessionId'>): Project {
     if (!this.db) {
       throw new Error('Database not initialized')
     }
@@ -140,13 +158,14 @@ class DatabaseService {
       configCompleted: false,
       envVars: null,
       dependenciesInstalled: false,
+      claudeSessionId: null,
       createdAt: Date.now(),
       lastOpenedAt: null
     }
 
     const sql = `
-      INSERT INTO projects (id, name, path, templateId, templateName, status, isFavorite, configCompleted, envVars, dependenciesInstalled, createdAt, lastOpenedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, name, path, templateId, templateName, status, isFavorite, configCompleted, envVars, dependenciesInstalled, claudeSessionId, createdAt, lastOpenedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
 
     try {
@@ -161,6 +180,7 @@ class DatabaseService {
         newProject.configCompleted ? 1 : 0,
         newProject.envVars,
         newProject.dependenciesInstalled ? 1 : 0,
+        newProject.claudeSessionId,
         newProject.createdAt,
         newProject.lastOpenedAt
       )
@@ -349,6 +369,78 @@ class DatabaseService {
     } catch (error) {
       console.error('❌ Failed to update last opened:', error)
       throw error
+    }
+  }
+
+  /**
+   * Save Claude session ID for a project
+   */
+  saveClaudeSessionId(projectId: string, sessionId: string | null): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'UPDATE projects SET claudeSessionId = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(sessionId, projectId)
+      console.log(`✅ Claude session ID saved for project: ${projectId}`)
+    } catch (error) {
+      console.error('❌ Failed to save Claude session ID:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get Claude session ID for a project
+   */
+  getClaudeSessionId(projectId: string): string | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    return project?.claudeSessionId || null
+  }
+
+  /**
+   * Save Claude context for a project
+   */
+  saveClaudeContext(projectId: string, context: any): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const contextJson = JSON.stringify(context)
+    const sql = 'UPDATE projects SET claudeContext = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(contextJson, projectId)
+      console.log(`✅ Claude context saved for project: ${projectId}`)
+    } catch (error) {
+      console.error('❌ Failed to save Claude context:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get Claude context for a project
+   */
+  getClaudeContext(projectId: string): any | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!project?.claudeContext) {
+      return null
+    }
+
+    try {
+      return JSON.parse(project.claudeContext)
+    } catch (error) {
+      console.error('❌ Failed to parse Claude context:', error)
+      return null
     }
   }
 

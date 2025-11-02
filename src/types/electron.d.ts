@@ -31,6 +31,31 @@ export type ProcessState = 'stopped' | 'starting' | 'running' | 'stopping' | 'cr
 
 export type ClaudeStatus = 'idle' | 'starting' | 'running' | 'completed' | 'error'
 
+export interface ClaudeContext {
+  tokens: {
+    input: number
+    output: number
+    cacheRead: number
+    cacheCreation: number
+  }
+  baseline: {
+    systemPrompt: number
+    systemTools: number
+    memoryFiles: number
+    messages: number
+  }
+  cost: number
+  turns: number
+  model: string
+  contextWindow: number
+}
+
+export interface ClaudeModel {
+  value: string
+  displayName: string
+  description: string
+}
+
 export interface ProcessOutput {
   timestamp: Date
   type: 'stdout' | 'stderr'
@@ -261,11 +286,11 @@ export interface ElectronAPI {
   }
 
   claude: {
-    startSession: (projectId: string, prompt?: string) => Promise<{
+    startSession: (projectId: string, prompt?: string, model?: string) => Promise<{
       success: boolean
       error?: string
     }>
-    sendPrompt: (projectId: string, prompt: string) => Promise<{
+    sendPrompt: (projectId: string, prompt: string, model?: string) => Promise<{
       success: boolean
       error?: string
     }>
@@ -273,6 +298,20 @@ export interface ElectronAPI {
       success: boolean
       status?: ClaudeStatus
       sessionId?: string | null
+      error?: string
+    }>
+    getContext: (projectId: string) => Promise<{
+      success: boolean
+      context?: ClaudeContext | null
+      error?: string
+    }>
+    changeModel: (projectId: string, modelName: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    getModels: () => Promise<{
+      success: boolean
+      models?: ClaudeModel[]
       error?: string
     }>
     clearSession: (projectId: string) => Promise<{
@@ -287,6 +326,8 @@ export interface ElectronAPI {
     onCompleted: (callback: (projectId: string) => void) => () => void
     onError: (callback: (projectId: string, error: string) => void) => () => void
     onExited: (callback: (projectId: string, exitCode: number) => void) => () => void
+    onContextUpdated: (callback: (projectId: string, context: ClaudeContext) => void) => () => void
+    onModelChanged: (callback: (projectId: string, model: string) => void) => () => void
   }
 }
 

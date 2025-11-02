@@ -17,7 +17,7 @@ import { useAppStore, type DeploymentStatus } from '../store/appStore'
 import { useToast } from '../hooks/useToast'
 import StatusSheet from './StatusSheet'
 import ContextBar from './ContextBar'
-import type { ClaudeStatus } from '../types/electron'
+import type { ClaudeStatus, ClaudeContext, ClaudeModel } from '../types/electron'
 
 interface ActionBarProps {
   projectId?: string
@@ -50,8 +50,10 @@ function ActionBar({
   const [isHidden, setIsHidden] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
+  const [claudeContext, setClaudeContext] = useState<ClaudeContext | null>(null)
+  const [availableModels, setAvailableModels] = useState<ClaudeModel[]>([])
   const [message, setMessage] = useState('')
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4.5')
+  const [selectedModel, setSelectedModel] = useState('sonnet')
   const [isTextareaFocused, setIsTextareaFocused] = useState(false)
   const [deployProgress, setDeployProgress] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -73,9 +75,22 @@ function ActionBar({
     return () => clearTimeout(timer)
   }, [])
 
-  // Listen for Claude status changes
+  // Load available models on mount
+  useEffect(() => {
+    window.electronAPI?.claude.getModels().then((result) => {
+      if (result.success && result.models) {
+        setAvailableModels(result.models)
+      }
+    })
+  }, [])
+
+  // Listen for Claude status changes and context updates
   useEffect(() => {
     if (!projectId || !window.electronAPI?.claude) return
+
+    // Reset status only - don't clear context yet (will be fetched below)
+    setClaudeStatus('idle')
+    setSelectedModel('sonnet') // Default, will be overridden by context if available
 
     const unsubStatus = window.electronAPI.claude.onStatusChanged((id, status) => {
       if (id === projectId) {
@@ -100,10 +115,40 @@ function ActionBar({
       }
     })
 
-    // Get initial status
-    window.electronAPI.claude.getStatus(projectId).then((result) => {
-      if (result.success && result.status) {
-        setClaudeStatus(result.status)
+    const unsubContextUpdated = window.electronAPI.claude.onContextUpdated((id, context) => {
+      if (id === projectId) {
+        setClaudeContext(context)
+      }
+    })
+
+    const unsubModelChanged = window.electronAPI.claude.onModelChanged((id, model) => {
+      if (id === projectId) {
+        console.log('Claude model changed:', model)
+        setSelectedModel(model)
+        toast.success('Model Changed', `Switched to ${model}`)
+      }
+    })
+
+    // Fetch initial status and context immediately
+    Promise.all([
+      window.electronAPI.claude.getStatus(projectId),
+      window.electronAPI.claude.getContext(projectId)
+    ]).then(([statusResult, contextResult]) => {
+      // Set status
+      if (statusResult.success && statusResult.status) {
+        setClaudeStatus(statusResult.status)
+      }
+
+      // Set context and model
+      if (contextResult.success && contextResult.context) {
+        setClaudeContext(contextResult.context)
+        // Override default model with saved model from context
+        if (contextResult.context.model) {
+          setSelectedModel(contextResult.context.model)
+        }
+      } else {
+        // Only set to null if no context exists
+        setClaudeContext(null)
       }
     })
 
@@ -111,6 +156,8 @@ function ActionBar({
       unsubStatus()
       unsubCompleted()
       unsubError()
+      unsubContextUpdated()
+      unsubModelChanged()
     }
   }, [projectId, toast])
 
@@ -185,16 +232,16 @@ function ActionBar({
         const statusResult = await window.electronAPI?.claude.getStatus(projectId)
 
         if (statusResult?.status === 'idle') {
-          // Start session with the prompt (lazy initialization)
-          console.log('Starting Claude session with first message')
-          const result = await window.electronAPI?.claude.startSession(projectId, prompt)
+          // Start session with the prompt and selected model (lazy initialization)
+          console.log('Starting Claude session with first message and model:', selectedModel)
+          const result = await window.electronAPI?.claude.startSession(projectId, prompt, selectedModel)
 
           if (!result?.success) {
             toast.error('Failed to start Claude', result?.error || 'Unknown error')
             console.error('Failed to start Claude:', result?.error)
           }
         } else {
-          // Send prompt to existing session
+          // Send prompt to existing session (model is already set)
           const result = await window.electronAPI?.claude.sendPrompt(projectId, prompt)
 
           if (!result?.success) {
@@ -377,31 +424,62 @@ function ActionBar({
             <div className="relative">
               <select
                 value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
+                onChange={async (e) => {
+                  const newModel = e.target.value
+                  setSelectedModel(newModel)
+
+                  if (!projectId) return
+
+                  // Only call changeModel if there's an active session
+                  if (claudeStatus !== 'idle') {
+                    try {
+                      const result = await window.electronAPI?.claude.changeModel(projectId, newModel)
+                      if (!result?.success) {
+                        toast.error('Failed to change model', result?.error || 'Unknown error')
+                        // Revert selection on error
+                        setSelectedModel(selectedModel)
+                      }
+                    } catch (error) {
+                      console.error('Error changing model:', error)
+                      toast.error('Failed to change model', error instanceof Error ? error.message : 'Unknown error')
+                      // Revert selection on error
+                      setSelectedModel(selectedModel)
+                    }
+                  }
+                }}
                 className="bg-dark-bg/30 border border-dark-border/30 rounded-lg pl-2.5 pr-7 py-1.5 text-[11px] text-gray-300 outline-none hover:border-primary/30 transition-all cursor-pointer appearance-none"
               >
-                <option value="claude-sonnet-4.5">Claude Sonnet 4.5</option>
-                <option value="gemini-3.0-pro">Gemini 3.0 Pro</option>
+                {availableModels.length > 0 ? (
+                  availableModels.map((model) => (
+                    <option key={model.value} value={model.value}>
+                      {model.displayName}
+                    </option>
+                  ))
+                ) : (
+                  <>
+                    <option value="sonnet">Sonnet 4.5</option>
+                    <option value="opus">Opus 4.1</option>
+                    <option value="haiku">Haiku 4.5</option>
+                  </>
+                )}
               </select>
               <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
             </div>
 
             {/* Context Usage Bar */}
             <ContextBar
+              context={claudeContext}
               onClearContext={async () => {
                 if (!projectId) return
 
                 try {
                   await window.electronAPI?.claude.clearSession(projectId)
+                  // Context will be updated via onContextUpdated event with baseline
                   toast.success('Context Cleared', 'Starting fresh conversation')
                 } catch (error) {
                   console.error('Error clearing context:', error)
                   toast.error('Failed to clear context', error instanceof Error ? error.message : 'Unknown error')
                 }
-              }}
-              onCompactContext={() => {
-                toast.info('Compact Context', 'Optimizing conversation history...')
-                console.log('Compact context clicked - TODO')
               }}
             />
 

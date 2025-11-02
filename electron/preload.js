@@ -177,9 +177,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Claude Code methods
   claude: {
-    startSession: (projectId, prompt) => ipcRenderer.invoke('claude:start-session', projectId, prompt),
-    sendPrompt: (projectId, prompt) => ipcRenderer.invoke('claude:send-prompt', projectId, prompt),
+    startSession: (projectId, prompt, model) => ipcRenderer.invoke('claude:start-session', projectId, prompt, model),
+    sendPrompt: (projectId, prompt, model) => ipcRenderer.invoke('claude:send-prompt', projectId, prompt, model),
     getStatus: (projectId) => ipcRenderer.invoke('claude:get-status', projectId),
+    getContext: (projectId) => ipcRenderer.invoke('claude:get-context', projectId),
+    changeModel: (projectId, modelName) => ipcRenderer.invoke('claude:change-model', projectId, modelName),
+    getModels: (projectId) => ipcRenderer.invoke('claude:get-models', projectId),
     clearSession: (projectId) => ipcRenderer.invoke('claude:clear-session', projectId),
     destroySession: (projectId) => ipcRenderer.invoke('claude:destroy-session', projectId),
 
@@ -203,6 +206,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const listener = (_event, projectId, exitCode) => callback(projectId, exitCode)
       ipcRenderer.on('claude:exited', listener)
       return () => ipcRenderer.removeListener('claude:exited', listener)
+    },
+    onContextUpdated: (callback) => {
+      const listener = (_event, projectId, context) => callback(projectId, context)
+      ipcRenderer.on('claude:context-updated', listener)
+      return () => ipcRenderer.removeListener('claude:context-updated', listener)
+    },
+    onModelChanged: (callback) => {
+      const listener = (_event, projectId, model) => callback(projectId, model)
+      ipcRenderer.on('claude:model-changed', listener)
+      return () => ipcRenderer.removeListener('claude:model-changed', listener)
     }
   }
 })

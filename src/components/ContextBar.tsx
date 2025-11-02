@@ -1,62 +1,58 @@
 import { useState, useRef, useEffect } from 'react'
-import { Trash2, FileText, Database } from 'lucide-react'
-
-interface ContextUsage {
-  current: number
-  total: number
-  percentage: number
-  breakdown: {
-    systemPrompt: { tokens: number; percentage: number }
-    systemTools: { tokens: number; percentage: number }
-    mcpTools: { tokens: number; percentage: number }
-    messages: { tokens: number; percentage: number }
-    freeSpace: { tokens: number; percentage: number }
-    autocompactBuffer: { tokens: number; percentage: number }
-  }
-}
+import { createPortal } from 'react-dom'
+import { Trash2, Database, Info, X, AlertTriangle } from 'lucide-react'
+import type { ClaudeContext } from '../types/electron'
 
 interface ContextBarProps {
-  usage?: ContextUsage
+  context?: ClaudeContext | null
   onClearContext?: () => void
-  onCompactContext?: () => void
 }
 
-// Mock data - will be replaced with real data from backend
-const MOCK_USAGE: ContextUsage = {
-  current: 109000,
-  total: 200000,
-  percentage: 54,
-  breakdown: {
-    systemPrompt: { tokens: 2300, percentage: 1.2 },
-    systemTools: { tokens: 13300, percentage: 6.6 },
-    mcpTools: { tokens: 1300, percentage: 0.6 },
-    messages: { tokens: 46800, percentage: 23.4 },
-    freeSpace: { tokens: 91000, percentage: 45.6 },
-    autocompactBuffer: { tokens: 45000, percentage: 22.5 },
-  },
-}
-
-function ContextBar({ usage = MOCK_USAGE, onClearContext, onCompactContext }: ContextBarProps) {
+function ContextBar({ context, onClearContext }: ContextBarProps) {
   const [showTooltip, setShowTooltip] = useState(false)
-  const [showMenu, setShowMenu] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const tooltipRef = useRef<HTMLDivElement>(null)
+  const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Close menu when clicking outside
+  // Cleanup tooltip timeout on unmount
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false)
+    return () => {
+      if (tooltipTimeoutRef.current) {
+        clearTimeout(tooltipTimeoutRef.current)
       }
     }
+  }, [])
 
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside)
+  const handleShowTooltip = () => {
+    if (tooltipTimeoutRef.current) {
+      clearTimeout(tooltipTimeoutRef.current)
     }
+    setShowTooltip(true)
+  }
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showMenu])
+  const handleHideTooltip = () => {
+    // Don't hide if confirmation dialog is open
+    if (showConfirmDialog) return
+
+    // Add a small delay to allow moving from bar to tooltip
+    tooltipTimeoutRef.current = setTimeout(() => {
+      setShowTooltip(false)
+    }, 150)
+  }
+
+  const handleClearContext = () => {
+    setShowConfirmDialog(true)
+  }
+
+  const confirmClearContext = () => {
+    onClearContext?.()
+    setShowConfirmDialog(false)
+    setShowTooltip(false)
+  }
+
+  const cancelClearContext = () => {
+    setShowConfirmDialog(false)
+  }
 
   const formatTokens = (tokens: number) => {
     if (tokens >= 1000) {
@@ -65,20 +61,42 @@ function ContextBar({ usage = MOCK_USAGE, onClearContext, onCompactContext }: Co
     return tokens.toString()
   }
 
+  const formatCost = (cost: number) => {
+    if (cost < 0.01) return `$${(cost * 100).toFixed(2)}c`
+    return `$${cost.toFixed(3)}`
+  }
+
+  // Default baseline tokens (~30% of 200k context window = 61k tokens)
+  const defaultBaseline = {
+    systemPrompt: 2600,   // System prompt: 2.6k tokens (1.3%)
+    systemTools: 13300,   // System tools: 13.3k tokens (6.6%)
+    memoryFiles: 45,      // Memory files: 45 tokens (0.0%)
+    messages: 8           // Initial messages: 8 tokens (0.0%)
+  }
+
+  // Use context baseline if available, otherwise use defaults
+  const baseline = context?.baseline || defaultBaseline
+
+  // Calculate usage from context (including baseline system overhead)
+  const baselineTokens = baseline.systemPrompt + baseline.systemTools + baseline.memoryFiles + baseline.messages
+  const conversationTokens = context ? context.tokens.input + context.tokens.output : 0
+  const totalTokens = baselineTokens + conversationTokens
+  const contextWindow = context?.contextWindow || 200000
+  const percentage = Math.round((totalTokens / contextWindow) * 100)
+
   const getBarColor = () => {
-    if (usage.percentage >= 80) return 'from-red-500 to-red-600'
-    if (usage.percentage >= 60) return 'from-yellow-500 to-yellow-600'
+    if (percentage >= 80) return 'from-red-500 to-red-600'
+    if (percentage >= 60) return 'from-yellow-500 to-yellow-600'
     return 'from-primary to-green-600'
   }
 
   return (
-    <div ref={menuRef} className="relative flex items-center">
+    <div ref={tooltipRef} className="relative flex items-center">
       {/* Compact Context Bar */}
       <div
-        className="relative group cursor-pointer bg-dark-bg/30 border border-dark-border/30 rounded-lg px-2 py-1.5 hover:border-primary/30 transition-all flex items-center gap-2"
-        onMouseEnter={() => setShowTooltip(true)}
-        onMouseLeave={() => setShowTooltip(false)}
-        onClick={() => setShowMenu(!showMenu)}
+        className="relative group bg-dark-bg/30 border border-dark-border/30 rounded-lg px-2 py-1.5 hover:border-primary/30 transition-all flex items-center gap-2"
+        onMouseEnter={handleShowTooltip}
+        onMouseLeave={handleHideTooltip}
       >
         {/* Icon */}
         <Database size={12} className="text-gray-400 flex-shrink-0" />
@@ -88,122 +106,200 @@ function ContextBar({ usage = MOCK_USAGE, onClearContext, onCompactContext }: Co
           {/* Progress Fill */}
           <div
             className={`absolute inset-y-0 left-0 bg-gradient-to-r ${getBarColor()} rounded-full transition-all duration-500`}
-            style={{ width: `${usage.percentage}%` }}
+            style={{ width: `${percentage}%` }}
           />
         </div>
 
         {/* Percentage */}
         <span className="text-[10px] font-medium text-gray-400 tabular-nums">
-          {usage.percentage}%
+          {percentage}%
         </span>
       </div>
 
       {/* Hover Tooltip */}
-      {showTooltip && !showMenu && (
-        <div className="absolute bottom-full right-0 mb-2 bg-dark-card border border-dark-border rounded-lg shadow-2xl p-3 min-w-[260px] z-[70] animate-fadeIn">
-            {/* Header */}
-            <div className="mb-2 pb-2 border-b border-dark-border">
+      {showTooltip && (
+        <div
+          className="absolute bottom-full right-0 mb-2 bg-dark-card border border-dark-border rounded-lg shadow-2xl p-3 min-w-[260px] z-[70] animate-fadeIn"
+          onMouseEnter={handleShowTooltip}
+          onMouseLeave={handleHideTooltip}
+        >
+            {/* Header with Clear Button */}
+            <div className="mb-2 pb-2 border-b border-dark-border flex items-center justify-between gap-3">
               <p className="text-[11px] font-semibold text-gray-300">
-                {formatTokens(usage.current)}/{formatTokens(usage.total)} tokens ({usage.percentage}%)
+                {formatTokens(totalTokens)}/{formatTokens(contextWindow)} ({percentage}%)
               </p>
+              <button
+                onClick={handleClearContext}
+                className="px-2 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded text-[10px] font-medium text-red-400 transition-colors whitespace-nowrap"
+              >
+                Clear Context
+              </button>
             </div>
 
-            {/* Breakdown */}
-            <div className="space-y-1.5">
+            {/* Baseline System Usage */}
+            <div className="space-y-1.5 mb-2 pb-2 border-b border-dark-border/50">
+              <div className="text-[9px] text-gray-500 font-semibold uppercase tracking-wide mb-1">
+                System Baseline
+              </div>
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
                 <span className="text-[10px] text-gray-400 flex-1">System prompt:</span>
                 <span className="text-[10px] text-gray-300 font-medium tabular-nums">
-                  {formatTokens(usage.breakdown.systemPrompt.tokens)} ({usage.breakdown.systemPrompt.percentage}%)
+                  {formatTokens(baseline.systemPrompt)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+                <span className="text-[10px] text-gray-400 flex-1">System tools:</span>
+                <span className="text-[10px] text-gray-300 font-medium tabular-nums">
+                  {formatTokens(baseline.systemTools)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+                <span className="text-[10px] text-gray-400 flex-1">Memory files:</span>
+                <span className="text-[10px] text-gray-300 font-medium tabular-nums">
+                  {formatTokens(baseline.memoryFiles)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+                <span className="text-[10px] text-gray-400 flex-1">Messages overhead:</span>
+                <span className="text-[10px] text-gray-300 font-medium tabular-nums">
+                  {formatTokens(baseline.messages)}
+                </span>
+              </div>
+            </div>
+
+            {/* Conversation Stats */}
+            <div className="space-y-1.5">
+              <div className="text-[9px] text-gray-500 font-semibold uppercase tracking-wide mb-1">
+                Conversation
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                <span className="text-[10px] text-gray-400 flex-1">Input tokens:</span>
+                <span className="text-[10px] text-gray-300 font-medium tabular-nums">
+                  {formatTokens(context?.tokens.input || 0)}
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-purple-400 flex-shrink-0" />
-                <span className="text-[10px] text-gray-400 flex-1">System tools:</span>
+                <span className="text-[10px] text-gray-400 flex-1">Output tokens:</span>
                 <span className="text-[10px] text-gray-300 font-medium tabular-nums">
-                  {formatTokens(usage.breakdown.systemTools.tokens)} ({usage.breakdown.systemTools.percentage}%)
+                  {formatTokens(context?.tokens.output || 0)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                <span className="text-[10px] text-gray-400 flex-1">Cache read:</span>
+                <span className="text-[10px] text-gray-300 font-medium tabular-nums">
+                  {formatTokens(context?.tokens.cacheRead || 0)}
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 flex-shrink-0" />
-                <span className="text-[10px] text-gray-400 flex-1">MCP tools:</span>
+                <span className="text-[10px] text-gray-400 flex-1">Cache creation:</span>
                 <span className="text-[10px] text-gray-300 font-medium tabular-nums">
-                  {formatTokens(usage.breakdown.mcpTools.tokens)} ({usage.breakdown.mcpTools.percentage}%)
+                  {formatTokens(context?.tokens.cacheCreation || 0)}
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                <span className="text-[10px] text-gray-400 flex-1">Messages:</span>
+                <span className="text-[10px] text-gray-400 flex-1">Turns:</span>
                 <span className="text-[10px] text-gray-300 font-medium tabular-nums">
-                  {formatTokens(usage.breakdown.messages.tokens)} ({usage.breakdown.messages.percentage}%)
+                  {context?.turns || 0}
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-gray-500 flex-shrink-0" />
-                <span className="text-[10px] text-gray-400 flex-1">Free space:</span>
-                <span className="text-[10px] text-gray-300 font-medium tabular-nums">
-                  {formatTokens(usage.breakdown.freeSpace.tokens)} ({usage.breakdown.freeSpace.percentage}%)
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0" />
-                <span className="text-[10px] text-gray-400 flex-1">Autocompact buffer:</span>
-                <span className="text-[10px] text-gray-300 font-medium tabular-nums">
-                  {formatTokens(usage.breakdown.autocompactBuffer.tokens)} ({usage.breakdown.autocompactBuffer.percentage}%)
-                </span>
+                <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />
+                <span className="text-[10px] text-gray-400 flex-1">Total cost:</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-gray-300 font-medium tabular-nums">
+                    {formatCost(context?.cost || 0)}
+                  </span>
+                  <div className="group/info relative">
+                    <Info size={10} className="text-gray-500 cursor-help" />
+                    <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-dark-bg border border-dark-border rounded px-2 py-1 text-[9px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/info:opacity-100 transition-opacity z-[80] shadow-lg">
+                      API usage only. Included with Claude Pro/Team plans
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-      {/* Click Menu */}
-      {showMenu && (
-        <div className="absolute bottom-full right-0 mb-2 bg-dark-card border border-dark-border rounded-lg shadow-2xl overflow-hidden min-w-[180px] z-[70] animate-scaleIn">
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onCompactContext?.()
-              setShowMenu(false)
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-dark-bg/50 transition-colors group"
-          >
-            <FileText size={14} className="text-gray-400 group-hover:text-primary transition-colors" />
-            <div className="flex-1">
-              <div className="text-[12px] font-medium text-gray-300 group-hover:text-primary transition-colors">
-                Compact Context
+      {/* Confirmation Dialog - Use Portal to render at document body */}
+      {showConfirmDialog && createPortal(
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999]"
+            onClick={cancelClearContext}
+          />
+
+          {/* Dialog */}
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[420px]">
+              {/* Header */}
+              <div className="flex items-start gap-3 mb-4">
+                <div className="p-2 bg-red-500/10 rounded-lg">
+                  <AlertTriangle size={20} className="text-red-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-[15px] font-semibold text-white mb-1">
+                    Clear Context Window?
+                  </h3>
+                  <p className="text-[12px] text-gray-400 leading-relaxed">
+                    You're about to lose all context from this conversation and start fresh.
+                  </p>
+                </div>
+                <button
+                  onClick={cancelClearContext}
+                  className="p-1 hover:bg-dark-bg rounded transition-colors"
+                >
+                  <X size={16} className="text-gray-500" />
+                </button>
               </div>
-              <div className="text-[10px] text-gray-500">
-                Optimize conversation history
+
+              {/* Info Box */}
+              <div className="bg-dark-bg/50 border border-dark-border/50 rounded-lg p-3 mb-4">
+                <div className="flex items-start gap-2">
+                  <Info size={14} className="text-primary mt-0.5 flex-shrink-0" />
+                  <p className="text-[11px] text-gray-400 leading-relaxed">
+                    <span className="text-gray-300 font-medium">Pro tip:</span> Claude automatically compacts your context at ~95% capacity, so you rarely need to clear it manually.
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={cancelClearContext}
+                  className="flex-1 px-4 py-2 bg-dark-bg hover:bg-dark-bg/80 border border-dark-border rounded-lg text-[12px] font-medium text-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmClearContext}
+                  className="flex-1 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-[12px] font-medium text-red-400 transition-colors"
+                >
+                  Clear Context
+                </button>
               </div>
             </div>
-          </button>
-
-          <div className="border-t border-dark-border" />
-
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onClearContext?.()
-              setShowMenu(false)
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-red-500/10 transition-colors group"
-          >
-            <Trash2 size={14} className="text-gray-400 group-hover:text-red-400 transition-colors" />
-            <div className="flex-1">
-              <div className="text-[12px] font-medium text-gray-300 group-hover:text-red-400 transition-colors">
-                Clear Context
-              </div>
-              <div className="text-[10px] text-gray-500">
-                Start fresh conversation
-              </div>
-            </div>
-          </button>
-        </div>
+          </div>
+        </>,
+        document.body
       )}
     </div>
   )

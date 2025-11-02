@@ -1,5 +1,5 @@
 import { ipcMain, WebContents } from 'electron';
-import { claudeService, ClaudeStatus, ClaudeEvent } from '../services/ClaudeService';
+import { claudeService, ClaudeStatus, ClaudeEvent, ClaudeContext } from '../services/ClaudeService';
 import { terminalAggregator } from '../services/TerminalAggregator';
 import { databaseService } from '../services/DatabaseService';
 import { processManager } from '../services/ProcessManager';
@@ -20,7 +20,7 @@ export function setClaudeHandlersWindow(webContents: WebContents): void {
  */
 export function registerClaudeHandlers(): void {
   // Start Claude Code session
-  ipcMain.handle('claude:start-session', async (_event, projectId: string, prompt?: string) => {
+  ipcMain.handle('claude:start-session', async (_event, projectId: string, prompt?: string, model?: string) => {
     try {
       console.log(`🤖 Starting Claude session for project: ${projectId}`);
 
@@ -41,13 +41,13 @@ export function registerClaudeHandlers(): void {
         };
       }
 
-      // Start Claude session
-      await claudeService.startSession(projectId, project.path, prompt);
+      // Start Claude session with optional model
+      await claudeService.startSession(projectId, project.path, prompt, model);
 
       // Add system message to terminal
       terminalAggregator.addSystemLine(
         projectId,
-        '🤖 Claude Code session started\n'
+        `🤖 Claude Code session started${model ? ` with ${model}` : ''}\n`
       );
 
       return {
@@ -63,7 +63,7 @@ export function registerClaudeHandlers(): void {
   });
 
   // Send prompt to Claude
-  ipcMain.handle('claude:send-prompt', async (_event, projectId: string, prompt: string) => {
+  ipcMain.handle('claude:send-prompt', async (_event, projectId: string, prompt: string, model?: string) => {
     try {
       console.log(`📤 Sending prompt to Claude for project: ${projectId}`);
 
@@ -82,8 +82,8 @@ export function registerClaudeHandlers(): void {
         `\n💬 User: ${prompt}\n\n`
       );
 
-      // Send prompt using session resume pattern
-      await claudeService.sendPrompt(projectId, project.path, prompt);
+      // Send prompt using session resume pattern with optional model
+      await claudeService.sendPrompt(projectId, project.path, prompt, model);
 
       return {
         success: true,
@@ -159,6 +159,69 @@ export function registerClaudeHandlers(): void {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to destroy session',
+      };
+    }
+  });
+
+  // Get context information
+  ipcMain.handle('claude:get-context', async (_event, projectId: string) => {
+    try {
+      const context = claudeService.getContext(projectId);
+
+      return {
+        success: true,
+        context,
+      };
+    } catch (error) {
+      console.error('❌ Error getting Claude context:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get context',
+        context: null,
+      };
+    }
+  });
+
+  // Change model
+  ipcMain.handle('claude:change-model', async (_event, projectId: string, modelName: string) => {
+    try {
+      console.log(`🔄 Changing model for ${projectId} to ${modelName}`);
+
+      await claudeService.changeModel(projectId, modelName);
+
+      // Add system message to terminal
+      terminalAggregator.addSystemLine(
+        projectId,
+        `🔄 Model changed to ${modelName}\n`
+      );
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error changing model:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to change model',
+      };
+    }
+  });
+
+  // Get available models
+  ipcMain.handle('claude:get-models', async (_event) => {
+    try {
+      const models = await claudeService.getAvailableModels();
+
+      return {
+        success: true,
+        models,
+      };
+    } catch (error) {
+      console.error('❌ Error getting available models:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get models',
+        models: [],
       };
     }
   });
@@ -274,6 +337,22 @@ function setupClaudeEventForwarding(): void {
     // Notify renderer
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
       mainWindowContents.send('claude:exited', projectId, exitCode);
+    }
+  });
+
+  // Forward context updates to renderer
+  claudeService.on('claude-context-updated', ({ projectId, context }: { projectId: string; context: ClaudeContext }) => {
+    if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+      console.log(`📡 Forwarding context update to renderer: ${projectId}`);
+      mainWindowContents.send('claude:context-updated', projectId, context);
+    }
+  });
+
+  // Forward model changes to renderer
+  claudeService.on('claude-model-changed', ({ projectId, model }: { projectId: string; model: string }) => {
+    if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+      console.log(`📡 Forwarding model change to renderer: ${projectId} -> ${model}`);
+      mainWindowContents.send('claude:model-changed', projectId, model);
     }
   });
 }
