@@ -173,5 +173,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('terminal:exit', listener)
       return () => ipcRenderer.removeListener('terminal:exit', listener)
     }
+  },
+
+  // Claude Code methods
+  claude: {
+    startSession: (projectId, prompt) => ipcRenderer.invoke('claude:start-session', projectId, prompt),
+    sendPrompt: (projectId, prompt) => ipcRenderer.invoke('claude:send-prompt', projectId, prompt),
+    getStatus: (projectId) => ipcRenderer.invoke('claude:get-status', projectId),
+    clearSession: (projectId) => ipcRenderer.invoke('claude:clear-session', projectId),
+    destroySession: (projectId) => ipcRenderer.invoke('claude:destroy-session', projectId),
+
+    // Claude event listeners
+    onStatusChanged: (callback) => {
+      const listener = (_event, projectId, status) => callback(projectId, status)
+      ipcRenderer.on('claude:status-changed', listener)
+      return () => ipcRenderer.removeListener('claude:status-changed', listener)
+    },
+    onCompleted: (callback) => {
+      const listener = (_event, projectId) => callback(projectId)
+      ipcRenderer.on('claude:completed', listener)
+      return () => ipcRenderer.removeListener('claude:completed', listener)
+    },
+    onError: (callback) => {
+      const listener = (_event, projectId, error) => callback(projectId, error)
+      ipcRenderer.on('claude:error', listener)
+      return () => ipcRenderer.removeListener('claude:error', listener)
+    },
+    onExited: (callback) => {
+      const listener = (_event, projectId, exitCode) => callback(projectId, exitCode)
+      ipcRenderer.on('claude:exited', listener)
+      return () => ipcRenderer.removeListener('claude:exited', listener)
+    }
   }
 })

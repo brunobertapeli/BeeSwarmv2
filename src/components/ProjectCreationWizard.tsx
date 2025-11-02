@@ -83,8 +83,7 @@ export function ProjectCreationWizard({
         // Create project
         const result = await window.electronAPI?.projects.create(
           template.id,
-          projectName,
-          template
+          projectName
         )
 
         if (!result?.success) {

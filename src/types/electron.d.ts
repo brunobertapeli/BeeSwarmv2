@@ -19,7 +19,7 @@ export interface Project {
   templateId: string
   templateName: string
   status: 'creating' | 'ready' | 'error'
-  isFavorite: boolean
+  isFavorite?: boolean
   configCompleted: boolean
   envVars: string | null
   dependenciesInstalled: boolean
@@ -28,6 +28,8 @@ export interface Project {
 }
 
 export type ProcessState = 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed' | 'error'
+
+export type ClaudeStatus = 'idle' | 'starting' | 'running' | 'completed' | 'error'
 
 export interface ProcessOutput {
   timestamp: Date
@@ -86,7 +88,9 @@ export interface ElectronAPI {
       error?: string
     }>
     signOut: () => Promise<{ success: boolean; error?: string }>
-    onCallback: (callback: (url: string) => void) => void
+    onCallback: (callback: (url: string) => void) => () => void
+    onAuthSuccess: (callback: (result: any) => void) => () => void
+    onAuthError: (callback: (result: any) => void) => () => void
   }
 
   templates: {
@@ -254,6 +258,35 @@ export interface ElectronAPI {
     onLine: (callback: (projectId: string, line: TerminalLine) => void) => () => void
     onCleared: (callback: (projectId: string) => void) => () => void
     onExit: (callback: (projectId: string, exitCode: number, signal?: number) => void) => () => void
+  }
+
+  claude: {
+    startSession: (projectId: string, prompt?: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    sendPrompt: (projectId: string, prompt: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    getStatus: (projectId: string) => Promise<{
+      success: boolean
+      status?: ClaudeStatus
+      sessionId?: string | null
+      error?: string
+    }>
+    clearSession: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    destroySession: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    onStatusChanged: (callback: (projectId: string, status: ClaudeStatus) => void) => () => void
+    onCompleted: (callback: (projectId: string) => void) => () => void
+    onError: (callback: (projectId: string, error: string) => void) => () => void
+    onExited: (callback: (projectId: string, exitCode: number) => void) => () => void
   }
 }
 

@@ -99,6 +99,9 @@ function ProjectView() {
         // Create terminal session for this project
         await window.electronAPI?.terminal.createSession(currentProject.id)
 
+        // NOTE: Claude session will be started on first message (lazy initialization)
+        // This prevents blocking the input field on project load
+
         // Check if server is already running for this project
         const statusResult = await window.electronAPI?.process.getStatus(currentProject.id)
         if (statusResult?.success && statusResult.status === 'running' && statusResult.port) {
@@ -184,9 +187,10 @@ function ProjectView() {
       unsubReady?.()
       unsubError?.()
 
-      // Destroy terminal session when switching projects or unmounting
+      // Destroy terminal and Claude sessions when switching projects or unmounting
       if (currentProject) {
         window.electronAPI?.terminal.destroySession(currentProject.id)
+        window.electronAPI?.claude.destroySession(currentProject.id)
       }
     }
   }, [currentProject?.id])
@@ -463,6 +467,7 @@ function ProjectView() {
 
       {/* Floating Action Bar */}
       <ActionBar
+        projectId={currentProjectId || undefined}
         onChatClick={handleChatClick}
         onImagesClick={handleImagesClick}
         onSettingsClick={handleSettingsClick}

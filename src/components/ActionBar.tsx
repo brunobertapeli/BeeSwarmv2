@@ -17,8 +17,10 @@ import { useAppStore, type DeploymentStatus } from '../store/appStore'
 import { useToast } from '../hooks/useToast'
 import StatusSheet from './StatusSheet'
 import ContextBar from './ContextBar'
+import type { ClaudeStatus } from '../types/electron'
 
 interface ActionBarProps {
+  projectId?: string
   onChatClick?: () => void
   onImagesClick?: () => void
   onSettingsClick?: () => void
@@ -36,6 +38,7 @@ const DEPLOYMENT_STAGES = [
 ]
 
 function ActionBar({
+  projectId,
   onChatClick,
   onImagesClick,
   onSettingsClick,
@@ -46,13 +49,16 @@ function ActionBar({
   const [isVisible, setIsVisible] = useState(false)
   const [isHidden, setIsHidden] = useState(false)
   const [isLocked, setIsLocked] = useState(false)
-  const [isClaudeWorking, setIsClaudeWorking] = useState(false) // Blocks input when Claude is working
+  const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
   const [message, setMessage] = useState('')
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4.5')
   const [isTextareaFocused, setIsTextareaFocused] = useState(false)
   const [deployProgress, setDeployProgress] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Check if Claude is working
+  const isClaudeWorking = claudeStatus === 'starting' || claudeStatus === 'running'
 
   // Check if deployment is in progress
   const isDeploying = deploymentStatus !== 'idle' && deploymentStatus !== 'live'
@@ -66,6 +72,47 @@ function ActionBar({
     }, 300)
     return () => clearTimeout(timer)
   }, [])
+
+  // Listen for Claude status changes
+  useEffect(() => {
+    if (!projectId || !window.electronAPI?.claude) return
+
+    const unsubStatus = window.electronAPI.claude.onStatusChanged((id, status) => {
+      if (id === projectId) {
+        console.log(`Claude status changed: ${status}`)
+        setClaudeStatus(status)
+      }
+    })
+
+    const unsubCompleted = window.electronAPI.claude.onCompleted((id) => {
+      if (id === projectId) {
+        console.log('Claude completed!')
+        toast.success('Done!', 'Claude finished successfully')
+        setClaudeStatus('completed')
+      }
+    })
+
+    const unsubError = window.electronAPI.claude.onError((id, error) => {
+      if (id === projectId) {
+        console.error('Claude error:', error)
+        toast.error('Claude Error', error)
+        setClaudeStatus('error')
+      }
+    })
+
+    // Get initial status
+    window.electronAPI.claude.getStatus(projectId).then((result) => {
+      if (result.success && result.status) {
+        setClaudeStatus(result.status)
+      }
+    })
+
+    return () => {
+      unsubStatus()
+      unsubCompleted()
+      unsubError()
+    }
+  }, [projectId, toast])
 
   // Auto-resize textarea
   useEffect(() => {
@@ -128,16 +175,37 @@ function ActionBar({
     }
   }, [])
 
-  const handleSend = () => {
-    if (message.trim() && onChatClick && !isInputBlocked) {
-      onChatClick()
+  const handleSend = async () => {
+    if (message.trim() && !isInputBlocked && projectId) {
+      const prompt = message.trim()
       setMessage('')
-      setIsClaudeWorking(true) // Block input while Claude works
 
-      // Simulate Claude finishing work after 10 seconds (remove this in production)
-      setTimeout(() => {
-        setIsClaudeWorking(false)
-      }, 10000)
+      try {
+        // Check if Claude session exists, if not start it with the prompt
+        const statusResult = await window.electronAPI?.claude.getStatus(projectId)
+
+        if (statusResult?.status === 'idle') {
+          // Start session with the prompt (lazy initialization)
+          console.log('Starting Claude session with first message')
+          const result = await window.electronAPI?.claude.startSession(projectId, prompt)
+
+          if (!result?.success) {
+            toast.error('Failed to start Claude', result?.error || 'Unknown error')
+            console.error('Failed to start Claude:', result?.error)
+          }
+        } else {
+          // Send prompt to existing session
+          const result = await window.electronAPI?.claude.sendPrompt(projectId, prompt)
+
+          if (!result?.success) {
+            toast.error('Failed to send message', result?.error || 'Unknown error')
+            console.error('Failed to send prompt:', result?.error)
+          }
+        }
+      } catch (error) {
+        console.error('Error sending prompt:', error)
+        toast.error('Failed to send message', error instanceof Error ? error.message : 'Unknown error')
+      }
     }
   }
 
@@ -198,9 +266,15 @@ function ActionBar({
     )
   }
 
-  const handleStop = () => {
-    setIsClaudeWorking(false)
-    console.log('Stopping Claude generation...')
+  const handleStop = async () => {
+    if (!projectId) return
+
+    try {
+      await window.electronAPI?.claude.destroySession(projectId)
+      toast.info('Stopped', 'Claude session stopped')
+    } catch (error) {
+      console.error('Error stopping Claude:', error)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -314,13 +388,20 @@ function ActionBar({
 
             {/* Context Usage Bar */}
             <ContextBar
-              onClearContext={() => {
-                toast.info('Clear Context', 'Starting fresh conversation...')
-                console.log('Clear context clicked')
+              onClearContext={async () => {
+                if (!projectId) return
+
+                try {
+                  await window.electronAPI?.claude.clearSession(projectId)
+                  toast.success('Context Cleared', 'Starting fresh conversation')
+                } catch (error) {
+                  console.error('Error clearing context:', error)
+                  toast.error('Failed to clear context', error instanceof Error ? error.message : 'Unknown error')
+                }
               }}
               onCompactContext={() => {
                 toast.info('Compact Context', 'Optimizing conversation history...')
-                console.log('Compact context clicked')
+                console.log('Compact context clicked - TODO')
               }}
             />
 

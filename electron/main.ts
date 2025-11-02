@@ -13,11 +13,13 @@ import { registerProcessHandlers, setProcessHandlersWindow } from './handlers/pr
 import { registerPreviewHandlers, setPreviewHandlersWindow } from './handlers/previewHandlers.js'
 import { registerShellHandlers } from './handlers/shellHandlers.js'
 import { registerTerminalHandlers, setTerminalHandlersWindow } from './handlers/terminalHandlers.js'
+import { registerClaudeHandlers, setClaudeHandlersWindow } from './handlers/claudeHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { previewService } from './services/PreviewService.js'
 import { processManager } from './services/ProcessManager.js'
 import { processPersistence } from './services/ProcessPersistence.js'
 import { terminalService } from './services/TerminalService.js'
+import { claudeService } from './services/ClaudeService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -192,6 +194,7 @@ function createWindow() {
   setProcessHandlersWindow(mainWindow.webContents)
   setPreviewHandlersWindow(mainWindow.webContents)
   setTerminalHandlersWindow(mainWindow.webContents)
+  setClaudeHandlersWindow(mainWindow.webContents)
 }
 
 // Initialize database and register IPC handlers only once
@@ -215,6 +218,7 @@ async function initializeApp() {
     registerPreviewHandlers()
     registerShellHandlers()
     registerTerminalHandlers()
+    registerClaudeHandlers()
 
     handlersRegistered = true
   }
@@ -249,6 +253,9 @@ app.on('window-all-closed', () => {
 
   // Destroy all terminal sessions
   terminalService.destroyAllSessions()
+
+  // Destroy all Claude sessions
+  claudeService.destroyAllSessions()
 
   // Destroy all previews
   previewService.destroyAll()
