@@ -2,6 +2,7 @@ import { ipcMain, WebContents } from 'electron';
 import { processManager, ProcessState } from '../services/ProcessManager';
 import { databaseService } from '../services/DatabaseService';
 import { terminalAggregator } from '../services/TerminalAggregator';
+import { claudeService } from '../services/ClaudeService';
 
 let mainWindowContents: WebContents | null = null;
 
@@ -149,6 +150,37 @@ function setupProcessEventForwarding(): void {
 
   // Process output
   processManager.on('process-output', (projectId: string, output: any) => {
+    // Filter out Vite HMR noise during Claude operations
+    const isClaudeRunning = claudeService.isRunning(projectId);
+
+    if (isClaudeRunning && output.message) {
+      const msg = output.message.toLowerCase();
+
+      // Filter out Vite HMR updates during Claude work
+      if (msg.includes('[vite]') &&
+          (msg.includes('hmr update') ||
+           msg.includes('page reload') ||
+           msg.includes('hmr invalidate') ||
+           msg.includes('hmr propagate') ||
+           msg.includes('hmr connected'))) {
+        // Skip - these are automatic updates during Claude's edits
+        // User will see the final restart after Claude completes
+        return;
+      }
+
+      // Filter out common build noise during Claude work
+      if (msg.includes('client updated') ||
+          msg.includes('page reloaded') ||
+          msg.includes('rebuilding...')) {
+        return;
+      }
+    }
+
+    // Filter out empty/whitespace-only messages
+    if (!output.message || output.message.trim().length === 0) {
+      return;
+    }
+
     // Forward to terminal aggregator
     terminalAggregator.addDevServerLine(projectId, output);
 

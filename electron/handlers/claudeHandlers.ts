@@ -76,11 +76,13 @@ export function registerClaudeHandlers(): void {
         };
       }
 
-      // Add user message to terminal
-      terminalAggregator.addClaudeLine(
-        projectId,
-        `\n💬 User: ${prompt}\n\n`
-      );
+      // Add user message block to terminal
+      terminalAggregator.addClaudeLine(projectId, '\n\n');
+      terminalAggregator.addClaudeLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      terminalAggregator.addClaudeLine(projectId, '👤 USER REQUEST\n');
+      terminalAggregator.addClaudeLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      terminalAggregator.addClaudeLine(projectId, prompt + '\n');
+      terminalAggregator.addClaudeLine(projectId, '\n');
 
       // Send prompt using session resume pattern with optional model
       await claudeService.sendPrompt(projectId, project.path, prompt, model);
@@ -234,51 +236,195 @@ export function registerClaudeHandlers(): void {
  * Setup event forwarding from ClaudeService to renderer
  */
 function setupClaudeEventForwarding(): void {
-  // Forward Claude events (filtered for terminal display)
+  // Track Claude operation timing per project
+  const operationStartTimes = new Map<string, number>();
+  const toolExecutions = new Map<string, { toolName: string; startTime: number }>();
+
+  // Forward Claude events (with rich parsing for beautiful terminal output)
   claudeService.on('claude-event', ({ projectId, event }: { projectId: string; event: ClaudeEvent }) => {
-    // Only show meaningful messages in terminal (filter out verbose streaming)
-    if (!event.type || event.type === 'partial') {
-      // Skip partial/streaming messages to avoid terminal flooding
+    // Skip partial messages (they're for streaming UI, not terminal)
+    if (event.type === 'partial') {
       return;
     }
 
-    // Format message based on type
-    let terminalOutput = '';
+    const msg = event.message;
 
-    if (event.type === 'assistant' && event.message?.message?.content) {
-      // Extract text from assistant messages
-      const content = event.message.message.content;
-      if (Array.isArray(content)) {
-        const textParts = content
-          .filter((c: any) => c.type === 'text')
-          .map((c: any) => c.text)
-          .join('\n');
-        if (textParts) {
-          terminalOutput = `💬 ${textParts}\n\n`;
-        }
+    // ═══════════════════════════════════════════════════════════
+    // SYSTEM MESSAGES - Session initialization
+    // ═══════════════════════════════════════════════════════════
+    if (event.type === 'system') {
+      if (msg?.subtype === 'init') {
+        const model = msg.model || 'unknown';
+        const sessionId = msg.session_id || 'new';
+
+        terminalAggregator.addClaudeLine(projectId, '\n');
+        terminalAggregator.addClaudeLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        terminalAggregator.addClaudeLine(projectId, '🤖 CLAUDE CODE SESSION INITIALIZED\n');
+        terminalAggregator.addClaudeLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        terminalAggregator.addClaudeLine(projectId, `Model: ${model} | Session: ${sessionId.substring(0, 12)}...\n`);
+        terminalAggregator.addClaudeLine(projectId, '\n');
+
+        // Start operation timer
+        operationStartTimes.set(projectId, Date.now());
       }
-    } else if (event.type === 'result') {
-      // Result message
-      terminalOutput = '🎯 Task completed\n';
-    } else if (event.type === 'system') {
-      // System messages
-      if (event.message?.message?.content) {
-        const content = event.message.message.content;
-        if (Array.isArray(content)) {
-          const textParts = content
-            .filter((c: any) => c.type === 'text')
-            .map((c: any) => c.text)
-            .join('\n');
-          if (textParts) {
-            terminalOutput = `⚙️ ${textParts}\n`;
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // ASSISTANT MESSAGES - Claude's responses and tool usage
+    // ═══════════════════════════════════════════════════════════
+    if (event.type === 'assistant' && msg?.message?.content) {
+      const content = msg.message.content;
+
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          // Text blocks - Claude's explanations
+          if (block.type === 'text' && block.text) {
+            terminalAggregator.addClaudeLine(projectId, '\n');
+            terminalAggregator.addClaudeLine(projectId, '### 💭 Claude:\n');
+            terminalAggregator.addClaudeLine(projectId, block.text + '\n');
+            terminalAggregator.addClaudeLine(projectId, '###\n');
+            terminalAggregator.addClaudeLine(projectId, '\n');
+          }
+
+          // Tool use blocks - Claude executing tools
+          if (block.type === 'tool_use') {
+            const toolName = block.name || 'unknown';
+            const toolId = block.id;
+
+            // Store start time for this tool execution
+            toolExecutions.set(toolId, { toolName, startTime: Date.now() });
+
+            terminalAggregator.addClaudeLine(projectId, '\n');
+            terminalAggregator.addClaudeLine(projectId, `### 🔧 Tool: ${toolName}\n`);
+
+            // Show tool input in a readable format
+            if (block.input && typeof block.input === 'object') {
+              const input = block.input as any;
+
+              // Special formatting for common tools
+              if (toolName === 'Read') {
+                terminalAggregator.addClaudeLine(projectId, `📖 Reading: ${input.file_path || 'unknown'}\n`);
+              } else if (toolName === 'Write') {
+                terminalAggregator.addClaudeLine(projectId, `✍️  Writing: ${input.file_path || 'unknown'}\n`);
+                const lines = (input.content || '').split('\n').length;
+                terminalAggregator.addClaudeLine(projectId, `   Lines: ${lines}\n`);
+              } else if (toolName === 'Edit') {
+                terminalAggregator.addClaudeLine(projectId, `✏️  Editing: ${input.file_path || 'unknown'}\n`);
+              } else if (toolName === 'Bash') {
+                terminalAggregator.addClaudeLine(projectId, `💻 Command: ${input.command || 'unknown'}\n`);
+              } else if (toolName === 'Glob') {
+                terminalAggregator.addClaudeLine(projectId, `🔍 Pattern: ${input.pattern || 'unknown'}\n`);
+              } else if (toolName === 'Grep') {
+                terminalAggregator.addClaudeLine(projectId, `🔎 Search: ${input.pattern || 'unknown'}\n`);
+              } else if (toolName === 'WebSearch') {
+                terminalAggregator.addClaudeLine(projectId, `🌐 Query: ${input.query || 'unknown'}\n`);
+              } else {
+                // Generic tool - show key inputs only
+                for (const [key, value] of Object.entries(input)) {
+                  const displayValue = typeof value === 'string' && value.length > 60
+                    ? value.substring(0, 57) + '...'
+                    : String(value);
+                  terminalAggregator.addClaudeLine(projectId, `${key}: ${displayValue}\n`);
+                }
+              }
+            }
+
+            terminalAggregator.addClaudeLine(projectId, '⏳ Executing...\n');
+            terminalAggregator.addClaudeLine(projectId, '###\n');
           }
         }
       }
+      return;
     }
 
-    // Add to terminal if we have output
-    if (terminalOutput) {
-      terminalAggregator.addClaudeLine(projectId, terminalOutput);
+    // ═══════════════════════════════════════════════════════════
+    // USER MESSAGES - User's prompts (echoed by SDK)
+    // ═══════════════════════════════════════════════════════════
+    if (event.type === 'user' && msg?.message?.content) {
+      // User message is already shown in send-prompt handler
+      // Skip to avoid duplication
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TOOL RESULTS - Results from tool executions
+    // ═══════════════════════════════════════════════════════════
+    if (event.type === 'tool_result' && msg?.message?.content) {
+      const toolId = msg.message.tool_use_id;
+      const content = msg.message.content;
+
+      // Get tool execution info
+      const toolInfo = toolExecutions.get(toolId);
+      const elapsed = toolInfo ? Date.now() - toolInfo.startTime : 0;
+      const toolName = toolInfo?.toolName || 'unknown';
+
+      // Clean up stored tool execution
+      if (toolId) {
+        toolExecutions.delete(toolId);
+      }
+
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'text' && block.text) {
+            const isError = msg.message.is_error || block.text.includes('Error:') || block.text.includes('Failed');
+            const icon = isError ? '❌' : '✅';
+
+            terminalAggregator.addClaudeLine(projectId, `${icon} Result: ${toolName} (${elapsed}ms)\n`, isError ? 'stderr' : 'stdout');
+
+            // Show a compact preview of the result
+            const resultLines = block.text.split('\n');
+            const totalLines = resultLines.length;
+
+            if (totalLines <= 3) {
+              // Short result - show all
+              terminalAggregator.addClaudeLine(projectId, block.text + '\n', isError ? 'stderr' : 'stdout');
+            } else {
+              // Long result - show first 2 lines and summary
+              for (let i = 0; i < 2; i++) {
+                terminalAggregator.addClaudeLine(projectId, resultLines[i] + '\n', isError ? 'stderr' : 'stdout');
+              }
+              terminalAggregator.addClaudeLine(projectId, `... (${totalLines - 2} more lines)\n`);
+            }
+
+            terminalAggregator.addClaudeLine(projectId, '\n');
+          }
+        }
+      }
+      return;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // RESULT MESSAGE - Operation complete
+    // ═══════════════════════════════════════════════════════════
+    if (event.type === 'result') {
+      const startTime = operationStartTimes.get(projectId);
+      const totalElapsed = startTime ? Date.now() - startTime : 0;
+      const seconds = (totalElapsed / 1000).toFixed(1);
+
+      // Show usage stats if available
+      const usage = msg?.usage;
+      const cost = msg?.total_cost_usd;
+
+      terminalAggregator.addClaudeLine(projectId, '\n');
+      terminalAggregator.addClaudeLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      terminalAggregator.addClaudeLine(projectId, '✨ CLAUDE CODE COMPLETED\n');
+      terminalAggregator.addClaudeLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+      let statsLine = `⏱️  ${seconds}s`;
+      if (usage) {
+        statsLine += ` | 📊 ${usage.input_tokens || 0}→${usage.output_tokens || 0} tokens`;
+      }
+      if (cost !== undefined) {
+        statsLine += ` | 💰 $${cost.toFixed(4)}`;
+      }
+      terminalAggregator.addClaudeLine(projectId, statsLine + '\n');
+
+      terminalAggregator.addClaudeLine(projectId, '\n');
+
+      // Clean up
+      operationStartTimes.delete(projectId);
+      return;
     }
   });
 
@@ -294,9 +440,6 @@ function setupClaudeEventForwarding(): void {
   claudeService.on('claude-complete', async ({ projectId }: { projectId: string }) => {
     console.log(`✅ Claude completed for project: ${projectId}`);
 
-    // Add completion message to terminal
-    terminalAggregator.addClaudeLine(projectId, '\n✅ Claude Code completed successfully\n\n');
-
     // Get project details
     const project = databaseService.getProjectById(projectId);
     if (!project) {
@@ -304,7 +447,7 @@ function setupClaudeEventForwarding(): void {
       return;
     }
 
-    // Post-completion workflow
+    // Post-completion workflow (git commit, dev server restart)
     await handleClaudeCompletion(projectId, project.path);
 
     // Notify renderer
@@ -380,20 +523,63 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
     // 3. Restart dev server (if running)
     const processState = processManager.getProcessStatus(projectId);
     if (processState === 'running') {
+      const devServerStartTime = Date.now();
+
       console.log(`🔄 Restarting dev server for ${projectId}`);
-      terminalAggregator.addSystemLine(
-        projectId,
-        '🔄 Restarting dev server...\n'
-      );
+
+      // Dev server restart block
+      terminalAggregator.addDevServerLine(projectId, {
+        timestamp: new Date(),
+        type: 'stdout',
+        message: '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n',
+        raw: '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+      });
+      terminalAggregator.addDevServerLine(projectId, {
+        timestamp: new Date(),
+        type: 'stdout',
+        message: '🔄 DEV SERVER RESTART\n',
+        raw: '🔄 DEV SERVER RESTART\n'
+      });
+      terminalAggregator.addDevServerLine(projectId, {
+        timestamp: new Date(),
+        type: 'stdout',
+        message: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n',
+        raw: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
+      });
+      terminalAggregator.addDevServerLine(projectId, {
+        timestamp: new Date(),
+        type: 'stdout',
+        message: '⏳ Stopping...\n',
+        raw: '⏳ Stopping...\n'
+      });
 
       await processManager.stopDevServer(projectId);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s
-      await processManager.startDevServer(projectId, projectPath);
 
-      terminalAggregator.addSystemLine(
-        projectId,
-        '✅ Dev server restarted\n'
-      );
+      terminalAggregator.addDevServerLine(projectId, {
+        timestamp: new Date(),
+        type: 'stdout',
+        message: '✅ Stopped | ⏳ Starting...\n',
+        raw: '✅ Stopped | ⏳ Starting...\n'
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s
+
+      const port = await processManager.startDevServer(projectId, projectPath);
+
+      const devServerElapsed = ((Date.now() - devServerStartTime) / 1000).toFixed(1);
+
+      terminalAggregator.addDevServerLine(projectId, {
+        timestamp: new Date(),
+        type: 'stdout',
+        message: `✅ Restarted on port ${port} | ⏱️  ${devServerElapsed}s\n`,
+        raw: `✅ Restarted on port ${port} | ⏱️  ${devServerElapsed}s\n`
+      });
+      terminalAggregator.addDevServerLine(projectId, {
+        timestamp: new Date(),
+        type: 'stdout',
+        message: '\n',
+        raw: '\n'
+      });
     } else {
       console.log(`ℹ️ Dev server not running for ${projectId}, skipping restart`);
     }
@@ -415,6 +601,14 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
   return new Promise((resolve, reject) => {
     console.log(`📦 Committing changes for ${projectId}`);
 
+    const gitStartTime = Date.now();
+
+    // Add git block header
+    terminalAggregator.addGitLine(projectId, '\n');
+    terminalAggregator.addGitLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    terminalAggregator.addGitLine(projectId, '📦 GIT COMMIT\n');
+    terminalAggregator.addGitLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
     // Check if there are any changes to commit
     const statusProcess = spawn('git', ['status', '--porcelain'], {
       cwd: projectPath,
@@ -428,6 +622,8 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
     statusProcess.on('close', (code) => {
       if (code !== 0) {
         console.error(`❌ Git status failed for ${projectId}`);
+        terminalAggregator.addGitLine(projectId, '   ❌ Git status check failed\n', 'stderr');
+        terminalAggregator.addGitLine(projectId, '\n');
         reject(new Error('Git status failed'));
         return;
       }
@@ -435,13 +631,15 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
       // No changes to commit
       if (statusOutput.trim().length === 0) {
         console.log(`ℹ️ No changes to commit for ${projectId}`);
-        terminalAggregator.addGitLine(projectId, 'ℹ️ No changes to commit\n');
+        terminalAggregator.addGitLine(projectId, 'ℹ️  No changes detected - working tree clean\n');
+        terminalAggregator.addGitLine(projectId, '\n');
         resolve();
         return;
       }
 
-      // Add all changes
-      terminalAggregator.addGitLine(projectId, '📦 Adding changes to git...\n');
+      // Count files changed
+      const changedFiles = statusOutput.trim().split('\n').length;
+      terminalAggregator.addGitLine(projectId, `📝 Changes: ${changedFiles} file(s) | ⏳ Staging...\n`);
 
       const addProcess = spawn('git', ['add', '.'], {
         cwd: projectPath,
@@ -450,10 +648,13 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
       addProcess.on('close', (addCode) => {
         if (addCode !== 0) {
           console.error(`❌ Git add failed for ${projectId}`);
-          terminalAggregator.addGitLine(projectId, '❌ Git add failed\n', 'stderr');
+          terminalAggregator.addGitLine(projectId, '❌ Failed to stage changes\n', 'stderr');
+          terminalAggregator.addGitLine(projectId, '\n');
           reject(new Error('Git add failed'));
           return;
         }
+
+        terminalAggregator.addGitLine(projectId, '✅ Staged | ⏳ Committing...\n');
 
         // Commit with Claude-generated message
         const commitMessage = 'feat: updates via Claude Code\n\n🤖 Generated with Claude Code';
@@ -463,25 +664,31 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
 
         let commitOutput = '';
         commitProcess.stdout.on('data', (data) => {
-          const output = data.toString();
-          commitOutput += output;
-          terminalAggregator.addGitLine(projectId, output);
+          commitOutput += data.toString();
         });
 
         commitProcess.stderr.on('data', (data) => {
-          terminalAggregator.addGitLine(projectId, data.toString(), 'stderr');
+          commitOutput += data.toString();
         });
 
         commitProcess.on('close', (commitCode) => {
           if (commitCode !== 0) {
             console.error(`❌ Git commit failed for ${projectId}`);
-            terminalAggregator.addGitLine(projectId, '❌ Git commit failed\n', 'stderr');
+            terminalAggregator.addGitLine(projectId, '❌ Commit failed\n', 'stderr');
+            terminalAggregator.addGitLine(projectId, '\n');
             reject(new Error('Git commit failed'));
             return;
           }
 
+          // Parse commit hash from output
+          const commitHashMatch = commitOutput.match(/\[[\w-]+\s+([a-f0-9]+)\]/);
+          const commitHash = commitHashMatch ? commitHashMatch[1].substring(0, 7) : 'unknown';
+
+          const gitElapsed = ((Date.now() - gitStartTime) / 1000).toFixed(1);
+
           console.log(`✅ Changes committed for ${projectId}`);
-          terminalAggregator.addGitLine(projectId, '✅ Changes committed successfully\n');
+          terminalAggregator.addGitLine(projectId, `✅ Committed: ${commitHash} | ⏱️  ${gitElapsed}s\n`);
+          terminalAggregator.addGitLine(projectId, '\n');
           resolve();
         });
       });

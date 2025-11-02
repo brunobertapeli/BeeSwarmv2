@@ -82,16 +82,52 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
     const timeColor = '\x1b[90m' // Gray
     const reset = '\x1b[0m'
 
-    // Write formatted line
-    terminal.write(`${timeColor}[${timestamp}]${reset} ${sourceColor}${sourceTag}${reset} `)
-    terminal.write(line.message)
+    // Calculate prefix length for wrapping
+    // [HH:MM:SS] [Source] = approx 25 chars
+    const prefix = `${timeColor}[${timestamp}]${reset} ${sourceColor}${sourceTag}${reset} `
+    const prefixDisplayLength = `[${timestamp}] ${sourceTag} `.length // Visible length without ANSI codes
 
-    // Ensure newline if not present
-    if (!line.message.endsWith('\n')) {
-      terminal.write('\r\n')
-    }
+    // Terminal width (default to 120 if not available)
+    const terminalWidth = terminal.cols || 120
+    const maxLineWidth = terminalWidth - 5 // Leave some margin
 
-    setLineCount(prev => prev + 1)
+    // Clean message (remove trailing newlines for processing)
+    let message = line.message.replace(/\n+$/, '')
+
+    // Split message into lines if it contains newlines
+    const messageLines = message.split('\n')
+
+    messageLines.forEach((msgLine, index) => {
+      if (msgLine.length + prefixDisplayLength <= maxLineWidth) {
+        // Line fits - write normally
+        if (index === 0) {
+          terminal.write(prefix + msgLine + '\r\n')
+        } else {
+          // Continuation line - add prefix for consistency
+          terminal.write(prefix + msgLine + '\r\n')
+        }
+      } else {
+        // Line too long - wrap it
+        let remaining = msgLine
+        let isFirst = index === 0
+
+        while (remaining.length > 0) {
+          const availableWidth = maxLineWidth - (isFirst ? prefixDisplayLength : prefixDisplayLength)
+          const chunk = remaining.substring(0, availableWidth)
+          remaining = remaining.substring(availableWidth)
+
+          if (isFirst) {
+            terminal.write(prefix + chunk + '\r\n')
+            isFirst = false
+          } else {
+            // Wrapped continuation - add prefix
+            terminal.write(prefix + chunk + '\r\n')
+          }
+        }
+      }
+    })
+
+    setLineCount(prev => prev + messageLines.length)
   }
 
   // Load terminal history from backend
@@ -162,11 +198,41 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
     xtermRef.current = terminal
     fitAddonRef.current = fitAddon
 
-    // Write welcome message
-    terminal.writeln('\x1b[90m╭─────────────────────────────────────────────────────────────╮\x1b[0m')
-    terminal.writeln(`\x1b[90m│\x1b[0m \x1b[33m🐝 ${projectName}\x1b[0m - Unified Terminal${' '.repeat(Math.max(0, 40 - projectName.length))}\x1b[90m│\x1b[0m`)
-    terminal.writeln('\x1b[90m│\x1b[0m \x1b[90mDev Server, Shell, NPM, Git, Claude Code...\x1b[0m            \x1b[90m│\x1b[0m')
-    terminal.writeln('\x1b[90m╰─────────────────────────────────────────────────────────────╯\x1b[0m')
+    // Write beautiful ASCII art banner in a box
+    const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false })
+    const version = 'v1.1'
+
+    terminal.writeln('')
+    terminal.writeln('')
+
+    // Top border
+    terminal.writeln('\x1b[36m┌─────────────────────────────────────────────────────────────────────────────────────────┐\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m                                                                                         \x1b[36m│\x1b[0m')
+
+    // CodeDesk ASCII logo (cyan)
+    terminal.writeln('\x1b[36m│\x1b[0m     \x1b[36m█████████               █████          ██████████                     █████\x1b[0m         \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m    \x1b[36m███▒▒▒▒▒███             ▒▒███          ▒▒███▒▒▒▒███                   ▒▒███\x1b[0m          \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m   \x1b[36m███     ▒▒▒   ██████   ███████   ██████  ▒███   ▒▒███  ██████   ██████  ▒███ █████\x1b[0m    \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m  \x1b[36m▒███          ███▒▒███ ███▒▒███  ███▒▒███ ▒███    ▒███ ███▒▒███ ███▒▒███ ▒███▒▒███\x1b[0m     \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m  \x1b[36m▒███         ▒███ ▒███▒███ ▒███ ▒███████  ▒███    ▒███▒███████ ▒███ ▒▒▒  ▒██████▒\x1b[0m      \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m  \x1b[36m▒▒███     ███▒███ ▒███▒███ ▒███ ▒███▒▒▒   ▒███    ███ ▒███▒▒▒  ▒███  ███ ▒███▒▒███\x1b[0m     \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m   \x1b[36m▒▒█████████ ▒▒██████ ▒▒████████▒▒██████  ██████████  ▒▒██████ ▒▒██████  ████ █████\x1b[0m    \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m    \x1b[36m▒▒▒▒▒▒▒▒▒   ▒▒▒▒▒▒   ▒▒▒▒▒▒▒▒  ▒▒▒▒▒▒  ▒▒▒▒▒▒▒▒▒▒    ▒▒▒▒▒▒   ▒▒▒▒▒▒  ▒▒▒▒ ▒▒▒▒▒\x1b[0m     \x1b[36m│\x1b[0m')
+
+    terminal.writeln('\x1b[36m│\x1b[0m                                                                                         \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m                                                                                         \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m                                                                                         \x1b[36m│\x1b[0m')
+
+    // Info section
+    terminal.writeln('\x1b[36m│\x1b[0m  \x1b[33mProject:\x1b[0m ' + projectName.padEnd(77) + ' \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m  \x1b[33mVersion:\x1b[0m ' + version.padEnd(77) + ' \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m  \x1b[33mSession:\x1b[0m ' + timestamp.padEnd(77) + ' \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m  \x1b[33mSources:\x1b[0m ' + 'Dev Server, Shell, NPM, Git, Claude'.padEnd(77) + ' \x1b[36m│\x1b[0m')
+
+    terminal.writeln('\x1b[36m│\x1b[0m                                                                                         \x1b[36m│\x1b[0m')
+
+    // Bottom border
+    terminal.writeln('\x1b[36m└─────────────────────────────────────────────────────────────────────────────────────────┘\x1b[0m')
     terminal.writeln('')
 
     // Load history if exists

@@ -22,7 +22,7 @@
 
 **Key Principle:** Everything runs locally on user's machine. Authentication and subscription management happen on the website. Electron app only reads user/subscription data from MongoDB.
 
-**Claude Code Integration:** BeeSwarm spawns the Claude Code CLI (NOT the SDK) via node-pty and streams its output to a visual interface. Users don't need to learn terminal commands - they just chat naturally.
+**Claude Code Integration:** BeeSwarm uses the Claude Code SDK (@anthropic-ai/claude-agent-sdk) to provide AI-powered code editing. The SDK provides structured responses that we parse and display beautifully in the unified terminal. Users don't need to learn terminal commands - they just chat naturally.
 
 ---
 
@@ -38,10 +38,11 @@
 - **Security:** safeStorage for API key encryption
 
 ### User's Local Environment
-- **Claude Code CLI**: Terminal application (Coming Soon)
-  - Will be installed via: `npm install -g @anthropic-ai/claude-code`
-  - Will be spawned via node-pty from BeeSwarm's main process
-- **Anthropic API Key**: User provides their own, stored encrypted locally (Coming Soon)
+- **Claude Code SDK**: Programmatic agent library ✅ **IMPLEMENTED**
+  - Uses: `@anthropic-ai/claude-agent-sdk`
+  - Integrated directly into BeeSwarm's main process
+  - Provides structured message streaming (tool_use, tool_result, system, assistant)
+- **Anthropic API Key**: User provides their own, stored encrypted locally ✅ **IMPLEMENTED**
 - **Dev Server**: Netlify Dev (single server that proxies Vite frontend)
   - Netlify CLI runs on ports 8888-8999 (auto-allocated)
   - Vite dev server on ports 5174-5285 (auto-calculated, paired with Netlify port)
@@ -633,24 +634,27 @@ templates {
 - ✅ TerminalModal (xterm.js with color-coded source tags)
 - ✅ Real-time output streaming to terminal
 
-### Phase 5: Claude Integration ⚠️ **NOT STARTED**
-- ⏳ Auto-install Claude Code CLI
-- ⏳ API key setup + validation
-- ⏳ Spawn Claude Code CLI via node-pty
-- ⏳ Output parsing for UI display
-- ⏳ Chat interface
-- ⏳ Stop/restart Claude process
-- Infrastructure ready: TerminalService, TerminalAggregator
+### Phase 5: Claude Integration ✅ **COMPLETE**
+- ✅ Claude Code SDK integration (@anthropic-ai/claude-agent-sdk)
+- ✅ API key setup + validation
+- ✅ Session management with resume capability
+- ✅ Rich output parsing for beautiful terminal display
+- ✅ Chat interface with message streaming
+- ✅ Stop/abort Claude operations
+- ✅ Tool execution tracking (Read, Write, Edit, Bash, etc.)
+- ✅ Progress indicators with elapsed time
+- ✅ Visual blocks for different message types
 
-### Phase 6: Editing Loop ⚠️ **NOT STARTED**
-- ⏳ Complete editing workflow
-- ⏳ File change detection
-- ⏳ Dev server restart logic
-- ⏳ Console error detection
-- ⏳ Error auto-fix loop (max 3 retries)
-- ⏳ Git auto-commit
-- ⏳ Preview auto-refresh
-- ⏳ Chat history in SQLite
+### Phase 6: Editing Loop ✅ **COMPLETE**
+- ✅ Complete editing workflow (prompt → Claude → commit → restart)
+- ✅ File change detection (via Claude SDK tool results)
+- ✅ Dev server restart logic with beautiful terminal blocks
+- ✅ Git auto-commit with detailed progress display
+- ✅ Preview auto-refresh
+- ✅ Context persistence (tokens, cost, model)
+- ⏳ Console error detection (future enhancement)
+- ⏳ Error auto-fix loop (future enhancement)
+- ⏳ Chat history in SQLite (future enhancement)
 
 ### Phase 7: Deployment ⚠️ **NOT STARTED**
 - ⏳ Netlify OAuth integration
