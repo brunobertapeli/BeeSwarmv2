@@ -26,6 +26,12 @@ const __dirname = path.dirname(__filename)
 
 // Debug: Log if environment variables are loaded
 const isDev = process.env.NODE_ENV !== 'production'
+
+// Suppress Electron security warnings in development (we need unsafe-eval for Vite HMR)
+if (isDev) {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
+}
+
 console.log('\n🔧 BeeSwarm Starting...')
 console.log('🔧 Development mode:', isDev)
 console.log('📁 CWD:', process.cwd())
@@ -162,6 +168,13 @@ function createWindow() {
     trafficLightPosition: { x: 15, y: 15 },
   })
 
+  // Suppress harmless DevTools Autofill protocol errors
+  mainWindow.webContents.on('console-message', (event, level, message) => {
+    if (message.includes('Autofill.enable') || message.includes('Autofill.setAddresses')) {
+      event.preventDefault()
+    }
+  })
+
   // Set Content Security Policy
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
@@ -169,8 +182,26 @@ function createWindow() {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           isDev
-            ? "default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*; img-src 'self' https://* data:; connect-src 'self' http://localhost:* ws://localhost:*"
-            : "default-src 'self'; img-src 'self' https://* data:; connect-src 'self'"
+            ? [
+                "default-src 'self'",
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*", // unsafe-eval needed for Vite HMR
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // Allow Google Fonts
+                "font-src 'self' https://fonts.gstatic.com data:", // Allow Google Fonts
+                "img-src 'self' https://* http://* data: blob:", // Allow images from any HTTPS source
+                "connect-src 'self' http://localhost:* ws://localhost:* https://*", // Allow API calls
+                "worker-src 'self' blob:", // Allow web workers
+                "frame-src 'self' http://localhost:*" // Allow iframes from localhost
+              ].join('; ')
+            : [
+                "default-src 'self'",
+                "script-src 'self'",
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+                "font-src 'self' https://fonts.gstatic.com",
+                "img-src 'self' https://* data:",
+                "connect-src 'self' https://*",
+                "worker-src 'self' blob:",
+                "frame-src 'self'"
+              ].join('; ')
         ]
       }
     })

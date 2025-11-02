@@ -67,10 +67,7 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
 
   // Write a line to the terminal with source tag
   const writeLineToTerminal = (line: TerminalLine) => {
-    console.log('✍️ TerminalModal: Writing line to xterm:', line.source, line.message.substring(0, 50))
-
     if (!xtermRef.current) {
-      console.warn('⚠️ TerminalModal: xterm ref is null, cannot write')
       return
     }
 
@@ -114,19 +111,13 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
 
   // Initialize xterm.js terminal
   useEffect(() => {
-    console.log('🔍 Terminal init effect running. isOpen:', isOpen, 'terminalRef:', !!terminalRef.current, 'xtermRef:', !!xtermRef.current)
-
     if (!isOpen) return
     if (!terminalRef.current) {
-      console.warn('⚠️ terminalRef.current is null, waiting for DOM to mount')
       return
     }
     if (xtermRef.current) {
-      console.log('✅ xterm already initialized')
       return
     }
-
-    console.log('🖥️ Initializing xterm.js terminal')
 
     // Create terminal instance
     const terminal = new Terminal({
@@ -183,7 +174,6 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
 
     // Cleanup
     return () => {
-      console.log('🧹 Cleaning up xterm terminal')
       terminal.dispose()
       xtermRef.current = null
       fitAddonRef.current = null
@@ -194,17 +184,13 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
   useEffect(() => {
     if (!isOpen) return
 
-    console.log('🎧 TerminalModal: Setting up event listeners for', projectId)
-
     const handleTerminalLine = (receivedProjectId: string, line: TerminalLine) => {
-      console.log('📨 TerminalModal: Received line for', receivedProjectId, 'source:', line.source)
       if (receivedProjectId !== projectId) return
 
       writeLineToTerminal(line)
     }
 
     const handleTerminalCleared = (receivedProjectId: string) => {
-      console.log('🧹 TerminalModal: Terminal cleared for', receivedProjectId)
       if (receivedProjectId !== projectId) return
 
       xtermRef.current?.clear()
@@ -215,7 +201,6 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
     const unsubCleared = window.electronAPI.terminal.onCleared(handleTerminalCleared)
 
     return () => {
-      console.log('🔌 TerminalModal: Cleaning up event listeners')
       unsubLine?.()
       unsubCleared?.()
     }

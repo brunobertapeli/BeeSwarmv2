@@ -94,14 +94,12 @@ function ActionBar({
 
     const unsubStatus = window.electronAPI.claude.onStatusChanged((id, status) => {
       if (id === projectId) {
-        console.log(`Claude status changed: ${status}`)
         setClaudeStatus(status)
       }
     })
 
     const unsubCompleted = window.electronAPI.claude.onCompleted((id) => {
       if (id === projectId) {
-        console.log('Claude completed!')
         toast.success('Done!', 'Claude finished successfully')
         setClaudeStatus('completed')
       }
@@ -123,7 +121,6 @@ function ActionBar({
 
     const unsubModelChanged = window.electronAPI.claude.onModelChanged((id, model) => {
       if (id === projectId) {
-        console.log('Claude model changed:', model)
         setSelectedModel(model)
         toast.success('Model Changed', `Switched to ${model}`)
       }
@@ -233,7 +230,6 @@ function ActionBar({
 
         if (statusResult?.status === 'idle') {
           // Start session with the prompt and selected model (lazy initialization)
-          console.log('Starting Claude session with first message and model:', selectedModel)
           const result = await window.electronAPI?.claude.startSession(projectId, prompt, selectedModel)
 
           if (!result?.success) {

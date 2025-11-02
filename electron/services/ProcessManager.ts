@@ -76,8 +76,6 @@ class ProcessManager extends EventEmitter {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        console.log(`🔄 Start attempt ${attempt}/${maxAttempts} for project: ${projectId}`);
-
         const port = await this.attemptStartServer(projectId, projectPath);
 
         // Wait briefly to detect immediate failures (like EADDRINUSE)
@@ -95,7 +93,6 @@ class ProcessManager extends EventEmitter {
           );
 
           if (hasPortError && attempt < maxAttempts) {
-            console.log(`⚠️ Port ${port} conflict detected, retrying with new port...`);
             portService.releasePort(projectId);
             this.processes.delete(projectId);
             await new Promise(resolve => setTimeout(resolve, 500));
@@ -109,7 +106,6 @@ class ProcessManager extends EventEmitter {
         return port;
       } catch (error) {
         lastError = error;
-        console.log(`❌ Attempt ${attempt} failed:`, error);
 
         if (attempt < maxAttempts) {
           portService.releasePort(projectId);
@@ -145,9 +141,6 @@ class ProcessManager extends EventEmitter {
     this.emit('process-status-changed', projectId, ProcessState.STARTING);
 
     // Spawn netlify dev
-    console.log(`📡 Spawning netlify dev in: ${projectPath}`);
-    console.log(`📡 Command: npx netlify dev --port ${port}`);
-
     const childProcess = spawn('npx', ['netlify', 'dev', '--port', port.toString()], {
       cwd: projectPath,
       shell: true,
@@ -159,7 +152,6 @@ class ProcessManager extends EventEmitter {
       },
     });
 
-    console.log(`📡 Process spawned with PID: ${childProcess.pid}`);
     processInfo.process = childProcess;
 
     // Save PID to persistence file for orphan cleanup
@@ -170,26 +162,22 @@ class ProcessManager extends EventEmitter {
     // Handle stdout
     childProcess.stdout?.on('data', (data: Buffer) => {
       const message = data.toString();
-      console.log(`📤 STDOUT: ${message.substring(0, 100)}...`);
       this.handleOutput(projectId, 'stdout', message);
     });
 
     // Handle stderr
     childProcess.stderr?.on('data', (data: Buffer) => {
       const message = data.toString();
-      console.log(`📤 STDERR: ${message.substring(0, 100)}...`);
       this.handleOutput(projectId, 'stderr', message);
     });
 
     // Handle process exit
     childProcess.on('exit', (code, signal) => {
-      console.log(`🚪 Process exited with code: ${code}, signal: ${signal}`);
       this.handleProcessExit(projectId, code, signal);
     });
 
     // Handle process error
     childProcess.on('error', (error) => {
-      console.log(`❌ Process error: ${error.message}`);
       this.handleProcessError(projectId, error);
     });
 
@@ -386,7 +374,6 @@ class ProcessManager extends EventEmitter {
 
     if (isReady) {
       // Don't mark as running yet - start HTTP health check instead
-      console.log(`📡 Netlify Dev reports ready, verifying with HTTP health check...`);
       this.verifyServerWithHttpCheck(projectId, processInfo.port);
     }
   }
@@ -407,7 +394,6 @@ class ProcessManager extends EventEmitter {
       try {
         // Check if process still exists
         if (!this.processes.get(projectId)) {
-          console.log(`❌ Process ${projectId} disappeared during health check`);
           return;
         }
 
@@ -423,7 +409,6 @@ class ProcessManager extends EventEmitter {
 
         // Any response (even 404) means server is up
         if (response) {
-          console.log(`✅ HTTP health check passed for port ${port}`);
           const currentProcessInfo = this.processes.get(projectId);
           if (currentProcessInfo) {
             currentProcessInfo.state = ProcessState.RUNNING;
@@ -443,7 +428,6 @@ class ProcessManager extends EventEmitter {
     }
 
     // Health check failed after all attempts
-    console.log(`❌ HTTP health check failed for port ${port} after ${maxAttempts} attempts`);
     const currentProcessInfo = this.processes.get(projectId);
     if (currentProcessInfo) {
       currentProcessInfo.state = ProcessState.ERROR;

@@ -44,9 +44,6 @@ class TerminalService extends EventEmitter {
       this.destroySession(projectId);
     }
 
-    console.log(`📟 Creating terminal session for project: ${projectId}`);
-    console.log(`📁 Working directory: ${projectPath}`);
-
     // Determine shell based on platform
     const shell = this.getDefaultShell();
     const shellArgs = this.getShellArgs();
@@ -82,14 +79,11 @@ class TerminalService extends EventEmitter {
 
     // Handle PTY exit
     ptyProcess.onExit(({ exitCode, signal }) => {
-      console.log(`📟 Terminal session exited for ${projectId}: code=${exitCode}, signal=${signal}`);
       this.emit('terminal-exit', { projectId, exitCode, signal });
 
       // Remove session
       this.sessions.delete(projectId);
     });
-
-    console.log(`✅ Terminal session created for ${projectId}`);
   }
 
   /**
@@ -100,11 +94,9 @@ class TerminalService extends EventEmitter {
   writeInput(projectId: string, input: string): void {
     const session = this.sessions.get(projectId);
     if (!session) {
-      console.error(`❌ No terminal session found for project: ${projectId}`);
       return;
     }
 
-    console.log(`📝 Writing to terminal [${projectId}]: ${input.trim()}`);
     session.ptyProcess.write(input);
   }
 
@@ -117,7 +109,6 @@ class TerminalService extends EventEmitter {
   resize(projectId: string, cols: number, rows: number): void {
     const session = this.sessions.get(projectId);
     if (!session) {
-      console.error(`❌ No terminal session found for project: ${projectId}`);
       return;
     }
 
@@ -166,8 +157,6 @@ class TerminalService extends EventEmitter {
       return;
     }
 
-    console.log(`🗑️ Destroying terminal session for project: ${projectId}`);
-
     try {
       session.ptyProcess.kill();
     } catch (error) {
@@ -181,8 +170,6 @@ class TerminalService extends EventEmitter {
    * Destroy all terminal sessions (app shutdown)
    */
   destroyAllSessions(): void {
-    console.log(`🗑️ Destroying all terminal sessions (${this.sessions.size} active)`);
-
     for (const projectId of this.sessions.keys()) {
       this.destroySession(projectId);
     }

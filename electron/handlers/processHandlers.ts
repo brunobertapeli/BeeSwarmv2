@@ -150,7 +150,6 @@ function setupProcessEventForwarding(): void {
   // Process output
   processManager.on('process-output', (projectId: string, output: any) => {
     // Forward to terminal aggregator
-    console.log(`📡 Forwarding dev server output to aggregator for ${projectId}`);
     terminalAggregator.addDevServerLine(projectId, output);
 
     // Still send to renderer for backward compatibility

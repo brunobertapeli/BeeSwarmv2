@@ -120,11 +120,9 @@ if (typeof window !== 'undefined') {
       // This prevents old mock data from being loaded
       if (user && user.plan && user.email) {
         useAppStore.setState({ user, isAuthenticated: true })
-        console.log('✅ Restored session for:', user.email)
       } else {
         // Clear invalid/old session data
         localStorage.removeItem('beeswarm_auth')
-        console.log('🧹 Cleared old session data')
       }
     } catch (e) {
       console.error('Failed to parse stored auth:', e)
@@ -136,6 +134,5 @@ if (typeof window !== 'undefined') {
   const storedProjectId = localStorage.getItem('beeswarm_currentProjectId')
   if (storedProjectId) {
     useAppStore.setState({ currentProjectId: storedProjectId, lastProjectId: storedProjectId })
-    console.log('✅ Restored project:', storedProjectId)
   }
 }

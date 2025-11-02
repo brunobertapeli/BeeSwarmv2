@@ -105,7 +105,6 @@ function ProjectView() {
         // Check if server is already running for this project
         const statusResult = await window.electronAPI?.process.getStatus(currentProject.id)
         if (statusResult?.success && statusResult.status === 'running' && statusResult.port) {
-          console.log(`Server already running for ${currentProject.id} on port ${statusResult.port}`)
           setServerPort(statusResult.port)
           setServerStatus('running')
           return
@@ -208,12 +207,10 @@ function ProjectView() {
 
   const handleChatClick = () => {
     toast.info('Starting conversation...', 'Claude is ready to help you build!')
-    console.log('Chat clicked')
   }
 
   const handleImagesClick = () => {
     toast.info('Image manager', 'Opening image management modal...')
-    console.log('Images clicked')
   }
 
   const handleConsoleClick = () => {
@@ -236,7 +233,6 @@ function ProjectView() {
     setNewProjectData(null)
     setShowProjectSettings(false)
     toast.success('Setup complete!', 'Your project is ready to use')
-    console.log('Project setup completed!')
   }
 
   const handleSelectProject = async (projectId: string) => {
@@ -250,7 +246,6 @@ function ProjectView() {
     if (project) {
       toast.success('Project switched', `Now viewing ${project.name}`)
     }
-    console.log('Switched to project:', projectId)
   }
 
   const handleCreateProject = () => {

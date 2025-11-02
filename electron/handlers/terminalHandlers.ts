@@ -172,12 +172,6 @@ function setupTerminalEventForwarding(): void {
 
   // Forward shell output to aggregator
   terminalService.on('terminal-output', ({ projectId, output }) => {
-    console.log(`📤 Shell output for ${projectId}:`, output.message.substring(0, 50));
     terminalAggregator.addShellLine(projectId, output);
-  });
-
-  // Debug: Log when lines are aggregated
-  terminalAggregator.on('terminal-line', ({ projectId, line }) => {
-    console.log(`📺 Terminal line emitted for ${projectId}: [${line.source}]`, line.message.substring(0, 50));
   });
 }

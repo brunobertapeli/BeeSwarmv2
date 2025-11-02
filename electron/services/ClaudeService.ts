@@ -77,7 +77,6 @@ class ClaudeService extends EventEmitter {
 
     // If session exists and is still running, abort it first
     if (existingSession && (existingSession.status === 'starting' || existingSession.status === 'running')) {
-      console.log(`🔄 Aborting existing Claude session before starting new one: ${projectId}`);
       existingSession.abortController?.abort();
       // Wait a bit for cleanup
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -99,15 +98,12 @@ class ClaudeService extends EventEmitter {
     const savedSessionId = databaseService.getClaudeSessionId(projectId);
     if (savedSessionId) {
       sessionId = savedSessionId;
-      console.log(`💾 Loaded session ID from database: ${sessionId}`);
     }
     // Fallback to existing session in memory
     else if (existingSession?.sessionId) {
       if (existingSession.projectPath === projectPath) {
         sessionId = existingSession.sessionId;
-        console.log(`🔄 Resuming previous session from memory: ${sessionId}`);
       } else {
-        console.log(`⚠️ Working directory changed (${existingSession.projectPath} → ${projectPath}), starting fresh session`);
         sessionId = null;
       }
     }
@@ -135,8 +131,6 @@ class ClaudeService extends EventEmitter {
       model: effectiveModel,
       contextWindow: 200000
     };
-
-    console.log(`📊 Initial context for ${projectId}:`, initialContext);
 
     // Create or update session object
     const session: ClaudeSession = {
@@ -175,22 +169,6 @@ class ClaudeService extends EventEmitter {
       // Update status to running
       this.updateStatus(projectId, 'running');
 
-      console.log(`🚀 Starting SDK query for ${projectId}`);
-      console.log(`🔍 SDK Options:`, JSON.stringify({
-        cwd: options.cwd,
-        dataDir: options.dataDir,
-        model: options.model,
-        resume: sessionId || 'none',
-        pathToClaudeCodeExecutable: options.pathToClaudeCodeExecutable
-      }, null, 2));
-
-      // Extra verification - check if dataDir exists
-      if (!existsSync(options.dataDir)) {
-        console.log(`📁 DataDir will be created: ${options.dataDir}`);
-      } else {
-        console.log(`📁 DataDir already exists: ${options.dataDir}`);
-      }
-
       // Execute query with async generator and store Query object
       const claudeQuery = query({ prompt, options });
 
@@ -202,11 +180,8 @@ class ClaudeService extends EventEmitter {
 
       // If resuming and model changed, use setModel() to preserve context
       if (sessionId && existingSession?.context?.model && existingSession.context.model !== effectiveModel) {
-        const oldModel = existingSession.context.model;
-        console.log(`🔄 Changing model in resumed session: ${oldModel} → ${effectiveModel}`);
         try {
           await claudeQuery.setModel(effectiveModel);
-          console.log(`✅ Model changed successfully while preserving context`);
         } catch (error) {
           console.error(`❌ Failed to change model:`, error);
         }
@@ -236,15 +211,7 @@ class ClaudeService extends EventEmitter {
         // Update context from result message
         if (msg.type === 'result') {
           const session = this.sessions.get(projectId);
-          console.log(`📊 Result message received for ${projectId}, session exists: ${!!session}`);
           if (session) {
-            console.log(`📊 Updating context from result message:`, {
-              usage: msg.usage,
-              total_cost_usd: msg.total_cost_usd,
-              num_turns: msg.num_turns,
-              modelUsage: msg.modelUsage
-            });
-
             // Update token counts (SDK uses snake_case field names)
             // Note: result message contains TOTAL cumulative tokens, not incremental
             if (msg.usage) {
@@ -266,8 +233,6 @@ class ClaudeService extends EventEmitter {
                 session.context.contextWindow = (modelData as any).contextWindow || session.context.contextWindow;
               }
             }
-
-            console.log(`📊 Context after update:`, session.context);
 
             // Save context to database for persistence across app restarts
             databaseService.saveClaudeContext(projectId, session.context);
@@ -295,7 +260,6 @@ class ClaudeService extends EventEmitter {
 
       // Check if it was aborted
       if (error.name === 'AbortError') {
-        console.log(`⏹️ Claude session aborted for ${projectId}`);
         this.updateStatus(projectId, 'idle');
       } else {
         this.updateStatus(projectId, 'error');
@@ -409,8 +373,6 @@ class ClaudeService extends EventEmitter {
     // If no session or session is idle/completed, just update the context
     // The new model will be used on the next message
     if (!session || !session.query || session.status === 'idle' || session.status === 'completed') {
-      console.log(`📝 Session not active, storing model preference: ${modelName}`);
-
       if (session) {
         session.context.model = modelName;
         this.emit('claude-model-changed', { projectId, model: modelName });
@@ -438,10 +400,8 @@ class ClaudeService extends EventEmitter {
 
     // Session is active (running), use setModel()
     try {
-      console.log(`🔄 Changing model during active session for ${projectId} to ${modelName}`);
       await session.query.setModel(modelName);
       session.context.model = modelName;
-      console.log(`✅ Model changed to ${modelName}`);
       this.emit('claude-model-changed', { projectId, model: modelName });
       this.emit('claude-context-updated', { projectId, context: session.context });
     } catch (error) {
@@ -473,8 +433,6 @@ class ClaudeService extends EventEmitter {
     if (!session) {
       return;
     }
-
-    console.log(`🗑️ Destroying Claude session for project: ${projectId}`);
 
     try {
       session.abortController?.abort();
@@ -516,8 +474,6 @@ class ClaudeService extends EventEmitter {
    * Destroy all Claude sessions (app shutdown)
    */
   destroyAllSessions(): void {
-    console.log(`🗑️ Destroying all Claude sessions (${this.sessions.size} active)`);
-
     for (const projectId of this.sessions.keys()) {
       this.destroySession(projectId);
     }
@@ -540,49 +496,8 @@ class ClaudeService extends EventEmitter {
     // Emit the event for handlers to process
     this.emit('claude-event', { projectId, event });
 
-    // Handle specific message types with better logging
-    switch (msg.type) {
-      case 'assistant':
-        // Assistant response - main content from Claude
-        // Extract and log the actual text
-        if (msg.message?.content) {
-          const content = msg.message.content;
-          if (Array.isArray(content)) {
-            const textParts = content
-              .filter((c: any) => c.type === 'text')
-              .map((c: any) => c.text);
-            if (textParts.length > 0) {
-              console.log(`💬 [${projectId}] Claude says:`, textParts.join('\n'));
-            }
-          }
-        }
-        break;
-
-      case 'partial':
-        // Streaming chunk - skip logging to reduce noise
-        break;
-
-      case 'result':
-        // Final result
-        console.log(`🎯 [${projectId}] Task completed`);
-        if (msg.message?.content) {
-          console.log(`📋 Result:`, JSON.stringify(msg.message.content, null, 2));
-        }
-        break;
-
-      case 'system':
-        // System message
-        console.log(`⚙️ [${projectId}] System:`, msg.message);
-        break;
-
-      case 'user':
-      case 'user_message_replay':
-        // User messages - skip to reduce noise
-        break;
-
-      default:
-        console.log(`❓ [${projectId}] Unknown message type: ${msg.type}`);
-    }
+    // Handle specific message types - minimal logging
+    // Most message types are handled silently to reduce console noise
   }
 
   /**
@@ -602,7 +517,6 @@ class ClaudeService extends EventEmitter {
    * @private
    */
   private emitStatusChange(projectId: string, status: ClaudeStatus): void {
-    console.log(`📊 Claude status changed for ${projectId}: ${status}`);
     this.emit('claude-status', { projectId, status });
   }
 
@@ -615,7 +529,6 @@ class ClaudeService extends EventEmitter {
       // Try to find claude in PATH
       const path = execSync('which claude', { encoding: 'utf-8' }).trim();
       if (path) {
-        console.log(`📍 Found Claude executable at: ${path}`);
         return path;
       }
     } catch (error) {
@@ -633,7 +546,6 @@ class ClaudeService extends EventEmitter {
     for (const path of commonPaths) {
       try {
         if (existsSync(path)) {
-          console.log(`📍 Found Claude executable at: ${path}`);
           return path;
         }
       } catch (error) {
@@ -642,7 +554,6 @@ class ClaudeService extends EventEmitter {
     }
 
     // Default to 'claude' and hope it's in PATH
-    console.warn('⚠️ Claude executable not found in common paths, using "claude" from PATH');
     return 'claude';
   }
 }
