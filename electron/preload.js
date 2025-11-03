@@ -217,5 +217,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('claude:model-changed', listener)
       return () => ipcRenderer.removeListener('claude:model-changed', listener)
     }
+  },
+
+  // Chat history methods
+  chat: {
+    createBlock: (projectId, userPrompt) => ipcRenderer.invoke('chat:create-block', projectId, userPrompt),
+    updateBlock: (blockId, updates) => ipcRenderer.invoke('chat:update-block', blockId, updates),
+    completeBlock: (blockId) => ipcRenderer.invoke('chat:complete-block', blockId),
+    getHistory: (projectId, limit, offset) => ipcRenderer.invoke('chat:get-history', projectId, limit, offset),
+    getBlock: (blockId) => ipcRenderer.invoke('chat:get-block', blockId),
+    deleteHistory: (projectId) => ipcRenderer.invoke('chat:delete-history', projectId),
+
+    // Chat event listeners
+    onBlockCreated: (callback) => {
+      const listener = (_event, projectId, block) => callback(projectId, block)
+      ipcRenderer.on('chat:block-created', listener)
+      return () => ipcRenderer.removeListener('chat:block-created', listener)
+    },
+    onBlockUpdated: (callback) => {
+      const listener = (_event, projectId, block) => callback(projectId, block)
+      ipcRenderer.on('chat:block-updated', listener)
+      return () => ipcRenderer.removeListener('chat:block-updated', listener)
+    },
+    onBlockCompleted: (callback) => {
+      const listener = (_event, projectId, block) => callback(projectId, block)
+      ipcRenderer.on('chat:block-completed', listener)
+      return () => ipcRenderer.removeListener('chat:block-completed', listener)
+    },
+    onHistoryDeleted: (callback) => {
+      const listener = (_event, projectId) => callback(projectId)
+      ipcRenderer.on('chat:history-deleted', listener)
+      return () => ipcRenderer.removeListener('chat:history-deleted', listener)
+    }
   }
 })

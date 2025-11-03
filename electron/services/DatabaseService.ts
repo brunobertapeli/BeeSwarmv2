@@ -20,6 +20,23 @@ export interface Project {
   lastOpenedAt: number | null
 }
 
+export interface ChatBlock {
+  id: string
+  projectId: string
+  blockIndex: number
+  userPrompt: string
+  claudeMessages: string | null // JSON array of Claude text messages
+  toolExecutions: string | null // JSON array of individual tool executions (while working) or grouped (when complete)
+  commitHash: string | null
+  filesChanged: number | null
+  completionStats: string | null // JSON with { timeSeconds, inputTokens, outputTokens, cost }
+  summary: string | null // Claude's summary at the end
+  actions: string | null // JSON array of post-completion actions like git commits, builds, etc.
+  completedAt: number | null
+  isComplete: boolean
+  createdAt: number
+}
+
 class DatabaseService {
   private db: Database.Database | null = null
   private dbPath: string = ''
@@ -47,6 +64,9 @@ class DatabaseService {
 
       // Create projects table
       this.createProjectsTable()
+
+      // Create chat history table
+      this.createChatHistoryTable()
 
       // Run migrations
       this.runMigrations()
@@ -77,6 +97,39 @@ class DatabaseService {
 
     this.db!.exec(sql)
     console.log('✅ Projects table ready')
+  }
+
+  /**
+   * Create chat_history table
+   */
+  private createChatHistoryTable(): void {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS chat_history (
+        id TEXT PRIMARY KEY,
+        projectId TEXT NOT NULL,
+        blockIndex INTEGER NOT NULL,
+        userPrompt TEXT NOT NULL,
+        claudeMessages TEXT,
+        toolExecutions TEXT,
+        commitHash TEXT,
+        filesChanged INTEGER,
+        completionStats TEXT,
+        summary TEXT,
+        actions TEXT,
+        completedAt INTEGER,
+        isComplete INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `
+
+    this.db!.exec(sql)
+
+    // Create index for faster queries by projectId
+    this.db!.exec('CREATE INDEX IF NOT EXISTS idx_chat_history_projectId ON chat_history(projectId)')
+    this.db!.exec('CREATE INDEX IF NOT EXISTS idx_chat_history_blockIndex ON chat_history(projectId, blockIndex)')
+
+    console.log('✅ Chat history table ready')
   }
 
   /**
@@ -134,6 +187,41 @@ class DatabaseService {
         console.log('📦 Running migration: Adding claudeContext column...')
         this.db.exec('ALTER TABLE projects ADD COLUMN claudeContext TEXT')
         console.log('✅ Migration complete: claudeContext column added')
+      }
+
+      // Migration 7-10: Add chat_history table columns if they don't exist
+      try {
+        const chatTableInfo = this.db.prepare('PRAGMA table_info(chat_history)').all() as any[]
+
+        const hasClaudeMessages = chatTableInfo.some(col => col.name === 'claudeMessages')
+        if (!hasClaudeMessages) {
+          console.log('📦 Running migration: Adding claudeMessages column to chat_history...')
+          this.db.exec('ALTER TABLE chat_history ADD COLUMN claudeMessages TEXT')
+          console.log('✅ Migration complete: claudeMessages column added')
+        }
+
+        const hasCompletionStats = chatTableInfo.some(col => col.name === 'completionStats')
+        if (!hasCompletionStats) {
+          console.log('📦 Running migration: Adding completionStats column to chat_history...')
+          this.db.exec('ALTER TABLE chat_history ADD COLUMN completionStats TEXT')
+          console.log('✅ Migration complete: completionStats column added')
+        }
+
+        const hasSummary = chatTableInfo.some(col => col.name === 'summary')
+        if (!hasSummary) {
+          console.log('📦 Running migration: Adding summary column to chat_history...')
+          this.db.exec('ALTER TABLE chat_history ADD COLUMN summary TEXT')
+          console.log('✅ Migration complete: summary column added')
+        }
+
+        const hasActions = chatTableInfo.some(col => col.name === 'actions')
+        if (!hasActions) {
+          console.log('📦 Running migration: Adding actions column to chat_history...')
+          this.db.exec('ALTER TABLE chat_history ADD COLUMN actions TEXT')
+          console.log('✅ Migration complete: actions column added')
+        }
+      } catch (e) {
+        // chat_history table might not exist yet - that's ok
       }
 
       // Future migrations can be added here
@@ -494,6 +582,324 @@ class DatabaseService {
    */
   private generateId(): string {
     return `proj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+
+  /**
+   * Generate chat block ID
+   */
+  private generateChatBlockId(): string {
+    return `block_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+
+  // ==================== CHAT HISTORY METHODS ====================
+
+  /**
+   * Create a new chat block
+   */
+  createChatBlock(projectId: string, userPrompt: string): ChatBlock {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    // Get the next block index for this project
+    const maxIndexQuery = 'SELECT MAX(blockIndex) as maxIndex FROM chat_history WHERE projectId = ?'
+    const result = this.db.prepare(maxIndexQuery).get(projectId) as { maxIndex: number | null }
+    const blockIndex = (result?.maxIndex ?? -1) + 1
+
+    const newBlock: ChatBlock = {
+      id: this.generateChatBlockId(),
+      projectId,
+      blockIndex,
+      userPrompt,
+      claudeMessages: null,
+      toolExecutions: null,
+      commitHash: null,
+      filesChanged: null,
+      completionStats: null,
+      summary: null,
+      actions: null,
+      completedAt: null,
+      isComplete: false,
+      createdAt: Date.now()
+    }
+
+    const sql = `
+      INSERT INTO chat_history (id, projectId, blockIndex, userPrompt, claudeMessages, toolExecutions, commitHash, filesChanged, completionStats, summary, actions, completedAt, isComplete, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+
+    try {
+      this.db.prepare(sql).run(
+        newBlock.id,
+        newBlock.projectId,
+        newBlock.blockIndex,
+        newBlock.userPrompt,
+        newBlock.claudeMessages,
+        newBlock.toolExecutions,
+        newBlock.commitHash,
+        newBlock.filesChanged,
+        newBlock.completionStats,
+        newBlock.summary,
+        newBlock.actions,
+        newBlock.completedAt,
+        newBlock.isComplete ? 1 : 0,
+        newBlock.createdAt
+      )
+
+      console.log(`✅ Chat block created: ${newBlock.id} for project ${projectId}`)
+      return newBlock
+    } catch (error) {
+      console.error('❌ Failed to create chat block:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update a chat block
+   */
+  updateChatBlock(blockId: string, updates: Partial<Omit<ChatBlock, 'id' | 'projectId' | 'blockIndex' | 'createdAt'>>): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const fields: string[] = []
+    const values: any[] = []
+
+    if (updates.userPrompt !== undefined) {
+      fields.push('userPrompt = ?')
+      values.push(updates.userPrompt)
+    }
+    if (updates.claudeMessages !== undefined) {
+      fields.push('claudeMessages = ?')
+      values.push(updates.claudeMessages)
+    }
+    if (updates.toolExecutions !== undefined) {
+      fields.push('toolExecutions = ?')
+      values.push(updates.toolExecutions)
+    }
+    if (updates.commitHash !== undefined) {
+      fields.push('commitHash = ?')
+      values.push(updates.commitHash)
+    }
+    if (updates.filesChanged !== undefined) {
+      fields.push('filesChanged = ?')
+      values.push(updates.filesChanged)
+    }
+    if (updates.completionStats !== undefined) {
+      fields.push('completionStats = ?')
+      values.push(updates.completionStats)
+    }
+    if (updates.summary !== undefined) {
+      fields.push('summary = ?')
+      values.push(updates.summary)
+    }
+    if (updates.actions !== undefined) {
+      fields.push('actions = ?')
+      values.push(updates.actions)
+    }
+    if (updates.completedAt !== undefined) {
+      fields.push('completedAt = ?')
+      values.push(updates.completedAt)
+    }
+    if (updates.isComplete !== undefined) {
+      fields.push('isComplete = ?')
+      values.push(updates.isComplete ? 1 : 0)
+    }
+
+    if (fields.length === 0) {
+      return // Nothing to update
+    }
+
+    values.push(blockId)
+    const sql = `UPDATE chat_history SET ${fields.join(', ')} WHERE id = ?`
+
+    try {
+      this.db.prepare(sql).run(...values)
+      console.log(`✅ Chat block updated: ${blockId}`)
+    } catch (error) {
+      console.error('❌ Failed to update chat block:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Complete a chat block
+   */
+  completeChatBlock(blockId: string): void {
+    this.updateChatBlock(blockId, {
+      isComplete: true,
+      completedAt: Date.now()
+    })
+  }
+
+  /**
+   * Add an action to a chat block
+   */
+  addAction(blockId: string, action: {
+    type: 'git_commit' | 'build' | 'dev_server'
+    status: 'in_progress' | 'success' | 'error'
+    message?: string
+    data?: any
+    timestamp: number
+  }): void {
+    const block = this.getChatBlock(blockId)
+    if (!block) {
+      throw new Error(`Chat block not found: ${blockId}`)
+    }
+
+    // Get existing actions or initialize empty array
+    let actions: any[] = []
+    if (block.actions) {
+      try {
+        actions = JSON.parse(block.actions)
+      } catch (e) {
+        console.error('Failed to parse existing actions:', e)
+      }
+    }
+
+    // Add new action
+    actions.push(action)
+
+    // Update block
+    this.updateChatBlock(blockId, {
+      actions: JSON.stringify(actions)
+    })
+  }
+
+  /**
+   * Update an action in a chat block
+   */
+  updateAction(blockId: string, actionIndex: number, updates: {
+    status?: 'in_progress' | 'success' | 'error'
+    message?: string
+    data?: any
+  }): void {
+    const block = this.getChatBlock(blockId)
+    if (!block) {
+      throw new Error(`Chat block not found: ${blockId}`)
+    }
+
+    if (!block.actions) {
+      return
+    }
+
+    try {
+      const actions = JSON.parse(block.actions)
+      if (actionIndex < 0 || actionIndex >= actions.length) {
+        return
+      }
+
+      // Update action
+      actions[actionIndex] = { ...actions[actionIndex], ...updates }
+
+      // Save back to database
+      this.updateChatBlock(blockId, {
+        actions: JSON.stringify(actions)
+      })
+    } catch (e) {
+      console.error('Failed to update action:', e)
+    }
+  }
+
+  /**
+   * Get chat history for a project
+   */
+  getChatHistory(projectId: string, limit?: number, offset?: number): ChatBlock[] {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    let sql = 'SELECT * FROM chat_history WHERE projectId = ? ORDER BY blockIndex DESC'
+
+    if (limit) {
+      sql += ` LIMIT ${limit}`
+    }
+
+    if (offset) {
+      sql += ` OFFSET ${offset}`
+    }
+
+    try {
+      const rows = this.db.prepare(sql).all(projectId) as any[]
+
+      return rows.map(row => ({
+        id: row.id,
+        projectId: row.projectId,
+        blockIndex: row.blockIndex,
+        userPrompt: row.userPrompt,
+        claudeMessages: row.claudeMessages,
+        toolExecutions: row.toolExecutions,
+        commitHash: row.commitHash,
+        filesChanged: row.filesChanged,
+        completionStats: row.completionStats,
+        summary: row.summary,
+        actions: row.actions,
+        completedAt: row.completedAt,
+        isComplete: Boolean(row.isComplete),
+        createdAt: row.createdAt
+      }))
+    } catch (error) {
+      console.error('❌ Failed to get chat history:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get a specific chat block by ID
+   */
+  getChatBlock(blockId: string): ChatBlock | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'SELECT * FROM chat_history WHERE id = ?'
+
+    try {
+      const row = this.db.prepare(sql).get(blockId) as any
+
+      if (!row) {
+        return null
+      }
+
+      return {
+        id: row.id,
+        projectId: row.projectId,
+        blockIndex: row.blockIndex,
+        userPrompt: row.userPrompt,
+        claudeMessages: row.claudeMessages,
+        toolExecutions: row.toolExecutions,
+        commitHash: row.commitHash,
+        filesChanged: row.filesChanged,
+        completionStats: row.completionStats,
+        summary: row.summary,
+        actions: row.actions,
+        completedAt: row.completedAt,
+        isComplete: Boolean(row.isComplete),
+        createdAt: row.createdAt
+      }
+    } catch (error) {
+      console.error('❌ Failed to get chat block:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Delete chat history for a project
+   */
+  deleteChatHistory(projectId: string): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'DELETE FROM chat_history WHERE projectId = ?'
+
+    try {
+      this.db.prepare(sql).run(projectId)
+      console.log(`✅ Chat history deleted for project: ${projectId}`)
+    } catch (error) {
+      console.error('❌ Failed to delete chat history:', error)
+      throw error
+    }
   }
 
   /**

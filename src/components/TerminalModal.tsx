@@ -6,7 +6,7 @@ import 'xterm/css/xterm.css'
 
 interface TerminalLine {
   timestamp: Date
-  source: 'dev-server' | 'shell' | 'npm' | 'git' | 'claude' | 'system'
+  source: 'dev-server' | 'shell' | 'npm' | 'git' | 'claude' | 'user' | 'system'
   type: 'stdout' | 'stderr'
   message: string
   raw?: string
@@ -48,6 +48,7 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
       'npm': '[NPM]',
       'git': '[Git]',
       'claude': '[Claude]',
+      'user': '[User]',
       'system': '[System]',
     }
     return tags[source] || `[${source}]`
@@ -59,7 +60,8 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
       'shell': '\x1b[32m',      // Green
       'npm': '\x1b[33m',        // Yellow
       'git': '\x1b[35m',        // Magenta
-      'claude': '\x1b[34m',     // Blue
+      'claude': '\x1b[38;5;130m', // Brownish (Claude brand color)
+      'user': '\x1b[38;5;141m',   // Purple
       'system': '\x1b[90m',     // Gray
     }
     return colors[source] || '\x1b[37m' // White
@@ -227,7 +229,7 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
     terminal.writeln('\x1b[36m│\x1b[0m  \x1b[33mProject:\x1b[0m ' + projectName.padEnd(77) + ' \x1b[36m│\x1b[0m')
     terminal.writeln('\x1b[36m│\x1b[0m  \x1b[33mVersion:\x1b[0m ' + version.padEnd(77) + ' \x1b[36m│\x1b[0m')
     terminal.writeln('\x1b[36m│\x1b[0m  \x1b[33mSession:\x1b[0m ' + timestamp.padEnd(77) + ' \x1b[36m│\x1b[0m')
-    terminal.writeln('\x1b[36m│\x1b[0m  \x1b[33mSources:\x1b[0m ' + 'Dev Server, Shell, NPM, Git, Claude'.padEnd(77) + ' \x1b[36m│\x1b[0m')
+    terminal.writeln('\x1b[36m│\x1b[0m  \x1b[33mSources:\x1b[0m ' + 'Dev Server, Shell, NPM, Git, Claude, User'.padEnd(77) + ' \x1b[36m│\x1b[0m')
 
     terminal.writeln('\x1b[36m│\x1b[0m                                                                                         \x1b[36m│\x1b[0m')
 

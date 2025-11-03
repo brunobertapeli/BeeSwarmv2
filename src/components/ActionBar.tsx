@@ -59,8 +59,8 @@ function ActionBar({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Check if Claude is working
-  const isClaudeWorking = claudeStatus === 'starting' || claudeStatus === 'running'
+  // Check if Claude is working (also block if status is undefined to prevent race condition)
+  const isClaudeWorking = claudeStatus === 'starting' || claudeStatus === 'running' || claudeStatus === undefined
 
   // Check if deployment is in progress
   const isDeploying = deploymentStatus !== 'idle' && deploymentStatus !== 'live'
@@ -225,6 +225,17 @@ function ActionBar({
       setMessage('')
 
       try {
+        // Create chat block first
+        const blockResult = await window.electronAPI?.chat.createBlock(projectId, prompt)
+
+        if (!blockResult?.success) {
+          toast.error('Failed to create chat block', blockResult?.error || 'Unknown error')
+          console.error('Failed to create chat block:', blockResult?.error)
+          return
+        }
+
+        console.log('✅ Chat block created:', blockResult.block.id)
+
         // Check if Claude session exists, if not start it with the prompt
         const statusResult = await window.electronAPI?.claude.getStatus(projectId)
 
@@ -345,6 +356,7 @@ function ActionBar({
       {/* Status Sheet - shows when action bar is visible and has history */}
       {!isHidden && (
         <StatusSheet
+          projectId={projectId}
           onMouseEnter={() => {
             clearHideTimer()
             setIsTextareaFocused(true) // Prevent auto-hide

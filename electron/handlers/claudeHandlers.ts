@@ -3,6 +3,7 @@ import { claudeService, ClaudeStatus, ClaudeEvent, ClaudeContext } from '../serv
 import { terminalAggregator } from '../services/TerminalAggregator';
 import { databaseService } from '../services/DatabaseService';
 import { processManager } from '../services/ProcessManager';
+import { chatHistoryManager } from '../services/ChatHistoryManager';
 import { spawn } from 'child_process';
 import * as path from 'path';
 
@@ -41,14 +42,17 @@ export function registerClaudeHandlers(): void {
         };
       }
 
+      // Add user message block to terminal
+      console.log('📝 Adding user prompt to terminal:', prompt);
+      terminalAggregator.addUserLine(projectId, '\n\n');
+      terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      terminalAggregator.addUserLine(projectId, '👤 USER REQUEST\n');
+      terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      terminalAggregator.addUserLine(projectId, prompt + '\n');
+      terminalAggregator.addUserLine(projectId, '\n');
+
       // Start Claude session with optional model
       await claudeService.startSession(projectId, project.path, prompt, model);
-
-      // Add system message to terminal
-      terminalAggregator.addSystemLine(
-        projectId,
-        `🤖 Claude Code session started${model ? ` with ${model}` : ''}\n`
-      );
 
       return {
         success: true,
@@ -77,12 +81,12 @@ export function registerClaudeHandlers(): void {
       }
 
       // Add user message block to terminal
-      terminalAggregator.addClaudeLine(projectId, '\n\n');
-      terminalAggregator.addClaudeLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-      terminalAggregator.addClaudeLine(projectId, '👤 USER REQUEST\n');
-      terminalAggregator.addClaudeLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-      terminalAggregator.addClaudeLine(projectId, prompt + '\n');
-      terminalAggregator.addClaudeLine(projectId, '\n');
+      terminalAggregator.addUserLine(projectId, '\n\n');
+      terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      terminalAggregator.addUserLine(projectId, '👤 USER REQUEST\n');
+      terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      terminalAggregator.addUserLine(projectId, prompt + '\n');
+      terminalAggregator.addUserLine(projectId, '\n');
 
       // Send prompt using session resume pattern with optional model
       await claudeService.sendPrompt(projectId, project.path, prompt, model);
@@ -527,6 +531,12 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
 
       console.log(`🔄 Restarting dev server for ${projectId}`);
 
+      // Add dev server action (in progress)
+      chatHistoryManager.addAction(projectId, {
+        type: 'dev_server',
+        status: 'in_progress',
+      });
+
       // Dev server restart block
       terminalAggregator.addDevServerLine(projectId, {
         timestamp: new Date(),
@@ -553,33 +563,58 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
         raw: '⏳ Stopping...\n'
       });
 
-      await processManager.stopDevServer(projectId);
+      try {
+        await processManager.stopDevServer(projectId);
 
-      terminalAggregator.addDevServerLine(projectId, {
-        timestamp: new Date(),
-        type: 'stdout',
-        message: '✅ Stopped | ⏳ Starting...\n',
-        raw: '✅ Stopped | ⏳ Starting...\n'
-      });
+        terminalAggregator.addDevServerLine(projectId, {
+          timestamp: new Date(),
+          type: 'stdout',
+          message: '✅ Stopped | ⏳ Starting...\n',
+          raw: '✅ Stopped | ⏳ Starting...\n'
+        });
 
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s
 
-      const port = await processManager.startDevServer(projectId, projectPath);
+        const port = await processManager.startDevServer(projectId, projectPath);
 
-      const devServerElapsed = ((Date.now() - devServerStartTime) / 1000).toFixed(1);
+        const devServerElapsed = ((Date.now() - devServerStartTime) / 1000).toFixed(1);
 
-      terminalAggregator.addDevServerLine(projectId, {
-        timestamp: new Date(),
-        type: 'stdout',
-        message: `✅ Restarted on port ${port} | ⏱️  ${devServerElapsed}s\n`,
-        raw: `✅ Restarted on port ${port} | ⏱️  ${devServerElapsed}s\n`
-      });
-      terminalAggregator.addDevServerLine(projectId, {
-        timestamp: new Date(),
-        type: 'stdout',
-        message: '\n',
-        raw: '\n'
-      });
+        terminalAggregator.addDevServerLine(projectId, {
+          timestamp: new Date(),
+          type: 'stdout',
+          message: `✅ Restarted on port ${port} | ⏱️  ${devServerElapsed}s\n`,
+          raw: `✅ Restarted on port ${port} | ⏱️  ${devServerElapsed}s\n`
+        });
+        terminalAggregator.addDevServerLine(projectId, {
+          timestamp: new Date(),
+          type: 'stdout',
+          message: '\n',
+          raw: '\n'
+        });
+
+        // Update action to success
+        chatHistoryManager.updateLastAction(projectId, {
+          status: 'success',
+          data: {
+            url: `http://localhost:${port}`,
+            restartTime: parseFloat(devServerElapsed),
+          },
+        });
+      } catch (error) {
+        console.error(`❌ Dev server restart failed for ${projectId}:`, error);
+        terminalAggregator.addDevServerLine(projectId, {
+          timestamp: new Date(),
+          type: 'stderr',
+          message: '❌ Failed to restart dev server\n',
+          raw: '❌ Failed to restart dev server\n'
+        });
+
+        // Update action to error
+        chatHistoryManager.updateLastAction(projectId, {
+          status: 'error',
+          message: 'Failed to restart dev server',
+        });
+      }
     } else {
       console.log(`ℹ️ Dev server not running for ${projectId}, skipping restart`);
     }
@@ -609,6 +644,12 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
     terminalAggregator.addGitLine(projectId, '📦 GIT COMMIT\n');
     terminalAggregator.addGitLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
+    // Add git commit action (in progress)
+    chatHistoryManager.addAction(projectId, {
+      type: 'git_commit',
+      status: 'in_progress',
+    });
+
     // Check if there are any changes to commit
     const statusProcess = spawn('git', ['status', '--porcelain'], {
       cwd: projectPath,
@@ -624,6 +665,13 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
         console.error(`❌ Git status failed for ${projectId}`);
         terminalAggregator.addGitLine(projectId, '   ❌ Git status check failed\n', 'stderr');
         terminalAggregator.addGitLine(projectId, '\n');
+
+        // Update action to error
+        chatHistoryManager.updateLastAction(projectId, {
+          status: 'error',
+          message: 'Git status check failed',
+        });
+
         reject(new Error('Git status failed'));
         return;
       }
@@ -633,6 +681,13 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
         console.log(`ℹ️ No changes to commit for ${projectId}`);
         terminalAggregator.addGitLine(projectId, 'ℹ️  No changes detected - working tree clean\n');
         terminalAggregator.addGitLine(projectId, '\n');
+
+        // Update action to success (no changes)
+        chatHistoryManager.updateLastAction(projectId, {
+          status: 'success',
+          message: 'No changes to commit',
+        });
+
         resolve();
         return;
       }
@@ -650,6 +705,13 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
           console.error(`❌ Git add failed for ${projectId}`);
           terminalAggregator.addGitLine(projectId, '❌ Failed to stage changes\n', 'stderr');
           terminalAggregator.addGitLine(projectId, '\n');
+
+          // Update action to error
+          chatHistoryManager.updateLastAction(projectId, {
+            status: 'error',
+            message: 'Failed to stage changes',
+          });
+
           reject(new Error('Git add failed'));
           return;
         }
@@ -676,6 +738,13 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
             console.error(`❌ Git commit failed for ${projectId}`);
             terminalAggregator.addGitLine(projectId, '❌ Commit failed\n', 'stderr');
             terminalAggregator.addGitLine(projectId, '\n');
+
+            // Update action to error
+            chatHistoryManager.updateLastAction(projectId, {
+              status: 'error',
+              message: 'Commit failed',
+            });
+
             reject(new Error('Git commit failed'));
             return;
           }
@@ -689,6 +758,20 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
           console.log(`✅ Changes committed for ${projectId}`);
           terminalAggregator.addGitLine(projectId, `✅ Committed: ${commitHash} | ⏱️  ${gitElapsed}s\n`);
           terminalAggregator.addGitLine(projectId, '\n');
+
+          // Update action to success with commit details
+          chatHistoryManager.updateLastAction(projectId, {
+            status: 'success',
+            data: {
+              commitHash,
+              filesChanged: changedFiles,
+              commitTime: parseFloat(gitElapsed),
+            },
+          });
+
+          // Also update old commit info for backward compatibility
+          chatHistoryManager.updateCommitInfo(projectId, commitHash, changedFiles);
+
           resolve();
         });
       });

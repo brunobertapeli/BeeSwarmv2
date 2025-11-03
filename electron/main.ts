@@ -14,12 +14,14 @@ import { registerPreviewHandlers, setPreviewHandlersWindow } from './handlers/pr
 import { registerShellHandlers } from './handlers/shellHandlers.js'
 import { registerTerminalHandlers, setTerminalHandlersWindow } from './handlers/terminalHandlers.js'
 import { registerClaudeHandlers, setClaudeHandlersWindow } from './handlers/claudeHandlers.js'
+import { registerChatHandlers, setChatHandlersWindow } from './handlers/chatHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { previewService } from './services/PreviewService.js'
 import { processManager } from './services/ProcessManager.js'
 import { processPersistence } from './services/ProcessPersistence.js'
 import { terminalService } from './services/TerminalService.js'
 import { claudeService } from './services/ClaudeService.js'
+import { chatHistoryManager } from './services/ChatHistoryManager.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -226,6 +228,7 @@ function createWindow() {
   setPreviewHandlersWindow(mainWindow.webContents)
   setTerminalHandlersWindow(mainWindow.webContents)
   setClaudeHandlersWindow(mainWindow.webContents)
+  setChatHandlersWindow(mainWindow.webContents)
 }
 
 // Initialize database and register IPC handlers only once
@@ -242,6 +245,9 @@ async function initializeApp() {
     // Initialize database
     databaseService.init()
 
+    // Initialize chat history manager (tracks Claude events)
+    chatHistoryManager.init()
+
     // Register IPC handlers (only once)
     registerTemplateHandlers()
     registerProjectHandlers()
@@ -250,6 +256,7 @@ async function initializeApp() {
     registerShellHandlers()
     registerTerminalHandlers()
     registerClaudeHandlers()
+    registerChatHandlers()
 
     handlersRegistered = true
   }

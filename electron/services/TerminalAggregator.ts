@@ -5,7 +5,7 @@ import { TerminalOutput } from './TerminalService';
 /**
  * Terminal line source type
  */
-export type TerminalSource = 'dev-server' | 'shell' | 'npm' | 'git' | 'claude' | 'system';
+export type TerminalSource = 'dev-server' | 'shell' | 'npm' | 'git' | 'claude' | 'user' | 'system';
 
 /**
  * Unified terminal line interface
@@ -98,12 +98,26 @@ class TerminalAggregator extends EventEmitter {
   }
 
   /**
-   * Add a line from Claude Code (future)
+   * Add a line from Claude Code
    */
   addClaudeLine(projectId: string, message: string, type: 'stdout' | 'stderr' = 'stdout'): void {
     const line: TerminalLine = {
       timestamp: new Date(),
       source: 'claude',
+      type,
+      message,
+    };
+
+    this.addLine(projectId, line);
+  }
+
+  /**
+   * Add a line from user (user prompts/messages)
+   */
+  addUserLine(projectId: string, message: string, type: 'stdout' | 'stderr' = 'stdout'): void {
+    const line: TerminalLine = {
+      timestamp: new Date(),
+      source: 'user',
       type,
       message,
     };
@@ -217,6 +231,7 @@ class TerminalAggregator extends EventEmitter {
       'npm': '[NPM]',
       'git': '[Git]',
       'claude': '[Claude]',
+      'user': '[User]',
       'system': '[System]',
     };
 
@@ -232,7 +247,8 @@ class TerminalAggregator extends EventEmitter {
       'shell': '\x1b[32m',      // Green
       'npm': '\x1b[33m',        // Yellow
       'git': '\x1b[35m',        // Magenta
-      'claude': '\x1b[34m',     // Blue
+      'claude': '\x1b[38;5;130m', // Brownish (Claude brand color)
+      'user': '\x1b[38;5;141m',   // Purple
       'system': '\x1b[90m',     // Gray
     };
 

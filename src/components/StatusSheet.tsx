@@ -1,16 +1,38 @@
-import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
+
+// Import workflow icons
+import UserIcon from '../assets/images/user.svg'
+import AnthropicIcon from '../assets/images/anthropic.svg'
+import GitIcon from '../assets/images/git.svg'
+import DeployIcon from '../assets/images/deploy.svg'
 
 interface ConversationMessage {
   type: 'user' | 'assistant' | 'tool'
   content: string
   timestamp?: Date
+  toolName?: string // For highlighting tool names
 }
 
 interface DeploymentStage {
   label: string
   isComplete: boolean
+}
+
+interface CompletionStats {
+  timeSeconds: number
+  inputTokens: number
+  outputTokens: number
+  cost: number
+}
+
+interface Action {
+  type: 'git_commit' | 'build' | 'dev_server'
+  status: 'in_progress' | 'success' | 'error'
+  message?: string
+  data?: any
+  timestamp: number
 }
 
 interface ConversationBlock {
@@ -20,73 +42,331 @@ interface ConversationBlock {
   messages?: ConversationMessage[]
   isComplete: boolean
   commitHash?: string
+  filesChanged?: number
+  completionStats?: CompletionStats
+  summary?: string
+  actions?: Action[]
+  completionMessage?: string // Final message to show after everything
   // Deployment-specific fields
   deploymentStages?: DeploymentStage[]
   deploymentUrl?: string
 }
 
-// Mock conversation blocks - will be replaced with real data from backend
-const MOCK_BLOCKS: ConversationBlock[] = [
-  {
-    id: '1',
-    type: 'conversation',
-    userPrompt: 'Add a dark mode toggle to the settings page',
-    messages: [
-      { type: 'assistant', content: "I'll help you add a dark mode toggle. Let me first check the current settings page structure." },
-      { type: 'tool', content: 'Reading file: src/pages/Settings.tsx' },
-      { type: 'tool', content: 'Reading file: src/context/ThemeContext.tsx' },
-      { type: 'assistant', content: 'I found the theme context. Now I\'ll add the toggle component.' },
-      { type: 'tool', content: 'Writing changes to src/pages/Settings.tsx' },
-      { type: 'tool', content: 'Creating new file: src/components/DarkModeToggle.tsx' },
-      { type: 'assistant', content: 'Dark mode toggle has been added to the settings page.' },
-      { type: 'tool', content: 'Committed changes: "feat: add dark mode toggle to settings"' },
-    ],
-    isComplete: true,
-    commitHash: 'a3f2b1c',
-  },
-  {
-    id: '2',
-    type: 'conversation',
-    userPrompt: 'Fix the bug where the form doesn\'t validate email correctly',
-    messages: [
-      { type: 'assistant', content: 'I\'ll investigate the email validation issue.' },
-      { type: 'tool', content: 'Searching for email validation logic...' },
-      { type: 'tool', content: 'Found in src/utils/validation.ts' },
-      { type: 'tool', content: 'Reading file: src/utils/validation.ts' },
-      { type: 'assistant', content: 'I found the issue - the regex pattern was missing special characters. Fixing now.' },
-      { type: 'tool', content: 'Updating validation.ts...' },
-      { type: 'tool', content: 'Running tests...' },
-      { type: 'assistant', content: 'Tests passed! The email validation is now working correctly.' },
-      { type: 'tool', content: 'Committed changes: "fix: improve email validation regex"' },
-    ],
-    isComplete: true,
-    commitHash: 'b7e4d2a',
-  },
-  {
-    id: '3',
-    type: 'conversation',
-    userPrompt: 'Create a loading skeleton for the user profile card',
-    messages: [
-      { type: 'assistant', content: 'I\'ll create a loading skeleton component for the profile card.' },
-      { type: 'tool', content: 'Reading file: src/components/ProfileCard.tsx' },
-      { type: 'assistant', content: 'Analyzing the profile card structure to match the skeleton design...' },
-      { type: 'tool', content: 'Creating ProfileCardSkeleton.tsx...' },
-    ],
-    isComplete: false,
-  },
-]
-
 interface StatusSheetProps {
+  projectId?: string
   onMouseEnter?: () => void
   onMouseLeave?: () => void
   onStopClick?: () => void
 }
 
-function StatusSheet({ onMouseEnter, onMouseLeave, onStopClick }: StatusSheetProps) {
+function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: StatusSheetProps) {
   const { deploymentStatus } = useAppStore()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
-  const [allBlocks, setAllBlocks] = useState<ConversationBlock[]>(MOCK_BLOCKS)
+  const [allBlocks, setAllBlocks] = useState<ConversationBlock[]>([])
+  const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set())
+  const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set())
+  const [expandedUserPrompts, setExpandedUserPrompts] = useState<Set<string>>(new Set())
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMoreBlocks, setHasMoreBlocks] = useState(true)
+  const [currentOffset, setCurrentOffset] = useState(0)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+  // Random loading phrases - use block ID for consistent selection
+  const getLoadingPhrase = (blockId: string) => {
+    const phrases = [
+      'Warming up the engines...',
+      'Booting up the code engines...',
+      'Charging the circuits...',
+      'Activating the neural cores...',
+      'Charging the neural network...',
+      'Spinning up the AI nodes...',
+      'Linking the thought patterns...',
+      'Calibrating the reasoning unit...',
+      'Optimizing the neural flow...',
+    ]
+    // Use blockId to get consistent phrase for same block
+    const hash = blockId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
+    return phrases[hash % phrases.length]
+  }
+
+  // Estimate number of lines in user prompt
+  const estimatePromptLines = (text: string): number => {
+    if (!text) return 1
+    const charsPerLine = 50 // Approximate characters per line
+    const explicitLines = text.split('\n').length
+    const estimatedLines = Math.ceil(text.length / charsPerLine)
+    return Math.max(explicitLines, estimatedLines)
+  }
+
+  // Get font size class based on line count
+  const getPromptFontSize = (lineCount: number): string => {
+    if (lineCount >= 8) return 'text-xs' // Smaller for 8+ lines
+    if (lineCount >= 2) return 'text-[13px]' // Medium for 2-3 lines
+    return 'text-sm' // Default for 1 line
+  }
+
+  // Transform database block to UI block
+  const transformBlock = (block: any): ConversationBlock => {
+    const messages: ConversationMessage[] = []
+
+    // Add user message
+    messages.push({
+      type: 'user',
+      content: block.userPrompt,
+      timestamp: new Date(block.createdAt),
+    })
+
+    // Parse and add Claude messages
+    if (block.claudeMessages) {
+      try {
+        const claudeMessages = JSON.parse(block.claudeMessages) as string[]
+        claudeMessages.forEach(msg => {
+          messages.push({
+            type: 'assistant',
+            content: msg,
+          })
+        })
+      } catch (e) {
+        console.error('Failed to parse Claude messages:', e)
+      }
+    }
+
+    // If no Claude messages yet, show random loading message
+    if (messages.filter(m => m.type === 'assistant').length === 0 && !block.isComplete) {
+      messages.push({
+        type: 'assistant',
+        content: getLoadingPhrase(block.id),
+      })
+    }
+
+    // Parse and add tool executions
+    if (block.toolExecutions) {
+      try {
+        const toolData = JSON.parse(block.toolExecutions)
+
+        if (block.isComplete) {
+          // Completed: toolData might be grouped object or array - handle both
+          if (Array.isArray(toolData)) {
+            // Group the array
+            const grouped: Record<string, number> = {}
+            toolData.forEach((tool: any) => {
+              grouped[tool.toolName] = (grouped[tool.toolName] || 0) + 1
+            })
+            const toolMessages = Object.entries(grouped).map(([toolName, count]) =>
+              `${count}x ${toolName}`
+            ).join(', ')
+            messages.push({
+              type: 'tool',
+              content: toolMessages,
+            })
+          } else {
+            // Already grouped
+            const toolMessages = Object.entries(toolData).map(([toolName, count]) =>
+              `${count}x ${toolName}`
+            ).join(', ')
+            messages.push({
+              type: 'tool',
+              content: toolMessages,
+            })
+          }
+        } else {
+          // In progress: show verbose tool executions
+          if (Array.isArray(toolData)) {
+            toolData.forEach((tool: any) => {
+              let toolMsg = `Claude using tool ${tool.toolName}`
+              if (tool.filePath) {
+                // Extract just the filename from path
+                const fileName = tool.filePath.split('/').pop() || tool.filePath
+                toolMsg += ` @ ${fileName}`
+              } else if (tool.command) {
+                toolMsg += ` @ ${tool.command}`
+              }
+              messages.push({
+                type: 'tool',
+                content: toolMsg,
+                toolName: tool.toolName, // Store tool name for highlighting
+              })
+            })
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse tool executions:', e)
+      }
+    }
+
+    // Parse completion stats
+    let completionStats: CompletionStats | undefined
+    if (block.completionStats) {
+      try {
+        completionStats = JSON.parse(block.completionStats)
+      } catch (e) {
+        console.error('Failed to parse completion stats:', e)
+      }
+    }
+
+    // Parse actions
+    let actions: Action[] | undefined
+    if (block.actions) {
+      try {
+        actions = JSON.parse(block.actions)
+      } catch (e) {
+        console.error('Failed to parse actions:', e)
+      }
+    }
+
+    // Determine completion message (shown after actions)
+    let completionMessage: string | undefined
+    if (block.isComplete && actions && actions.length > 0) {
+      const allSuccess = actions.every(a => a.status === 'success')
+      const hasDevServer = actions.some(a => a.type === 'dev_server' && a.status === 'success')
+
+      if (allSuccess && hasDevServer) {
+        completionMessage = '🚀 Build complete. You can test your project!'
+      }
+    }
+
+    return {
+      id: block.id,
+      type: 'conversation' as const,
+      userPrompt: block.userPrompt,
+      messages,
+      isComplete: block.isComplete,
+      commitHash: block.commitHash || undefined,
+      filesChanged: block.filesChanged || undefined,
+      completionStats,
+      summary: block.summary || undefined,
+      actions,
+      completionMessage,
+    }
+  }
+
+  // Helper to check if a message is long (should be collapsible)
+  const isLongMessage = (content: string): boolean => {
+    const lines = content.split('\n')
+    return lines.length > 2 || content.length > 150
+  }
+
+  // Helper to get truncated message
+  const getTruncatedMessage = (content: string): string => {
+    const lines = content.split('\n')
+    if (lines.length > 2) {
+      return lines.slice(0, 2).join('\n') + '...'
+    }
+    if (content.length > 150) {
+      return content.slice(0, 150) + '...'
+    }
+    return content
+  }
+
+  // Load more blocks (for infinite scroll)
+  const loadMoreBlocks = async () => {
+    if (!projectId || !window.electronAPI?.chat || isLoadingMore || !hasMoreBlocks) return
+
+    setIsLoadingMore(true)
+    const nextOffset = currentOffset + 20
+
+    try {
+      const result = await window.electronAPI.chat.getHistory(projectId, 20, nextOffset)
+
+      if (result.success && result.blocks) {
+        const olderBlocks = result.blocks
+          .map((block: any) => transformBlock(block))
+          .reverse() // Reverse to show oldest first
+
+        if (olderBlocks.length < 20) {
+          setHasMoreBlocks(false)
+        }
+
+        if (olderBlocks.length > 0) {
+          // Save current scroll height before adding blocks
+          const scrollContainer = scrollContainerRef.current
+          const oldScrollHeight = scrollContainer?.scrollHeight || 0
+
+          // Prepend older blocks
+          setAllBlocks(prev => [...olderBlocks, ...prev])
+          setCurrentOffset(nextOffset)
+
+          // Maintain scroll position after adding blocks
+          setTimeout(() => {
+            if (scrollContainer) {
+              const newScrollHeight = scrollContainer.scrollHeight
+              const heightDiff = newScrollHeight - oldScrollHeight
+              scrollContainer.scrollTop = scrollContainer.scrollTop + heightDiff
+            }
+          }, 0)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load more blocks:', error)
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
+
+  // Load initial chat history from database
+  useEffect(() => {
+    if (!projectId || !window.electronAPI?.chat) return
+
+    // Reset state
+    setAllBlocks([])
+    setCurrentOffset(0)
+    setHasMoreBlocks(true)
+
+    // Load history
+    window.electronAPI.chat.getHistory(projectId, 20, 0).then((result) => {
+      if (result.success && result.blocks) {
+        const conversationBlocks = result.blocks
+          .map((block: any) => transformBlock(block))
+          .reverse() // Reverse to show oldest first
+
+        setAllBlocks(conversationBlocks)
+        setCurrentOffset(0)
+
+        // Check if there are more blocks
+        if (conversationBlocks.length < 20) {
+          setHasMoreBlocks(false)
+        }
+      }
+    })
+  }, [projectId])
+
+  // Listen for real-time chat updates
+  useEffect(() => {
+    if (!projectId || !window.electronAPI?.chat) return
+
+    const unsubCreated = window.electronAPI.chat.onBlockCreated((id, block) => {
+      if (id !== projectId) return
+
+      // Add new block to UI
+      const newBlock = transformBlock(block)
+      setAllBlocks(prev => [...prev, newBlock])
+    })
+
+    const unsubUpdated = window.electronAPI.chat.onBlockUpdated((id, block) => {
+      if (id !== projectId) return
+
+      // Update existing block
+      setAllBlocks(prev => prev.map(b =>
+        b.id === block.id ? transformBlock(block) : b
+      ))
+    })
+
+    const unsubCompleted = window.electronAPI.chat.onBlockCompleted((id, block) => {
+      if (id !== projectId) return
+
+      // Update block with complete data
+      setAllBlocks(prev => prev.map(b =>
+        b.id === block.id ? transformBlock(block) : b
+      ))
+    })
+
+    return () => {
+      unsubCreated()
+      unsubUpdated()
+      unsubCompleted()
+    }
+  }, [projectId])
 
   // Add deployment block when deployment starts
   useEffect(() => {
@@ -140,6 +420,31 @@ function StatusSheet({ onMouseEnter, onMouseLeave, onStopClick }: StatusSheetPro
     }
   }, [deploymentStatus])
 
+  // Auto-scroll to bottom when blocks change or when expanded
+  useEffect(() => {
+    if (isExpanded && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
+    }
+  }, [allBlocks, isExpanded])
+
+  // Infinite scroll - detect when user scrolls near top
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current
+    if (!scrollContainer || !isExpanded) return
+
+    const handleScroll = () => {
+      const { scrollTop } = scrollContainer
+      const threshold = 100 // Load more when within 100px of top
+
+      if (scrollTop <= threshold && hasMoreBlocks && !isLoadingMore) {
+        loadMoreBlocks()
+      }
+    }
+
+    scrollContainer.addEventListener('scroll', handleScroll)
+    return () => scrollContainer.removeEventListener('scroll', handleScroll)
+  }, [isExpanded, hasMoreBlocks, isLoadingMore, currentOffset])
+
   // Check if there's any conversation history
   const hasHistory = allBlocks.length > 0
 
@@ -173,6 +478,42 @@ function StatusSheet({ onMouseEnter, onMouseLeave, onStopClick }: StatusSheetPro
       const currentStage = currentBlock.deploymentStages?.find((s) => !s.isComplete)
       return currentStage ? currentStage.label : 'Deploying...'
     }
+
+    // Show completion message if available (highest priority when complete)
+    if (currentBlock.completionMessage) {
+      return currentBlock.completionMessage
+    }
+
+    // Check for in-progress actions
+    if (currentBlock.actions && currentBlock.actions.length > 0) {
+      const inProgressAction = currentBlock.actions.find(a => a.status === 'in_progress')
+      if (inProgressAction) {
+        if (inProgressAction.type === 'git_commit') {
+          return 'Committing and pushing changes to GitHub...'
+        }
+        if (inProgressAction.type === 'build') {
+          return 'Building...'
+        }
+        if (inProgressAction.type === 'dev_server') {
+          return 'Starting dev server...'
+        }
+      }
+
+      // Show last completed action
+      const lastAction = currentBlock.actions[currentBlock.actions.length - 1]
+      if (lastAction.status === 'success') {
+        if (lastAction.type === 'git_commit') {
+          return 'Committed successfully'
+        }
+        if (lastAction.type === 'build') {
+          return 'Build succeed'
+        }
+        if (lastAction.type === 'dev_server') {
+          return 'Dev server running'
+        }
+      }
+    }
+
     return latestMessage?.content || ''
   }
 
@@ -235,19 +576,27 @@ function StatusSheet({ onMouseEnter, onMouseLeave, onStopClick }: StatusSheetPro
               className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 -mx-4 px-4 transition-colors"
               onClick={() => setIsExpanded(false)}
             >
-              <span className="text-xs font-medium text-gray-300">Conversation History</span>
+              <span className="text-xs font-medium text-gray-300">Workflow Activity</span>
               <button className="p-1">
                 <ChevronDown size={14} className="text-gray-300" />
               </button>
             </div>
 
-            {/* Conversation blocks - scrollable */}
-            <div className="space-y-3 max-h-[400px] overflow-y-scroll pr-2 custom-scrollbar">
+            {/* Workflow Timeline */}
+            <div ref={scrollContainerRef} className="max-h-[500px] overflow-y-scroll pr-2 custom-scrollbar">
+              {/* Loading spinner at top for infinite scroll */}
+              {isLoadingMore && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 size={16} className="text-primary animate-spin" />
+                  <span className="ml-2 text-xs text-gray-400">Loading older messages...</span>
+                </div>
+              )}
+
               {allBlocks.map((block, blockIndex) => {
                 const isLastBlock = blockIndex === allBlocks.length - 1
                 const showStopButton = isLastBlock && !block.isComplete
 
-                // Render deployment block
+                // Render deployment block (keep existing for now)
                 if (block.type === 'deployment') {
                   return (
                     <div key={block.id} className="bg-primary/5 rounded-lg p-3 border border-primary/20 relative">
@@ -304,78 +653,368 @@ function StatusSheet({ onMouseEnter, onMouseLeave, onStopClick }: StatusSheetPro
                   )
                 }
 
-                // Render conversation block
+                // Render conversation block with timeline workflow
+                const hasGitAction = block.actions?.some(a => a.type === 'git_commit')
+                const hasDeployAction = block.actions?.some(a => a.type === 'dev_server')
+                const gitAction = block.actions?.find(a => a.type === 'git_commit')
+                const deployAction = block.actions?.find(a => a.type === 'dev_server')
+
                 return (
-                  <div key={block.id} className="bg-white/5 rounded-lg p-3 border border-white/10 relative">
-                    {/* Checkpoint button or Stop button */}
-                    {block.isComplete ? (
-                      <button
-                        className="absolute top-2 right-2 p-1.5 hover:bg-white/10 rounded-lg transition-colors group tooltip-fast"
-                        title="Restore to this checkpoint"
-                      >
-                        <RotateCcw size={12} className="text-gray-400 group-hover:text-primary transition-colors" />
-                      </button>
-                    ) : showStopButton ? (
-                      <button
-                        onClick={onStopClick}
-                        className="absolute top-2 right-2 p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group tooltip-fast"
-                        title="Stop generation"
-                      >
-                        <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
-                      </button>
-                    ) : null}
+                  <div key={block.id} className="mb-6">
+                    {/* Workflow Block Container */}
+                    <div className="bg-white/[0.02] rounded-lg border border-white/10 p-4 relative">
+                      {/* Checkpoint or Stop button (top right) */}
+                      {block.isComplete ? (
+                        <button
+                          className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors group z-10"
+                          title="Restore to this checkpoint"
+                        >
+                          <RotateCcw size={12} className="text-gray-400 group-hover:text-primary transition-colors" />
+                        </button>
+                      ) : showStopButton ? (
+                        <button
+                          onClick={onStopClick}
+                          className="absolute top-3 right-3 p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group z-10"
+                          title="Stop generation"
+                        >
+                          <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
+                        </button>
+                      ) : null}
 
-                  {/* User Prompt */}
-                  {block.userPrompt && (
-                    <div className="flex items-start gap-2 mb-2 pr-8">
-                      <div className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center mt-0.5">
-                        <User size={12} className="text-blue-400" />
-                      </div>
-                      <div className="flex-1">
-                        <span className="text-xs font-medium text-gray-200">{block.userPrompt}</span>
-                      </div>
+                      {/* Timeline Workflow */}
+                      <div className="relative pr-8">
+                        {/* Continuous dotted line from top to bottom - behind icons */}
+                        <div className="absolute left-[12px] top-0 bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
+
+                        {/* STEP 0: USER (User Prompt) */}
+                        <div className="relative pb-4">
+                          {/* Step header */}
+                          <div className="flex items-center gap-3 mb-3">
+                            {/* Icon - Adjust left/right positioning here */}
+                            <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                              <img src={UserIcon} alt="User" className="w-6 h-6 opacity-90" />
+                            </div>
+
+                            {/* Title */}
+                            <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                              {(() => {
+                                const prompt = block.userPrompt || 'User request'
+                                const lineCount = estimatePromptLines(prompt)
+                                const fontSize = getPromptFontSize(lineCount)
+                                const needsExpansion = lineCount > 10
+                                const isExpanded = expandedUserPrompts.has(block.id)
+                                const maxLines = 3
+
+                                return (
+                                  <div>
+                                    <div className={`${fontSize} font-medium text-gray-200 ${needsExpansion && !isExpanded ? 'line-clamp-3' : ''}`}>
+                                      {prompt}
+                                    </div>
+                                    {needsExpansion && (
+                                      <button
+                                        onClick={() => {
+                                          const newSet = new Set(expandedUserPrompts)
+                                          if (newSet.has(block.id)) {
+                                            newSet.delete(block.id)
+                                          } else {
+                                            newSet.add(block.id)
+                                          }
+                                          setExpandedUserPrompts(newSet)
+                                        }}
+                                        className="mt-1 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                      >
+                                        {isExpanded ? 'Show less' : 'Show more'}
+                                      </button>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* STEP 1: ANTHROPIC (Code Editing) */}
+                        <div className="relative pb-4">
+                          {/* Step header */}
+                          <div className="flex items-center gap-3 mb-3">
+                            {/* Icon - Adjust left/right positioning here */}
+                            <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                              <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6 opacity-90" />
+                            </div>
+
+                            {/* Title + Status */}
+                            <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-200">
+                                  Code editing
+                                </span>
+                                {block.isComplete && (
+                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                    <Check size={10} className="text-green-400" />
+                                  </div>
+                                )}
+                              </div>
+                              {block.completionStats && (
+                                <div className="text-[10px] text-gray-500 mt-0.5">
+                                  {block.completionStats.timeSeconds}s
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Anthropic step content (always visible) */}
+                          <div className="ml-10 space-y-3">
+
+                            {/* Messages */}
+                            <div className="space-y-1.5">
+                              {block.messages?.map((message, idx) => {
+                                const messageId = `${block.id}-msg-${idx}`
+                                const isLong = isLongMessage(message.content)
+                                const isMessageExpanded = expandedMessages.has(messageId)
+
+                                return (
+                                  <div key={idx}>
+                                    <div className="flex items-start gap-2">
+                                      {message.type === 'assistant' && (
+                                        <>
+                                          <Bot size={10} className="text-primary flex-shrink-0 mt-1 opacity-60" />
+                                          <div className="flex-1">
+                                            <span className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap">
+                                              {isLong && !isMessageExpanded
+                                                ? getTruncatedMessage(message.content)
+                                                : message.content
+                                              }
+                                            </span>
+                                            {isLong && (
+                                              <button
+                                                onClick={() => {
+                                                  const newSet = new Set(expandedMessages)
+                                                  if (newSet.has(messageId)) {
+                                                    newSet.delete(messageId)
+                                                  } else {
+                                                    newSet.add(messageId)
+                                                  }
+                                                  setExpandedMessages(newSet)
+                                                }}
+                                                className="ml-1 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                              >
+                                                {isMessageExpanded ? 'Show less' : 'Show more'}
+                                              </button>
+                                            )}
+                                          </div>
+                                        </>
+                                      )}
+                                      {message.type === 'tool' && (
+                                        <>
+                                          <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
+                                          <span className="text-[11px] text-gray-400 leading-relaxed">
+                                            {message.toolName ? (
+                                              // Highlight the tool name
+                                              <>
+                                                Claude using tool{' '}
+                                                <span className="text-primary font-medium">{message.toolName}</span>
+                                                {message.content.includes('@') && (
+                                                  <> @ {message.content.split('@')[1].trim()}</>
+                                                )}
+                                              </>
+                                            ) : (
+                                              // Grouped tools (completed)
+                                              <span className="font-mono">{message.content}</span>
+                                            )}
+                                          </span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+
+                            {/* Completion Stats */}
+                            {block.completionStats && (
+                              <div className="mt-2 pt-2 border-t border-white/10">
+                                <div className="flex items-center gap-2 flex-wrap text-[10px]">
+                                  <span className="text-gray-400">
+                                    ⏱️ {block.completionStats.timeSeconds}s
+                                  </span>
+                                  <span className="text-gray-600">|</span>
+                                  <span className="text-gray-400">
+                                    📊 {block.completionStats.inputTokens}→{block.completionStats.outputTokens}
+                                  </span>
+                                  <span className="text-gray-600">|</span>
+                                  <span className="text-gray-400">
+                                    💰 ${block.completionStats.cost.toFixed(4)}
+                                  </span>
+                                </div>
+
+                                {/* Collapsible Summary */}
+                                {block.summary && (
+                                  <div className="mt-2">
+                                    <button
+                                      onClick={() => {
+                                        const newSet = new Set(expandedSummaries)
+                                        if (newSet.has(block.id)) {
+                                          newSet.delete(block.id)
+                                        } else {
+                                          newSet.add(block.id)
+                                        }
+                                        setExpandedSummaries(newSet)
+                                      }}
+                                      className="flex items-center gap-1.5 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                    >
+                                      {expandedSummaries.has(block.id) ? (
+                                        <ChevronUp size={10} />
+                                      ) : (
+                                        <ChevronDown size={10} />
+                                      )}
+                                      <span className="font-medium">Summary</span>
+                                    </button>
+
+                                    {expandedSummaries.has(block.id) && (
+                                      <div className="mt-2 pl-4 text-[10px] text-gray-300 leading-relaxed whitespace-pre-wrap">
+                                        {block.summary}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Completion Message */}
+                            {block.completionMessage && (
+                              <div className="mt-2 pt-2 border-t border-white/10">
+                                <div className="flex items-start gap-2">
+                                  <Bot size={10} className="text-primary flex-shrink-0 mt-1 opacity-60" />
+                                  <span className="text-[11px] text-gray-300 leading-relaxed">{block.completionMessage}</span>
+                                </div>
+                              </div>
+                            )}
+
+                          </div>
+                        </div>
+
+                      {/* STEP 2: GIT (GitHub Commit) */}
+                      {hasGitAction && gitAction && (
+                        <div className="relative pb-4">
+                          {/* Step header */}
+                          <div className="flex items-center gap-3 mb-3">
+                            {/* Icon - Adjust left/right positioning here */}
+                            <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                              <img src={GitIcon} alt="Git" className="w-6 h-6 opacity-90" />
+                            </div>
+
+                            {/* Title + Status */}
+                            <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-200">
+                                  {gitAction.status === 'in_progress'
+                                    ? 'Committing and pushing to GitHub...'
+                                    : gitAction.status === 'success'
+                                    ? 'Committed successfully'
+                                    : 'Commit failed'
+                                  }
+                                </span>
+                                {gitAction.status === 'success' && (
+                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                    <Check size={10} className="text-green-400" />
+                                  </div>
+                                )}
+                                {gitAction.status === 'in_progress' && (
+                                  <Loader2 size={12} className="text-primary animate-spin" />
+                                )}
+                              </div>
+                              {gitAction.status === 'success' && (
+                                <div className="text-[10px] text-gray-500 mt-0.5">
+                                  0.1s
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Git step content (always visible) */}
+                          {gitAction.status === 'success' && gitAction.data && (
+                            <div className="ml-10 space-y-2">
+                              {gitAction.data.commitHash && (
+                                <div className="flex items-center gap-2 text-[11px]">
+                                  <span className="text-gray-400">Commit:</span>
+                                  <span className="font-mono bg-white/5 px-2 py-0.5 rounded text-gray-300">
+                                    {gitAction.data.commitHash}
+                                  </span>
+                                </div>
+                              )}
+                              {gitAction.data.filesChanged !== undefined && (
+                                <div className="flex items-center gap-2 text-[11px]">
+                                  <span className="text-gray-400">Files changed:</span>
+                                  <span className="text-gray-300">
+                                    {gitAction.data.filesChanged} file{gitAction.data.filesChanged !== 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* STEP 3: DEPLOY (Dev Server) */}
+                      {hasDeployAction && deployAction && (
+                        <div className="relative">
+                          {/* Step header */}
+                          <div className="flex items-center gap-3 mb-3">
+                            {/* Icon - Adjust left/right positioning here */}
+                            <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                              <img src={DeployIcon} alt="Deploy" className="w-6 h-6 opacity-90" />
+                            </div>
+
+                            {/* Title + Status */}
+                            <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-200">
+                                  {deployAction.status === 'in_progress'
+                                    ? 'Starting dev server...'
+                                    : deployAction.status === 'success'
+                                    ? 'Dev server running'
+                                    : 'Failed to start dev server'
+                                  }
+                                </span>
+                                {deployAction.status === 'success' && (
+                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                    <Check size={10} className="text-green-400" />
+                                  </div>
+                                )}
+                                {deployAction.status === 'in_progress' && (
+                                  <Loader2 size={12} className="text-primary animate-spin" />
+                                )}
+                              </div>
+                              {deployAction.data?.restartTime && (
+                                <div className="text-[10px] text-gray-500 mt-0.5">
+                                  {deployAction.data.restartTime}s
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Deploy step content (always visible) */}
+                          {deployAction.status === 'success' && deployAction.data?.url && (
+                            <div className="ml-10">
+                              <div className="flex items-center gap-2 text-[11px]">
+                                <span className="text-gray-400">Server:</span>
+                                <a
+                                  href={deployAction.data.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group"
+                                >
+                                  <span>{deployAction.data.url}</span>
+                                  <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                     </div>
-                  )}
-
-                  {/* Messages */}
-                  <div className="space-y-1.5 ml-7">
-                    {block.messages?.map((message, idx) => (
-                      <div key={idx} className="flex items-start gap-2">
-                        {message.type === 'assistant' && (
-                          <>
-                            <Bot size={10} className="text-primary flex-shrink-0 mt-1 opacity-60" />
-                            <span className="text-[11px] text-gray-300 leading-relaxed">{message.content}</span>
-                          </>
-                        )}
-                        {message.type === 'tool' && (
-                          <>
-                            <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
-                            <span className="text-[11px] text-gray-400 leading-relaxed font-mono">{message.content}</span>
-                          </>
-                        )}
-                      </div>
-                    ))}
                   </div>
-
-                  {/* Completion indicator */}
-                  {block.isComplete && block.commitHash && (
-                    <div className="mt-2 pt-2 border-t border-white/10 flex items-center gap-1.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                      <span className="text-[10px] text-primary font-mono">
-                        Committed: {block.commitHash}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Working indicator */}
-                  {!block.isComplete && (
-                    <div className="mt-2 pt-2 border-t border-white/10 flex items-center gap-1.5">
-                      <Loader2 size={10} className="text-primary animate-spin" />
-                      <span className="text-[10px] text-primary">
-                        Working...
-                      </span>
-                    </div>
-                    )}
                   </div>
                 )
               })}
@@ -402,11 +1041,6 @@ function StatusSheet({ onMouseEnter, onMouseLeave, onStopClick }: StatusSheetPro
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: rgba(255, 255, 255, 0.25);
-        }
-
-        /* Fast tooltip appearance */
-        .tooltip-fast[title]:hover::after {
-          transition-delay: 0.1s !important;
         }
       `}</style>
     </div>
