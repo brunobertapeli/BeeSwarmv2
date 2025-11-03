@@ -78,6 +78,74 @@ export interface PreviewBounds {
   height: number
 }
 
+export interface SupportMessage {
+  _id?: string
+  userId: string
+  userName: string
+  userEmail: string
+  projectId?: string
+  type: 'user' | 'support'
+  content: string
+  timestamp: Date
+  read: boolean
+}
+
+export interface SupportSession {
+  _id?: string
+  userId: string
+  userName: string
+  userEmail: string
+  projectId?: string
+  messages: SupportMessage[]
+  status: 'active' | 'resolved'
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface SupportQueueEntry {
+  _id?: string
+  userId: string
+  userName: string
+  userEmail: string
+  projectId?: string
+  lastMessage: string
+  status: 'waiting' | 'in-progress' | 'resolved'
+  createdAt: Date
+  assignedTo?: string
+}
+
+export interface SupportOfflineMessage {
+  _id?: string
+  userId: string
+  userName: string
+  userEmail: string
+  projectId?: string
+  subject: string
+  message: string
+  status: 'new' | 'read' | 'replied'
+  createdAt: Date
+}
+
+export interface SupportStatus {
+  _id: 'status'
+  available: boolean
+}
+
+export interface BugReport {
+  _id?: string
+  userId: string
+  userName: string
+  userEmail: string
+  projectId?: string
+  bugType: 'ui' | 'functionality' | 'performance' | 'crash' | 'templates' | 'other'
+  title: string
+  description: string
+  stepsToReproduce?: string
+  status: 'new' | 'investigating' | 'in-progress' | 'resolved' | 'wont-fix'
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface ElectronAPI {
   send: (channel: string, data: any) => void
   receive: (channel: string, func: (...args: any[]) => void) => void
@@ -328,6 +396,79 @@ export interface ElectronAPI {
     onExited: (callback: (projectId: string, exitCode: number) => void) => () => void
     onContextUpdated: (callback: (projectId: string, context: ClaudeContext) => void) => () => void
     onModelChanged: (callback: (projectId: string, model: string) => void) => () => void
+  }
+
+  support: {
+    // Check if human support is available
+    checkAvailability: () => Promise<{
+      success: boolean
+      available?: boolean
+      error?: string
+    }>
+
+    // Save message to session (real-time chat)
+    saveMessage: (message: {
+      userId: string
+      userName: string
+      userEmail: string
+      projectId?: string
+      type: 'user' | 'support'
+      content: string
+    }) => Promise<{
+      success: boolean
+      message?: SupportMessage
+      error?: string
+    }>
+
+    // Get user's active session
+    getSession: (userId: string) => Promise<{
+      success: boolean
+      session?: SupportSession
+      error?: string
+    }>
+
+    // Add to human support queue (when available)
+    addToQueue: (data: {
+      userId: string
+      userName: string
+      userEmail: string
+      projectId?: string
+      lastMessage: string
+    }) => Promise<{
+      success: boolean
+      queueEntry?: SupportQueueEntry
+      error?: string
+    }>
+
+    // Send offline message (when unavailable)
+    sendOfflineMessage: (data: {
+      userId: string
+      userName: string
+      userEmail: string
+      projectId?: string
+      subject: string
+      message: string
+    }) => Promise<{
+      success: boolean
+      offlineMessage?: SupportOfflineMessage
+      error?: string
+    }>
+
+    // Submit bug report
+    submitBugReport: (report: {
+      userId: string
+      userName: string
+      userEmail: string
+      projectId?: string
+      bugType: 'ui' | 'functionality' | 'performance' | 'crash' | 'templates' | 'other'
+      title: string
+      description: string
+      stepsToReproduce?: string
+    }) => Promise<{
+      success: boolean
+      bugReport?: BugReport
+      error?: string
+    }>
   }
 }
 

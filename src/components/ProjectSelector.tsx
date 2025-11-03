@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import TechIcon from './TechIcon'
 import { Project, Template } from '../types/electron'
+import bgImage from '../assets/images/bg.jpg'
 
 interface ProjectSelectorProps {
   isOpen: boolean
@@ -210,9 +211,19 @@ function ProjectSelector({
       />
 
       {/* Modal */}
-      <div className="relative w-[520px] max-h-[70vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-visible">
+      <div className="relative w-[520px] max-h-[70vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden">
+        {/* Background Image */}
+        <div
+          className="absolute inset-0 rounded-xl opacity-10 pointer-events-none"
+          style={{
+            backgroundImage: `url(${bgImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border/50">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border/50 relative z-10">
           <div>
             <h2 className="text-sm font-semibold text-white">Projects</h2>
             <p className="text-[11px] text-gray-500 mt-0.5">
@@ -228,7 +239,7 @@ function ProjectSelector({
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(70vh-140px)] overflow-x-visible">
+        <div className="overflow-y-auto max-h-[calc(70vh-140px)] overflow-x-visible relative z-10">
           {/* Loading State */}
           {loading && (
             <div className="flex flex-col items-center justify-center py-12">
@@ -332,7 +343,7 @@ function ProjectSelector({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-dark-border/50 bg-dark-bg/20">
+        <div className="px-4 py-3 border-t border-dark-border/50 bg-dark-bg/20 relative z-10">
           <button
             onClick={onCreateProject}
             className="w-full px-3 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition-all"
@@ -525,11 +536,11 @@ function ProjectRow({
                   <TechIcon key={tech} name={tech} />
                 ))
               ) : (
-                <span className="text-[10px] text-gray-600">No tech stack</span>
+                <span className="text-[10px] text-gray-400">No tech stack</span>
               )}
             </div>
-            <span className="text-[11px] text-gray-600">•</span>
-            <span className="text-[11px] text-gray-500 flex-shrink-0">
+            <span className="text-[11px] text-gray-400">•</span>
+            <span className="text-[11px] text-gray-400 flex-shrink-0">
               {formatLastAccessed(project.lastOpenedAt)}
             </span>
           </div>

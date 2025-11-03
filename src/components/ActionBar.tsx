@@ -18,6 +18,7 @@ import { useToast } from '../hooks/useToast'
 import StatusSheet from './StatusSheet'
 import ContextBar from './ContextBar'
 import type { ClaudeStatus, ClaudeContext, ClaudeModel } from '../types/electron'
+import bgImage from '../assets/images/bg.jpg'
 
 interface ActionBarProps {
   projectId?: string
@@ -56,8 +57,13 @@ function ActionBar({
   const [selectedModel, setSelectedModel] = useState('sonnet')
   const [isTextareaFocused, setIsTextareaFocused] = useState(false)
   const [deployProgress, setDeployProgress] = useState(0)
+  const [showModelDropdown, setShowModelDropdown] = useState(false)
+  const [loadingDots, setLoadingDots] = useState('')
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const modelDropdownRef = useRef<HTMLDivElement>(null)
+  const workStartTimeRef = useRef<number | null>(null)
 
   // Check if Claude is working (also block if status is undefined to prevent race condition)
   const isClaudeWorking = claudeStatus === 'starting' || claudeStatus === 'running' || claudeStatus === undefined
@@ -156,7 +162,8 @@ function ActionBar({
       unsubContextUpdated()
       unsubModelChanged()
     }
-  }, [projectId, toast])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
 
   // Auto-resize textarea
   useEffect(() => {
@@ -167,6 +174,23 @@ function ActionBar({
       textareaRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`
     }
   }, [message])
+
+  // Close model dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
+        setShowModelDropdown(false)
+      }
+    }
+
+    if (showModelDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showModelDropdown])
 
   const startHideTimer = () => {
     if (!isLocked) {
@@ -218,6 +242,41 @@ function ActionBar({
       clearHideTimer()
     }
   }, [])
+
+  // Animate loading dots and track elapsed time when Claude is working
+  useEffect(() => {
+    if (isClaudeWorking) {
+      // Start timer
+      workStartTimeRef.current = Date.now()
+      setElapsedSeconds(0)
+
+      // Animate dots: '' -> '.' -> '..' -> '...'
+      const dotsInterval = setInterval(() => {
+        setLoadingDots(prev => {
+          if (prev === '...') return ''
+          return prev + '.'
+        })
+      }, 400)
+
+      // Update elapsed time every second
+      const timeInterval = setInterval(() => {
+        if (workStartTimeRef.current) {
+          const elapsed = Math.floor((Date.now() - workStartTimeRef.current) / 1000)
+          setElapsedSeconds(elapsed)
+        }
+      }, 1000)
+
+      return () => {
+        clearInterval(dotsInterval)
+        clearInterval(timeInterval)
+      }
+    } else {
+      // Reset when not working
+      setLoadingDots('')
+      setElapsedSeconds(0)
+      workStartTimeRef.current = null
+    }
+  }, [isClaudeWorking])
 
   const handleSend = async () => {
     if (message.trim() && !isInputBlocked && projectId) {
@@ -396,7 +455,7 @@ function ActionBar({
                   isDeploying
                     ? "Deploying your app..."
                     : isClaudeWorking
-                    ? "Claude is working..."
+                    ? `Claude is working${loadingDots}${elapsedSeconds > 0 ? ` ${elapsedSeconds}s` : ''}`
                     : "Tell Claude what to build..."
                 }
                 disabled={isInputBlocked}
@@ -429,49 +488,82 @@ function ActionBar({
           {/* Bottom Row - Model Dropdown + Icons */}
           <div className="flex items-center gap-1.5 px-3 pb-2.5">
             {/* Model Dropdown */}
-            <div className="relative">
-              <select
-                value={selectedModel}
-                onChange={async (e) => {
-                  const newModel = e.target.value
-                  setSelectedModel(newModel)
-
-                  if (!projectId) return
-
-                  // Only call changeModel if there's an active session
-                  if (claudeStatus !== 'idle') {
-                    try {
-                      const result = await window.electronAPI?.claude.changeModel(projectId, newModel)
-                      if (!result?.success) {
-                        toast.error('Failed to change model', result?.error || 'Unknown error')
-                        // Revert selection on error
-                        setSelectedModel(selectedModel)
-                      }
-                    } catch (error) {
-                      console.error('Error changing model:', error)
-                      toast.error('Failed to change model', error instanceof Error ? error.message : 'Unknown error')
-                      // Revert selection on error
-                      setSelectedModel(selectedModel)
-                    }
-                  }
-                }}
-                className="bg-dark-bg/30 border border-dark-border/30 rounded-lg pl-2.5 pr-7 py-1.5 text-[11px] text-gray-300 outline-none hover:border-primary/30 transition-all cursor-pointer appearance-none"
+            <div className="relative" ref={modelDropdownRef}>
+              <button
+                onClick={() => setShowModelDropdown(!showModelDropdown)}
+                className="bg-dark-bg/30 border border-dark-border/30 rounded-lg pl-2.5 pr-7 py-1.5 text-[11px] text-gray-300 outline-none hover:border-primary/30 transition-all cursor-pointer relative flex items-center gap-1.5"
               >
-                {availableModels.length > 0 ? (
-                  availableModels.map((model) => (
-                    <option key={model.value} value={model.value}>
-                      {model.displayName}
-                    </option>
-                  ))
-                ) : (
-                  <>
-                    <option value="sonnet">Sonnet 4.5</option>
-                    <option value="opus">Opus 4.1</option>
-                    <option value="haiku">Haiku 4.5</option>
-                  </>
-                )}
-              </select>
-              <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                <span>
+                  {availableModels.length > 0
+                    ? availableModels.find(m => m.value === selectedModel)?.displayName || selectedModel
+                    : selectedModel === 'sonnet' ? 'Sonnet 4.5' : selectedModel === 'opus' ? 'Opus 4.1' : 'Haiku 4.5'}
+                </span>
+                <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500" />
+              </button>
+
+              {/* Dropdown Menu */}
+              {showModelDropdown && (
+                <>
+                  {/* Backdrop */}
+                  <div className="fixed inset-0 z-[200]" onClick={() => setShowModelDropdown(false)} />
+
+                  {/* Menu */}
+                  <div className="absolute bottom-full left-0 mb-1 w-40 bg-dark-card border border-dark-border rounded-lg shadow-xl z-[201] overflow-hidden">
+                    {/* Background Image */}
+                    <div
+                      className="absolute inset-0 opacity-10 pointer-events-none"
+                      style={{
+                        backgroundImage: `url(${bgImage})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }}
+                    />
+
+                    <div className="p-1 relative z-10">
+                      {(availableModels.length > 0 ? availableModels : [
+                        { value: 'sonnet', displayName: 'Sonnet 4.5' },
+                        { value: 'opus', displayName: 'Opus 4.1' },
+                        { value: 'haiku', displayName: 'Haiku 4.5' }
+                      ]).map((model) => (
+                        <button
+                          key={model.value}
+                          onClick={async () => {
+                            const newModel = model.value
+                            setSelectedModel(newModel)
+                            setShowModelDropdown(false)
+
+                            if (!projectId) return
+
+                            // Only call changeModel if there's an active session
+                            if (claudeStatus !== 'idle') {
+                              try {
+                                const result = await window.electronAPI?.claude.changeModel(projectId, newModel)
+                                if (!result?.success) {
+                                  toast.error('Failed to change model', result?.error || 'Unknown error')
+                                  // Revert selection on error
+                                  setSelectedModel(selectedModel)
+                                }
+                              } catch (error) {
+                                console.error('Error changing model:', error)
+                                toast.error('Failed to change model', error instanceof Error ? error.message : 'Unknown error')
+                                // Revert selection on error
+                                setSelectedModel(selectedModel)
+                              }
+                            }
+                          }}
+                          className={`w-full px-2.5 py-1.5 rounded text-left text-[11px] transition-colors ${
+                            selectedModel === model.value
+                              ? 'bg-primary/20 text-primary'
+                              : 'text-gray-300 hover:bg-dark-bg/50'
+                          }`}
+                        >
+                          {model.displayName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Context Usage Bar */}

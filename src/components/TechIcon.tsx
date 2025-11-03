@@ -37,7 +37,7 @@ function TechIcon({ name, label }: TechIconProps) {
           alt={displayName}
           className="w-4 h-4 transition-all duration-200"
           style={{
-            filter: isHovered ? 'none' : 'grayscale(100%) brightness(0.4) opacity(0.8)',
+            filter: isHovered ? 'none' : 'grayscale(100%) brightness(1.2) opacity(0.9)',
           }}
         />
       </div>

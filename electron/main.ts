@@ -15,6 +15,7 @@ import { registerShellHandlers } from './handlers/shellHandlers.js'
 import { registerTerminalHandlers, setTerminalHandlersWindow } from './handlers/terminalHandlers.js'
 import { registerClaudeHandlers, setClaudeHandlersWindow } from './handlers/claudeHandlers.js'
 import { registerChatHandlers, setChatHandlersWindow } from './handlers/chatHandlers.js'
+import { registerSupportHandlers } from './handlers/supportHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { previewService } from './services/PreviewService.js'
 import { processManager } from './services/ProcessManager.js'
@@ -257,6 +258,7 @@ async function initializeApp() {
     registerTerminalHandlers()
     registerClaudeHandlers()
     registerChatHandlers()
+    registerSupportHandlers()
 
     handlersRegistered = true
   }

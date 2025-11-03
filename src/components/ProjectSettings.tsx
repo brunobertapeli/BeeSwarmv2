@@ -16,6 +16,7 @@ import {
 import type { TechConfig } from './TemplateSelector'
 import { useAppStore } from '../store/appStore'
 import { useToast } from '../hooks/useToast'
+import bgImage from '../assets/images/bg.jpg'
 
 interface ProjectSettingsProps {
   isOpen: boolean
@@ -128,8 +129,18 @@ function ProjectSettings({
 
         {/* Modal */}
         <div className="relative w-[700px] max-h-[80vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden flex flex-col">
+          {/* Background Image */}
+          <div
+            className="absolute inset-0 opacity-10 pointer-events-none"
+            style={{
+              backgroundImage: `url(${bgImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+
           {/* Header */}
-          <div className="border-b border-dark-border/50">
+          <div className="border-b border-dark-border/50 relative z-10">
             <div className="flex items-center justify-between px-5 py-4">
               <div className="flex-1">
                 <h2 className="text-base font-semibold text-white">
@@ -167,7 +178,7 @@ function ProjectSettings({
 
           {/* Tabs - Hidden in setup mode */}
           {!isSetupMode && (
-            <div className="border-b border-dark-border/50 px-5">
+            <div className="border-b border-dark-border/50 px-5 relative z-10">
               <div className="flex gap-1">
                 <button
                   onClick={() => setActiveTab('general')}
@@ -204,7 +215,7 @@ function ProjectSettings({
           )}
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto p-5 space-y-6 scrollbar-thin relative z-10">
             {/* General Tab */}
             {!isSetupMode && activeTab === 'general' && (
               <>
@@ -426,7 +437,7 @@ function ProjectSettings({
           </div>
 
           {/* Footer */}
-          <div className="px-5 py-3 border-t border-dark-border/50 bg-dark-bg/20 flex justify-end gap-2">
+          <div className="px-5 py-3 border-t border-dark-border/50 bg-dark-bg/20 flex justify-end gap-2 relative z-10">
             {!isSetupMode && (
               <button
                 onClick={onClose}
@@ -508,8 +519,18 @@ function ProjectSettings({
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setShowDeleteModal(false)}
           />
-          <div className="relative w-[450px] bg-dark-card border border-red-500/30 rounded-xl shadow-2xl p-5">
-            <div className="flex items-start gap-3 mb-4">
+          <div className="relative w-[450px] bg-dark-card border border-red-500/30 rounded-xl shadow-2xl p-5 overflow-hidden">
+            {/* Background Image */}
+            <div
+              className="absolute inset-0 opacity-10 pointer-events-none"
+              style={{
+                backgroundImage: `url(${bgImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            />
+
+            <div className="flex items-start gap-3 mb-4 relative z-10">
               <div className="p-2 bg-red-500/10 rounded-lg">
                 <AlertTriangle size={20} className="text-red-400" />
               </div>
@@ -521,7 +542,7 @@ function ProjectSettings({
               </div>
             </div>
 
-            <div className="mb-4">
+            <div className="mb-4 relative z-10">
               <label className="block text-xs font-medium text-gray-400 mb-2">
                 Type <span className="font-mono text-white">{projectId}</span> to confirm:
               </label>
@@ -534,7 +555,7 @@ function ProjectSettings({
               />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 relative z-10">
               <button
                 onClick={() => {
                   setShowDeleteModal(false)

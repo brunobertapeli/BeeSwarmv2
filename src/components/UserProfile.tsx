@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 import { LogOut, Settings, CreditCard, User as UserIcon } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
+import bgImage from '../assets/images/bg.jpg'
 
 function UserProfile() {
   const { user, logout } = useAppStore()
@@ -105,8 +106,18 @@ function UserProfile() {
       {/* Dropdown Menu */}
       {isDropdownOpen && (
         <div className="absolute right-0 mt-2 w-64 bg-dark-card border border-dark-border rounded-lg shadow-xl overflow-hidden z-50">
+          {/* Background Image */}
+          <div
+            className="absolute inset-0 opacity-10 pointer-events-none"
+            style={{
+              backgroundImage: `url(${bgImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+
           {/* User Info Header */}
-          <div className="px-4 py-3 border-b border-dark-border bg-dark-bg/50">
+          <div className="px-4 py-3 border-b border-dark-border bg-dark-bg/50 relative z-10">
             <div className="flex items-center gap-3">
               {user.photoUrl ? (
                 <img
@@ -140,7 +151,7 @@ function UserProfile() {
           </div>
 
           {/* Menu Items */}
-          <div className="py-1">
+          <div className="py-1 relative z-10">
             <button
               onClick={handleManageSubscription}
               className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-dark-bg transition-colors text-sm text-gray-300 hover:text-white"

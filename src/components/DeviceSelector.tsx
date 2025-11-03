@@ -48,7 +48,7 @@ function DeviceSelector({
   const displayHeight = orientation === 'landscape' ? selectedDevice.width : selectedDevice.height
 
   return (
-    <div ref={dropdownRef} className="fixed z-[60] top-20 left-1/2 -translate-x-1/2 transition-all duration-300 animate-fadeIn">
+    <div ref={dropdownRef} className="fixed z-[60] top-16 left-1/2 -translate-x-1/2 transition-all duration-300 animate-fadeIn">
       {/* Compact Bar */}
       <div className="bg-dark-card/95 backdrop-blur-xl border border-dark-border rounded-full shadow-xl px-3 py-2 flex items-center gap-2">
         {/* Device Icon */}

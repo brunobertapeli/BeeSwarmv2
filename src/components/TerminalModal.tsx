@@ -3,6 +3,7 @@ import { X, Square, Trash2, Minimize2, Maximize2, Terminal as TerminalIcon, Copy
 import { Terminal } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import 'xterm/css/xterm.css'
+import bgImage from '../assets/images/bg.jpg'
 
 interface TerminalLine {
   timestamp: Date
@@ -369,8 +370,18 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
             : 'w-[900px] h-[600px]'
         }`}
       >
+        {/* Background Image */}
+        <div
+          className="absolute inset-0 opacity-10 pointer-events-none"
+          style={{
+            backgroundImage: `url(${bgImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+
         {/* Terminal Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border bg-dark-bg/50">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border bg-dark-bg/50 relative z-10">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
               <TerminalIcon size={16} className="text-primary" />
@@ -443,12 +454,12 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
         </div>
 
         {/* Terminal Content (xterm.js) */}
-        <div className="flex-1 overflow-hidden bg-[#0a0e14]">
+        <div className="flex-1 overflow-hidden bg-[#0a0e14] relative z-10">
           <div ref={terminalRef} className="h-full w-full p-2" />
         </div>
 
         {/* Command Input */}
-        <form onSubmit={handleCommandSubmit} className="border-t border-dark-border bg-dark-bg/30">
+        <form onSubmit={handleCommandSubmit} className="border-t border-dark-border bg-dark-bg/30 relative z-10">
           <div className="flex items-center gap-2 px-4 py-2">
             <span className="text-green-400 text-sm font-mono">$</span>
             <input
@@ -472,7 +483,7 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
         </form>
 
         {/* Terminal Footer - Info Bar */}
-        <div className="flex items-center justify-between px-4 py-2 border-t border-dark-border bg-dark-bg/30">
+        <div className="flex items-center justify-between px-4 py-2 border-t border-dark-border bg-dark-bg/30 relative z-10">
           <div className="flex items-center gap-4 text-[10px]">
             <span className="text-gray-500">Lines: <span className="text-white">{lineCount}</span></span>
             <span className="text-gray-500">•</span>

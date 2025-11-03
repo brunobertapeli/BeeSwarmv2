@@ -7,6 +7,7 @@ import UserIcon from '../assets/images/user.svg'
 import AnthropicIcon from '../assets/images/anthropic.svg'
 import GitIcon from '../assets/images/git.svg'
 import DeployIcon from '../assets/images/deploy.svg'
+import bgImage from '../assets/images/bg.jpg'
 
 interface ConversationMessage {
   type: 'user' | 'assistant' | 'tool'
@@ -519,21 +520,31 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
 
   return (
     <div
-      className={`fixed left-1/2 transform -translate-x-1/2 z-45 transition-all duration-500 ease-out ${
+      className={`fixed left-1/2 transform -translate-x-1/2 z-[99] transition-all duration-500 ease-out pointer-events-none ${
         isVisible ? 'bottom-[110px] opacity-100' : 'bottom-[90px] opacity-0'
       }`}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
     >
-      <div className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[680px] overflow-hidden transition-all duration-300 pb-4"
+      <div className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[680px] overflow-hidden transition-all duration-300 pb-4 relative pointer-events-auto"
         style={{
           boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
         }}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
       >
+        {/* Background Image */}
+        <div
+          className="absolute inset-0 opacity-10 pointer-events-none"
+          style={{
+            backgroundImage: `url(${bgImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+
         {/* Collapsed State - Single Clickable Row */}
         {!isExpanded && (
           <div
-            className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors"
+            className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10"
             onClick={() => setIsExpanded(true)}
           >
             {currentBlock.type === 'deployment' ? (
@@ -570,7 +581,7 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
 
         {/* Expanded State - Conversation Blocks */}
         {isExpanded && (
-          <div className="px-4 pb-3">
+          <div className="px-4 pb-3 relative z-10">
             {/* Collapsible header */}
             <div
               className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 -mx-4 px-4 transition-colors"
@@ -583,7 +594,7 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
             </div>
 
             {/* Workflow Timeline */}
-            <div ref={scrollContainerRef} className="max-h-[500px] overflow-y-scroll pr-2 custom-scrollbar">
+            <div ref={scrollContainerRef} className="max-h-[500px] overflow-y-scroll pr-4 custom-scrollbar">
               {/* Loading spinner at top for infinite scroll */}
               {isLoadingMore && (
                 <div className="flex items-center justify-center py-4">

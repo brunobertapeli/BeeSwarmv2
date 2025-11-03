@@ -11,6 +11,7 @@ import TerminalModal from './TerminalModal'
 import DeviceFrame from './DeviceFrame'
 import DesktopPreviewFrame from './DesktopPreviewFrame'
 import DeviceSelector from './DeviceSelector'
+import HelpChat from './HelpChat'
 import { Project, ProcessState, ProcessOutput, Template } from '../types/electron'
 
 function ProjectView() {
@@ -287,7 +288,7 @@ function ProjectView() {
   }
 
   return (
-    <div className="w-full h-screen relative flex flex-col pt-12">
+    <div className="w-full h-screen relative flex flex-col pt-12 bg-gradient-to-br from-purple-950 via-blue-950 to-black">
       {/* Project Header - Fixed */}
       <ProjectHeader
         projectName={getProjectName()}
@@ -326,8 +327,21 @@ function ProjectView() {
       <div className="w-full flex-1 relative overflow-hidden">
         {projects.length === 0 && !loading ? (
           // No Projects State
-          <div className="w-full h-full bg-gradient-to-br from-gray-900 via-dark-bg to-gray-900 flex items-center justify-center">
-            <div className="text-center">
+          <div className="w-full h-full flex items-center justify-center relative">
+            {/* Background Gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-950 via-blue-950 to-black" />
+            <div className="absolute inset-0 bg-black/40" />
+
+            {/* Dot Pattern Overlay */}
+            <div
+              className="absolute inset-0 opacity-30 pointer-events-none"
+              style={{
+                backgroundImage: `radial-gradient(circle, rgba(139, 92, 246, 0.5) 1px, transparent 1px)`,
+                backgroundSize: "24px 24px",
+              }}
+            />
+
+            <div className="text-center relative z-10">
               <div className="w-32 h-32 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"/>
@@ -348,8 +362,7 @@ function ProjectView() {
           </div>
         ) : viewMode === 'desktop' ? (
           // Desktop Mode: Browser frame with scaled preview
-          <div ref={previewContainerRef} className="w-full h-full animate-fadeIn">
-            <DesktopPreviewFrame port={serverPort || undefined}>
+          <DesktopPreviewFrame port={serverPort || undefined}>
               {serverPort && serverStatus === 'running' ? (
                 <iframe
                   key={`${currentProject?.id}-${serverPort}`}
@@ -396,7 +409,6 @@ function ProjectView() {
                 </div>
               )}
             </DesktopPreviewFrame>
-          </div>
         ) : (
           // Mobile Mode: Device frame with phone silhouette
           <div className="w-full h-full animate-fadeIn">
@@ -468,6 +480,9 @@ function ProjectView() {
         onSettingsClick={handleSettingsClick}
         onConsoleClick={handleConsoleClick}
       />
+
+      {/* Help Chat */}
+      <HelpChat projectId={currentProjectId || undefined} />
 
       {/* Project Settings Modal */}
       <ProjectSettings

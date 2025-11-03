@@ -74,9 +74,9 @@ function Toast({ toast, onClose }: ToastProps) {
 
   return (
     <div
-      className={`relative w-[380px] ${config.bgClass} backdrop-blur-xl border ${config.borderClass} rounded-xl shadow-2xl overflow-hidden transition-all duration-300 ${
+      className={`relative w-[304px] ${config.bgClass} backdrop-blur-xl border ${config.borderClass} rounded-xl shadow-2xl overflow-hidden transition-all duration-300 ${
         isExiting
-          ? 'translate-x-[400px] opacity-0'
+          ? 'translate-x-[320px] opacity-0'
           : 'translate-x-0 opacity-100 animate-slideIn'
       }`}
     >
@@ -91,17 +91,17 @@ function Toast({ toast, onClose }: ToastProps) {
       )}
 
       {/* Content */}
-      <div className="flex items-start gap-3 px-4 py-3.5 pt-4">
+      <div className="flex items-start gap-2.5 px-3 py-3 pt-3.5">
         {/* Icon */}
         <div className="flex-shrink-0 mt-0.5">
-          <Icon size={20} className={config.iconClass} />
+          <Icon size={16} className={config.iconClass} />
         </div>
 
         {/* Text */}
         <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-semibold text-white mb-0.5">{toast.title}</h4>
+          <h4 className="text-xs font-semibold text-white mb-0.5">{toast.title}</h4>
           {toast.message && (
-            <p className="text-xs text-gray-400 leading-relaxed">{toast.message}</p>
+            <p className="text-[11px] text-gray-400 leading-relaxed">{toast.message}</p>
           )}
         </div>
 
@@ -110,7 +110,7 @@ function Toast({ toast, onClose }: ToastProps) {
           onClick={handleClose}
           className="flex-shrink-0 p-1 hover:bg-white/10 rounded transition-colors"
         >
-          <X size={14} className="text-gray-400 hover:text-white transition-colors" />
+          <X size={11} className="text-gray-400 hover:text-white transition-colors" />
         </button>
       </div>
     </div>

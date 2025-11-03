@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Trash2, Database, Info, X, AlertTriangle } from 'lucide-react'
 import type { ClaudeContext } from '../types/electron'
+import bgImage from '../assets/images/bg.jpg'
 
 interface ContextBarProps {
   context?: ClaudeContext | null
@@ -119,25 +120,36 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
       {/* Hover Tooltip */}
       {showTooltip && (
         <div
-          className="absolute bottom-full right-0 mb-2 bg-dark-card border border-dark-border rounded-lg shadow-2xl p-3 min-w-[260px] z-[70] animate-fadeIn"
+          className="absolute bottom-full right-0 mb-2 bg-dark-card border border-dark-border rounded-lg shadow-2xl p-3 min-w-[260px] z-[70] animate-fadeIn overflow-hidden"
           onMouseEnter={handleShowTooltip}
           onMouseLeave={handleHideTooltip}
         >
+            {/* Background Image */}
+            <div
+              className="absolute inset-0 opacity-10 pointer-events-none"
+              style={{
+                backgroundImage: `url(${bgImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            />
+
             {/* Header with Clear Button */}
-            <div className="mb-2 pb-2 border-b border-dark-border flex items-center justify-between gap-3">
+            <div className="mb-2 pb-2 border-b border-dark-border flex items-center justify-between gap-3 relative z-10">
               <p className="text-[11px] font-semibold text-gray-300">
                 {formatTokens(totalTokens)}/{formatTokens(contextWindow)} ({percentage}%)
               </p>
               <button
                 onClick={handleClearContext}
-                className="px-2 py-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded text-[10px] font-medium text-red-400 transition-colors whitespace-nowrap"
+                className="p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group"
+                title="Clear context"
               >
-                Clear Context
+                <Trash2 size={13} className="text-gray-400 group-hover:text-red-400 transition-colors" />
               </button>
             </div>
 
             {/* Baseline System Usage */}
-            <div className="space-y-1.5 mb-2 pb-2 border-b border-dark-border/50">
+            <div className="space-y-1.5 mb-2 pb-2 border-b border-dark-border/50 relative z-10">
               <div className="text-[9px] text-gray-500 font-semibold uppercase tracking-wide mb-1">
                 System Baseline
               </div>
@@ -175,7 +187,7 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
             </div>
 
             {/* Conversation Stats */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 relative z-10">
               <div className="text-[9px] text-gray-500 font-semibold uppercase tracking-wide mb-1">
                 Conversation
               </div>
@@ -249,9 +261,19 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
 
           {/* Dialog */}
           <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-            <div className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[420px]">
+            <div className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[420px] overflow-hidden relative">
+              {/* Background Image */}
+              <div
+                className="absolute inset-0 opacity-10 pointer-events-none"
+                style={{
+                  backgroundImage: `url(${bgImage})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              />
+
               {/* Header */}
-              <div className="flex items-start gap-3 mb-4">
+              <div className="flex items-start gap-3 mb-4 relative z-10">
                 <div className="p-2 bg-red-500/10 rounded-lg">
                   <AlertTriangle size={20} className="text-red-400" />
                 </div>
@@ -272,7 +294,7 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
               </div>
 
               {/* Info Box */}
-              <div className="bg-dark-bg/50 border border-dark-border/50 rounded-lg p-3 mb-4">
+              <div className="bg-dark-bg/50 border border-dark-border/50 rounded-lg p-3 mb-4 relative z-10">
                 <div className="flex items-start gap-2">
                   <Info size={14} className="text-primary mt-0.5 flex-shrink-0" />
                   <p className="text-[11px] text-gray-400 leading-relaxed">
@@ -282,7 +304,7 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 relative z-10">
                 <button
                   onClick={cancelClearContext}
                   className="flex-1 px-4 py-2 bg-dark-bg hover:bg-dark-bg/80 border border-dark-border rounded-lg text-[12px] font-medium text-gray-300 transition-colors"

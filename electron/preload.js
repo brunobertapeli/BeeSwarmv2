@@ -249,5 +249,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('chat:history-deleted', listener)
       return () => ipcRenderer.removeListener('chat:history-deleted', listener)
     }
+  },
+
+  // Support methods
+  support: {
+    checkAvailability: () => ipcRenderer.invoke('support:checkAvailability'),
+    saveMessage: (message) => ipcRenderer.invoke('support:saveMessage', message),
+    getSession: (userId) => ipcRenderer.invoke('support:getSession', userId),
+    addToQueue: (data) => ipcRenderer.invoke('support:addToQueue', data),
+    sendOfflineMessage: (data) => ipcRenderer.invoke('support:sendOfflineMessage', data),
+    submitBugReport: (report) => ipcRenderer.invoke('support:submitBugReport', report)
   }
 })
