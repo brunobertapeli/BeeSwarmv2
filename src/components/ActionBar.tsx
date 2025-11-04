@@ -30,6 +30,15 @@ interface ActionBarProps {
 
 type ViewMode = 'desktop' | 'mobile'
 
+// Helper to get display name from model ID
+const getModelDisplayName = (modelId: string): string => {
+  // Map full model IDs to display names (including correct snapshot dates)
+  if (modelId.includes('sonnet')) return 'Sonnet 4.5'
+  if (modelId.includes('opus')) return 'Opus 4.1'
+  if (modelId.includes('haiku')) return 'Haiku 4.5'
+  return modelId
+}
+
 // Deployment stages with user-friendly labels
 const DEPLOYMENT_STAGES = [
   { status: 'creating' as DeploymentStatus, label: 'Creating instance', icon: Rocket },
@@ -54,16 +63,14 @@ function ActionBar({
   const [claudeContext, setClaudeContext] = useState<ClaudeContext | null>(null)
   const [availableModels, setAvailableModels] = useState<ClaudeModel[]>([])
   const [message, setMessage] = useState('')
-  const [selectedModel, setSelectedModel] = useState('sonnet')
+  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-5-20250929')
   const [isTextareaFocused, setIsTextareaFocused] = useState(false)
   const [deployProgress, setDeployProgress] = useState(0)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const [loadingDots, setLoadingDots] = useState('')
-  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
-  const workStartTimeRef = useRef<number | null>(null)
 
   // Check if Claude is working (also block if status is undefined to prevent race condition)
   const isClaudeWorking = claudeStatus === 'starting' || claudeStatus === 'running' || claudeStatus === undefined
@@ -96,7 +103,7 @@ function ActionBar({
 
     // Reset status only - don't clear context yet (will be fetched below)
     setClaudeStatus('idle')
-    setSelectedModel('sonnet') // Default, will be overridden by context if available
+    setSelectedModel('claude-sonnet-4-5-20250929') // Default, will be overridden by context if available
 
     const unsubStatus = window.electronAPI.claude.onStatusChanged((id, status) => {
       if (id === projectId) {
@@ -149,10 +156,10 @@ function ActionBar({
         if (contextResult.context.model) {
           setSelectedModel(contextResult.context.model)
         }
-      } else {
-        // Only set to null if no context exists
-        setClaudeContext(null)
       }
+      // NOTE: If no context exists, keep current state (don't reset to null unnecessarily)
+      // This prevents resetting the display when switching between projects
+      // Context will be set when Claude actually starts working
     })
 
     return () => {
@@ -243,13 +250,9 @@ function ActionBar({
     }
   }, [])
 
-  // Animate loading dots and track elapsed time when Claude is working
+  // Animate loading dots when Claude is working
   useEffect(() => {
     if (isClaudeWorking) {
-      // Start timer
-      workStartTimeRef.current = Date.now()
-      setElapsedSeconds(0)
-
       // Animate dots: '' -> '.' -> '..' -> '...'
       const dotsInterval = setInterval(() => {
         setLoadingDots(prev => {
@@ -258,23 +261,12 @@ function ActionBar({
         })
       }, 400)
 
-      // Update elapsed time every second
-      const timeInterval = setInterval(() => {
-        if (workStartTimeRef.current) {
-          const elapsed = Math.floor((Date.now() - workStartTimeRef.current) / 1000)
-          setElapsedSeconds(elapsed)
-        }
-      }, 1000)
-
       return () => {
         clearInterval(dotsInterval)
-        clearInterval(timeInterval)
       }
     } else {
       // Reset when not working
       setLoadingDots('')
-      setElapsedSeconds(0)
-      workStartTimeRef.current = null
     }
   }, [isClaudeWorking])
 
@@ -300,6 +292,7 @@ function ActionBar({
 
         if (statusResult?.status === 'idle') {
           // Start session with the prompt and selected model (lazy initialization)
+          console.log('🔍 Starting new session with model:', selectedModel)
           const result = await window.electronAPI?.claude.startSession(projectId, prompt, selectedModel)
 
           if (!result?.success) {
@@ -307,8 +300,9 @@ function ActionBar({
             console.error('Failed to start Claude:', result?.error)
           }
         } else {
-          // Send prompt to existing session (model is already set)
-          const result = await window.electronAPI?.claude.sendPrompt(projectId, prompt)
+          // Send prompt to existing session with current selected model
+          console.log('🔍 Sending to existing session with model:', selectedModel)
+          const result = await window.electronAPI?.claude.sendPrompt(projectId, prompt, selectedModel)
 
           if (!result?.success) {
             toast.error('Failed to send message', result?.error || 'Unknown error')
@@ -455,7 +449,7 @@ function ActionBar({
                   isDeploying
                     ? "Deploying your app..."
                     : isClaudeWorking
-                    ? `Claude is working${loadingDots}${elapsedSeconds > 0 ? ` ${elapsedSeconds}s` : ''}`
+                    ? `Claude is working${loadingDots}`
                     : "Tell Claude what to build..."
                 }
                 disabled={isInputBlocked}
@@ -467,21 +461,38 @@ function ActionBar({
                 rows={1}
                 style={{ lineHeight: '24px', minHeight: '42px', maxHeight: '192px' }}
               />
-              <button
-                onClick={handleSend}
-                disabled={!message.trim() || isInputBlocked}
-                className={`absolute right-3 transition-all ${
-                  (textareaRef.current?.scrollHeight || 0) > 42
-                    ? 'bottom-2.5'
-                    : 'top-[12px]'
-                } ${
-                  message.trim() && !isInputBlocked
-                    ? 'text-primary hover:text-primary-dark cursor-pointer'
-                    : 'text-gray-600 cursor-not-allowed'
-                }`}
-              >
-                <Send size={18} />
-              </button>
+              {isClaudeWorking ? (
+                <div
+                  className={`absolute right-3 transition-all ${
+                    (textareaRef.current?.scrollHeight || 0) > 42
+                      ? 'bottom-2.5'
+                      : 'top-[12px]'
+                  }`}
+                >
+                  <div className="relative w-[18px] h-[18px]">
+                    {/* Pulsing outer ring */}
+                    <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+                    {/* Spinning loader */}
+                    <Loader2 size={18} className="text-primary animate-spin relative z-10" />
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={handleSend}
+                  disabled={!message.trim() || isInputBlocked}
+                  className={`absolute right-3 transition-all ${
+                    (textareaRef.current?.scrollHeight || 0) > 42
+                      ? 'bottom-2.5'
+                      : 'top-[12px]'
+                  } ${
+                    message.trim() && !isInputBlocked
+                      ? 'text-primary hover:text-primary-dark cursor-pointer'
+                      : 'text-gray-600 cursor-not-allowed'
+                  }`}
+                >
+                  <Send size={18} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -495,8 +506,8 @@ function ActionBar({
               >
                 <span>
                   {availableModels.length > 0
-                    ? availableModels.find(m => m.value === selectedModel)?.displayName || selectedModel
-                    : selectedModel === 'sonnet' ? 'Sonnet 4.5' : selectedModel === 'opus' ? 'Opus 4.1' : 'Haiku 4.5'}
+                    ? availableModels.find(m => m.value === selectedModel)?.displayName || getModelDisplayName(selectedModel)
+                    : getModelDisplayName(selectedModel)}
                 </span>
                 <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500" />
               </button>
@@ -521,9 +532,9 @@ function ActionBar({
 
                     <div className="p-1 relative z-10">
                       {(availableModels.length > 0 ? availableModels : [
-                        { value: 'sonnet', displayName: 'Sonnet 4.5' },
-                        { value: 'opus', displayName: 'Opus 4.1' },
-                        { value: 'haiku', displayName: 'Haiku 4.5' }
+                        { value: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5' },
+                        { value: 'claude-opus-4-1-20250805', displayName: 'Opus 4.1' },
+                        { value: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5' }
                       ]).map((model) => (
                         <button
                           key={model.value}

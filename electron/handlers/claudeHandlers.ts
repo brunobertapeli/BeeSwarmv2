@@ -4,6 +4,7 @@ import { terminalAggregator } from '../services/TerminalAggregator';
 import { databaseService } from '../services/DatabaseService';
 import { processManager } from '../services/ProcessManager';
 import { chatHistoryManager } from '../services/ChatHistoryManager';
+import { projectLockService } from '../services/ProjectLockService';
 import { spawn } from 'child_process';
 import * as path from 'path';
 
@@ -68,39 +69,59 @@ export function registerClaudeHandlers(): void {
 
   // Send prompt to Claude
   ipcMain.handle('claude:send-prompt', async (_event, projectId: string, prompt: string, model?: string) => {
-    try {
-      console.log(`📤 Sending prompt to Claude for project: ${projectId}`);
+    // CRITICAL FIX: Use project lock to prevent race conditions
+    // Prevents multiple Claude operations from running concurrently on same project
+    return await projectLockService.withLock(projectId, async () => {
+      try {
+        console.log(`📤 Sending prompt to Claude for project: ${projectId}`);
 
-      // Get project details
-      const project = databaseService.getProjectById(projectId);
-      if (!project) {
+        // Get project details
+        const project = databaseService.getProjectById(projectId);
+        if (!project) {
+          return {
+            success: false,
+            error: 'Project not found',
+          };
+        }
+
+        // CRITICAL FIX: Validate that any existing session's path matches current project
+        // This prevents Claude from editing files in the wrong directory
+        const existingSession = claudeService.getSession(projectId);
+        if (existingSession && existingSession.projectPath && existingSession.projectPath !== project.path) {
+          console.warn(`⚠️ Session path mismatch detected, destroying stale session`);
+          console.warn(`   Session path: ${existingSession.projectPath}`);
+          console.warn(`   Current path: ${project.path}`);
+          claudeService.destroySession(projectId);
+
+          // Add warning to terminal
+          terminalAggregator.addSystemLine(
+            projectId,
+            '⚠️ Project path changed - starting fresh Claude session\n'
+          );
+        }
+
+        // Add user message block to terminal
+        terminalAggregator.addUserLine(projectId, '\n\n');
+        terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        terminalAggregator.addUserLine(projectId, '👤 USER REQUEST\n');
+        terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+        terminalAggregator.addUserLine(projectId, prompt + '\n');
+        terminalAggregator.addUserLine(projectId, '\n');
+
+        // Send prompt using session resume pattern with optional model
+        await claudeService.sendPrompt(projectId, project.path, prompt, model);
+
+        return {
+          success: true,
+        };
+      } catch (error) {
+        console.error('❌ Error sending prompt to Claude:', error);
         return {
           success: false,
-          error: 'Project not found',
+          error: error instanceof Error ? error.message : 'Failed to send prompt',
         };
       }
-
-      // Add user message block to terminal
-      terminalAggregator.addUserLine(projectId, '\n\n');
-      terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-      terminalAggregator.addUserLine(projectId, '👤 USER REQUEST\n');
-      terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-      terminalAggregator.addUserLine(projectId, prompt + '\n');
-      terminalAggregator.addUserLine(projectId, '\n');
-
-      // Send prompt using session resume pattern with optional model
-      await claudeService.sendPrompt(projectId, project.path, prompt, model);
-
-      return {
-        success: true,
-      };
-    } catch (error) {
-      console.error('❌ Error sending prompt to Claude:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to send prompt',
-      };
-    }
+    }, 'claude:send-prompt');
   });
 
   // Get Claude session status

@@ -78,9 +78,11 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
   // Use context baseline if available, otherwise use defaults
   const baseline = context?.baseline || defaultBaseline
 
-  // Calculate usage from context (including baseline system overhead)
+  // Calculate context window usage (baseline + ALL conversation tokens)
+  // Formula: baseline + sum(all input tokens) + sum(all output tokens)
+  // Note: Cache tokens (read/creation) do NOT count toward 200k limit
   const baselineTokens = baseline.systemPrompt + baseline.systemTools + baseline.memoryFiles + baseline.messages
-  const conversationTokens = context ? context.tokens.input + context.tokens.output : 0
+  const conversationTokens = (context?.tokens.input || 0) + (context?.tokens.output || 0)
   const totalTokens = baselineTokens + conversationTokens
   const contextWindow = context?.contextWindow || 200000
   const percentage = Math.round((totalTokens / contextWindow) * 100)
@@ -240,8 +242,9 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
                   </span>
                   <div className="group/info relative">
                     <Info size={10} className="text-gray-500 cursor-help" />
-                    <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 bg-dark-bg border border-dark-border rounded px-2 py-1 text-[9px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/info:opacity-100 transition-opacity z-[80] shadow-lg">
-                      API usage only. Included with Claude Pro/Team plans
+                    <div className="absolute right-0 bottom-full mb-2 bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[9px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/info:opacity-100 transition-opacity z-[150] shadow-xl">
+                    Billed to API users only.<br />
+                    Included in Max plans.
                     </div>
                   </div>
                 </div>

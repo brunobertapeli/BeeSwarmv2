@@ -287,6 +287,14 @@ function ProjectView() {
     setWizardTemplate(null)
   }
 
+  const handleRefresh = () => {
+    // Trigger iframe reload by updating its src
+    const iframe = document.querySelector('iframe[title="Mobile Preview"]') as HTMLIFrameElement
+    if (iframe && iframe.src) {
+      iframe.src = iframe.src
+    }
+  }
+
   return (
     <div className="w-full h-screen relative flex flex-col pt-12 bg-gradient-to-br from-purple-950 via-blue-950 to-black">
       {/* Project Header - Fixed */}
@@ -468,6 +476,7 @@ function ProjectView() {
             orientation={orientation}
             onSelectDevice={setSelectedDevice}
             onToggleOrientation={toggleOrientation}
+            onRefresh={handleRefresh}
           />
         )}
       </div>

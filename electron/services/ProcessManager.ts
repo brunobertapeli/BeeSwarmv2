@@ -59,14 +59,17 @@ class ProcessManager extends EventEmitter {
    * @returns Port number where server is running
    */
   async startDevServer(projectId: string, projectPath: string): Promise<number> {
-    // Check if already running
+    // CRITICAL FIX: Check if already running OR starting
+    // Prevents race condition where rapid clicks trigger multiple starts
     const existing = this.processes.get(projectId);
-    if (existing && existing.state === ProcessState.RUNNING) {
+    if (existing && (existing.state === ProcessState.RUNNING || existing.state === ProcessState.STARTING)) {
+      console.log(`⚠️ Dev server for ${projectId} is already ${existing.state}, returning existing port`);
       return existing.port;
     }
 
-    // Stop existing process if any
+    // Stop existing process if any (crashed or error state)
     if (existing) {
+      console.log(`🔄 Cleaning up previous dev server (state: ${existing.state})`);
       await this.stopDevServer(projectId);
     }
 

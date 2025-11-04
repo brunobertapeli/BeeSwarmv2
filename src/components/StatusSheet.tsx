@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 
 // Import workflow icons
@@ -157,19 +157,25 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
             const toolMessages = Object.entries(grouped).map(([toolName, count]) =>
               `${count}x ${toolName}`
             ).join(', ')
-            messages.push({
-              type: 'tool',
-              content: toolMessages,
-            })
+            // Only add tool message if there's actual content
+            if (toolMessages) {
+              messages.push({
+                type: 'tool',
+                content: toolMessages,
+              })
+            }
           } else {
             // Already grouped
             const toolMessages = Object.entries(toolData).map(([toolName, count]) =>
               `${count}x ${toolName}`
             ).join(', ')
-            messages.push({
-              type: 'tool',
-              content: toolMessages,
-            })
+            // Only add tool message if there's actual content
+            if (toolMessages) {
+              messages.push({
+                type: 'tool',
+                content: toolMessages,
+              })
+            }
           }
         } else {
           // In progress: show verbose tool executions
@@ -216,17 +222,6 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
       }
     }
 
-    // Determine completion message (shown after actions)
-    let completionMessage: string | undefined
-    if (block.isComplete && actions && actions.length > 0) {
-      const allSuccess = actions.every(a => a.status === 'success')
-      const hasDevServer = actions.some(a => a.type === 'dev_server' && a.status === 'success')
-
-      if (allSuccess && hasDevServer) {
-        completionMessage = '🚀 Build complete. You can test your project!'
-      }
-    }
-
     return {
       id: block.id,
       type: 'conversation' as const,
@@ -238,7 +233,6 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
       completionStats,
       summary: block.summary || undefined,
       actions,
-      completionMessage,
     }
   }
 
@@ -480,11 +474,6 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
       return currentStage ? currentStage.label : 'Deploying...'
     }
 
-    // Show completion message if available (highest priority when complete)
-    if (currentBlock.completionMessage) {
-      return currentBlock.completionMessage
-    }
-
     // Check for in-progress actions
     if (currentBlock.actions && currentBlock.actions.length > 0) {
       const inProgressAction = currentBlock.actions.find(a => a.status === 'in_progress')
@@ -510,7 +499,7 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
           return 'Build succeed'
         }
         if (lastAction.type === 'dev_server') {
-          return 'Dev server running'
+          return '🚀 Dev Server running. You can test your project!'
         }
       }
     }
@@ -764,12 +753,12 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
                                     <Check size={10} className="text-green-400" />
                                   </div>
                                 )}
+                                {block.isComplete && block.completionStats && (
+                                  <span className="text-[10px] text-gray-500">
+                                    {block.completionStats.timeSeconds}s
+                                  </span>
+                                )}
                               </div>
-                              {block.completionStats && (
-                                <div className="text-[10px] text-gray-500 mt-0.5">
-                                  {block.completionStats.timeSeconds}s
-                                </div>
-                              )}
                             </div>
                           </div>
 
@@ -788,7 +777,7 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
                                     <div className="flex items-start gap-2">
                                       {message.type === 'assistant' && (
                                         <>
-                                          <Bot size={10} className="text-primary flex-shrink-0 mt-1 opacity-60" />
+                                          <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
                                           <div className="flex-1">
                                             <span className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap">
                                               {isLong && !isMessageExpanded
@@ -846,15 +835,28 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
                               <div className="mt-2 pt-2 border-t border-white/10">
                                 <div className="flex items-center gap-2 flex-wrap text-[10px]">
                                   <span className="text-gray-400">
-                                    ⏱️ {block.completionStats.timeSeconds}s
+                                    {block.completionStats.timeSeconds}s
                                   </span>
                                   <span className="text-gray-600">|</span>
-                                  <span className="text-gray-400">
-                                    📊 {block.completionStats.inputTokens}→{block.completionStats.outputTokens}
+                                  <span className="text-gray-400 flex items-center gap-1">
+                                    <span>Tokens:</span>
+                                    <ArrowUpCircle size={10} className="text-blue-400" />
+                                    <span>{block.completionStats.inputTokens}</span>
+                                    <span className="text-gray-600">→</span>
+                                    <ArrowDownCircle size={10} className="text-green-400" />
+                                    <span>{block.completionStats.outputTokens}</span>
                                   </span>
                                   <span className="text-gray-600">|</span>
-                                  <span className="text-gray-400">
-                                    💰 ${block.completionStats.cost.toFixed(4)}
+                                  <span className="text-gray-400 flex items-center gap-1">
+                                    <DollarSign size={10} />
+                                    {block.completionStats.cost.toFixed(4)}
+                                    <div className="group/info relative flex items-center">
+                                      <Info size={10} className="text-gray-500 cursor-help" />
+                                      <div className="absolute right-0 bottom-full mb-2 bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[9px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/info:opacity-100 transition-opacity z-[150] shadow-xl">
+                                        Billed to API users only.<br />
+                                        Included in Max plans.
+                                      </div>
+                                    </div>
                                   </span>
                                 </div>
 
@@ -891,16 +893,6 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
                               </div>
                             )}
 
-                            {/* Completion Message */}
-                            {block.completionMessage && (
-                              <div className="mt-2 pt-2 border-t border-white/10">
-                                <div className="flex items-start gap-2">
-                                  <Bot size={10} className="text-primary flex-shrink-0 mt-1 opacity-60" />
-                                  <span className="text-[11px] text-gray-300 leading-relaxed">{block.completionMessage}</span>
-                                </div>
-                              </div>
-                            )}
-
                           </div>
                         </div>
 
@@ -930,15 +922,15 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
                                     <Check size={10} className="text-green-400" />
                                   </div>
                                 )}
+                                {gitAction.status === 'success' && (
+                                  <span className="text-[10px] text-gray-500">
+                                    0.1s
+                                  </span>
+                                )}
                                 {gitAction.status === 'in_progress' && (
                                   <Loader2 size={12} className="text-primary animate-spin" />
                                 )}
                               </div>
-                              {gitAction.status === 'success' && (
-                                <div className="text-[10px] text-gray-500 mt-0.5">
-                                  0.1s
-                                </div>
-                              )}
                             </div>
                           </div>
 
@@ -992,15 +984,15 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
                                     <Check size={10} className="text-green-400" />
                                   </div>
                                 )}
+                                {deployAction.status === 'success' && deployAction.data?.restartTime && (
+                                  <span className="text-[10px] text-gray-500">
+                                    {deployAction.data.restartTime}s
+                                  </span>
+                                )}
                                 {deployAction.status === 'in_progress' && (
                                   <Loader2 size={12} className="text-primary animate-spin" />
                                 )}
                               </div>
-                              {deployAction.data?.restartTime && (
-                                <div className="text-[10px] text-gray-500 mt-0.5">
-                                  {deployAction.data.restartTime}s
-                                </div>
-                              )}
                             </div>
                           </div>
 

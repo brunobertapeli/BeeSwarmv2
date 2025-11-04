@@ -465,7 +465,9 @@ class DatabaseService {
    */
   saveClaudeSessionId(projectId: string, sessionId: string | null): void {
     if (!this.db) {
-      throw new Error('Database not initialized')
+      // Silently ignore updates after database closure (graceful shutdown)
+      console.warn('⚠️ Attempted to save Claude session ID after database closed - ignoring')
+      return
     }
 
     const sql = 'UPDATE projects SET claudeSessionId = ? WHERE id = ?'
@@ -496,7 +498,9 @@ class DatabaseService {
    */
   saveClaudeContext(projectId: string, context: any): void {
     if (!this.db) {
-      throw new Error('Database not initialized')
+      // Silently ignore updates after database closure (graceful shutdown)
+      console.warn('⚠️ Attempted to save Claude context after database closed - ignoring')
+      return
     }
 
     const contextJson = JSON.stringify(context)
@@ -659,7 +663,9 @@ class DatabaseService {
    */
   updateChatBlock(blockId: string, updates: Partial<Omit<ChatBlock, 'id' | 'projectId' | 'blockIndex' | 'createdAt'>>): void {
     if (!this.db) {
-      throw new Error('Database not initialized')
+      // Silently ignore updates after database closure (graceful shutdown)
+      console.warn('⚠️ Attempted to update chat block after database closed - ignoring')
+      return
     }
 
     const fields: string[] = []
@@ -908,6 +914,7 @@ class DatabaseService {
   close(): void {
     if (this.db) {
       this.db.close()
+      this.db = null // Mark as closed so future operations are safely ignored
       console.log('📊 Database connection closed')
     }
   }

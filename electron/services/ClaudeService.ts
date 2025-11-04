@@ -75,15 +75,38 @@ class ClaudeService extends EventEmitter {
   async startSession(projectId: string, projectPath: string, prompt: string, model?: string): Promise<void> {
     const existingSession = this.sessions.get(projectId);
 
-    // If session exists and is still running, abort it first
-    if (existingSession && (existingSession.status === 'starting' || existingSession.status === 'running')) {
+    // CRITICAL FIX: Validate that project path matches existing session
+    // If path changed (project renamed/moved), destroy stale session
+    if (existingSession && existingSession.projectPath !== projectPath) {
+      console.warn(`⚠️ Project path mismatch detected for ${projectId}`);
+      console.warn(`   Expected: ${existingSession.projectPath}`);
+      console.warn(`   Got: ${projectPath}`);
+      console.warn(`   Destroying stale session and starting fresh...`);
+
       existingSession.abortController?.abort();
-      // Wait a bit for cleanup
-      await new Promise(resolve => setTimeout(resolve, 100));
+      this.sessions.delete(projectId);
+
+      // Clear saved session ID from database (prevents resume with wrong path)
+      databaseService.saveClaudeSessionId(projectId, null);
+
+      // Wait for cleanup
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    // If session exists and is still running, abort it first
+    else if (existingSession && (existingSession.status === 'starting' || existingSession.status === 'running')) {
+      existingSession.abortController?.abort();
+      // Increased wait time from 100ms to 500ms for better cleanup
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     // If no model specified, check if there's a stored preference
-    const effectiveModel = model || existingSession?.context?.model || 'sonnet';
+    // Priority: explicit model parameter > existing session model > default
+    const effectiveModel = model || existingSession?.context?.model || 'claude-sonnet-4-5-20250929';
+
+    console.log('🔍 DEBUG - Model selection:');
+    console.log('  - Explicit model param:', model);
+    console.log('  - Existing session model:', existingSession?.context?.model);
+    console.log('  - Effective model:', effectiveModel);
 
     console.log(`🤖 Starting Claude Code session for project: ${projectId}`);
     console.log(`📁 Working directory: ${projectPath}`);
@@ -91,19 +114,32 @@ class ClaudeService extends EventEmitter {
     console.log(`📝 Prompt: ${prompt.substring(0, 100)}...`);
 
     // Get session ID from database OR existing session for resume
-    // BUT: Only resume if the working directory matches!
+    // CRITICAL: Only resume if the working directory matches!
     let sessionId: string | null = null;
 
     // First try to get from database (persists across app restarts)
     const savedSessionId = databaseService.getClaudeSessionId(projectId);
     if (savedSessionId) {
-      sessionId = savedSessionId;
+      // CRITICAL FIX: Validate project path hasn't changed
+      // Database stores session ID but doesn't track path changes
+      // We must trust the passed projectPath as source of truth
+      const project = databaseService.getProjectById(projectId);
+      if (project && project.path === projectPath) {
+        sessionId = savedSessionId;
+        console.log(`📦 Resuming Claude session from database: ${savedSessionId}`);
+      } else {
+        console.warn(`⚠️ Project path changed, clearing saved session ID`);
+        databaseService.saveClaudeSessionId(projectId, null);
+        sessionId = null;
+      }
     }
     // Fallback to existing session in memory
     else if (existingSession?.sessionId) {
       if (existingSession.projectPath === projectPath) {
         sessionId = existingSession.sessionId;
+        console.log(`📦 Resuming Claude session from memory: ${sessionId}`);
       } else {
+        console.warn(`⚠️ Session path mismatch, starting fresh session`);
         sessionId = null;
       }
     }
@@ -122,6 +158,7 @@ class ClaudeService extends EventEmitter {
       memoryFiles: 45,      // Memory files: 45 tokens (0.0%)
       messages: 8           // Initial messages: 8 tokens (0.0%)
     };
+
 
     const initialContext = existingSession?.context || savedContext || {
       tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
@@ -154,16 +191,17 @@ class ClaudeService extends EventEmitter {
 
     // Build SDK options
     const options = {
-      cwd: projectPath, // Current working directory - this is the correct option name
-      dataDir: `${projectPath}/.claude-data`, // Isolated data directory per project (prevents session conflicts)
-      permissionMode: 'bypassPermissions' as const, // Equivalent to --dangerously-skip-permissions
+      cwd: projectPath, // Current working directory
+      permissionMode: 'bypassPermissions' as const, // Bypass all permission prompts
       maxTurns: 10,
-      settingSources: ['user', 'project', 'local'] as const, // Load .claude/CLAUDE.md
       signal: abortController.signal,
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(), // Path to claude CLI
       model: effectiveModel, // Always set model
       ...(sessionId && { resume: sessionId }), // Resume if we have session ID
     };
+
+    console.log('🔍 DEBUG - SDK Options:', JSON.stringify(options, null, 2));
+    console.log('🔍 DEBUG - Model being sent to SDK:', effectiveModel);
 
     try {
       // Update status to running
@@ -180,14 +218,19 @@ class ClaudeService extends EventEmitter {
 
       // If resuming and model changed, use setModel() to preserve context
       if (sessionId && existingSession?.context?.model && existingSession.context.model !== effectiveModel) {
+        console.log(`🔄 Model change detected: ${existingSession.context.model} → ${effectiveModel}`);
         try {
+          console.log('🔄 Attempting to change model via setModel()...');
           await claudeQuery.setModel(effectiveModel);
+          console.log('✅ Model changed successfully');
         } catch (error) {
           console.error(`❌ Failed to change model:`, error);
         }
       }
 
       for await (const msg of claudeQuery) {
+        console.log('🔍 DEBUG - Received message type:', msg.type, 'subtype:', msg.subtype);
+
         // Save session ID for future resumption (both memory and database)
         if (msg.session_id) {
           const session = this.sessions.get(projectId);
@@ -201,9 +244,12 @@ class ClaudeService extends EventEmitter {
 
         // Update context from system init message
         if (msg.type === 'system' && msg.subtype === 'init') {
+          console.log('🔍 DEBUG - System init message received:', JSON.stringify(msg, null, 2));
+          console.log('🔍 DEBUG - Model from init message:', msg.model);
           const session = this.sessions.get(projectId);
           if (session) {
             session.context.model = msg.model || session.context.model;
+            console.log('🔍 DEBUG - Updated session context model:', session.context.model);
             this.emit('claude-context-updated', { projectId, context: session.context });
           }
         }
@@ -212,18 +258,17 @@ class ClaudeService extends EventEmitter {
         if (msg.type === 'result') {
           const session = this.sessions.get(projectId);
           if (session) {
-            // Update token counts (SDK uses snake_case field names)
-            // Note: result message contains TOTAL cumulative tokens, not incremental
+            // SUM token counts across all turns (each result message contains tokens for THAT turn only)
             if (msg.usage) {
-              session.context.tokens.input = msg.usage.input_tokens || 0;
-              session.context.tokens.output = msg.usage.output_tokens || 0;
-              session.context.tokens.cacheRead = msg.usage.cache_read_input_tokens || 0;
-              session.context.tokens.cacheCreation = msg.usage.cache_creation_input_tokens || 0;
+              session.context.tokens.input += msg.usage.input_tokens || 0;
+              session.context.tokens.output += msg.usage.output_tokens || 0;
+              session.context.tokens.cacheRead += msg.usage.cache_read_input_tokens || 0;
+              session.context.tokens.cacheCreation += msg.usage.cache_creation_input_tokens || 0;
             }
 
-            // Update cost and turns (also cumulative totals)
-            session.context.cost = msg.total_cost_usd || 0;
-            session.context.turns = msg.num_turns || 0;
+            // SUM cost and turns (SDK gives us per-turn values, not cumulative)
+            session.context.cost += msg.total_cost_usd || 0;
+            session.context.turns += 1; // Increment by 1 for this turn
 
             // Update context window from modelUsage
             if (msg.modelUsage) {
@@ -287,43 +332,46 @@ class ClaudeService extends EventEmitter {
    * @param projectId - Project identifier
    */
   clearSession(projectId: string): void {
+    console.log(`🗑️ Clearing Claude session for project: ${projectId}`);
+
     const session = this.sessions.get(projectId);
+
+    // Default baseline tokens
+    const defaultBaseline = {
+      systemPrompt: 2600,   // System prompt: 2.6k tokens (1.3%)
+      systemTools: 13300,   // System tools: 13.3k tokens (6.6%)
+      memoryFiles: 45,      // Memory files: 45 tokens (0.0%)
+      messages: 8           // Initial messages: 8 tokens (0.0%)
+    };
+
+    // Reset context to baseline only (clear conversation tokens)
+    const clearedContext: ClaudeContext = {
+      tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+      baseline: session?.context.baseline || defaultBaseline,
+      cost: 0,
+      turns: 0,
+      model: session?.context.model || 'claude-sonnet-4-5-20250929', // Default to Sonnet if no session
+      contextWindow: session?.context.contextWindow || 200000
+    };
+
+    // Save cleared context to database
+    databaseService.saveClaudeContext(projectId, clearedContext);
+
+    // Emit context update with baseline only
+    this.emit('claude-context-updated', { projectId, context: clearedContext });
+
+    // IMPORTANT: Clear session ID from database ALWAYS (not just if session exists in memory)
+    console.log(`🗑️ Clearing session ID from database for ${projectId}`);
+    databaseService.saveClaudeSessionId(projectId, null);
+
+    // If there's an active session in memory, clean it up
     if (session) {
-      console.log(`🗑️ Clearing Claude session for project: ${projectId}`);
-
-      // Default baseline tokens
-      const defaultBaseline = {
-        systemPrompt: 2600,   // System prompt: 2.6k tokens (1.3%)
-        systemTools: 13300,   // System tools: 13.3k tokens (6.6%)
-        memoryFiles: 45,      // Memory files: 45 tokens (0.0%)
-        messages: 8           // Initial messages: 8 tokens (0.0%)
-      };
-
-      // Reset context to baseline only (clear conversation tokens)
-      const clearedContext: ClaudeContext = {
-        tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
-        baseline: session.context.baseline || defaultBaseline,
-        cost: 0,
-        turns: 0,
-        model: session.context.model,
-        contextWindow: session.context.contextWindow || 200000
-      };
-
-      // Save cleared context to database
-      databaseService.saveClaudeContext(projectId, clearedContext);
-
-      // Emit context update with baseline only
-      this.emit('claude-context-updated', { projectId, context: clearedContext });
-
-      // Remove session ID so next start won't resume
       session.sessionId = null;
       session.abortController?.abort();
       this.sessions.delete(projectId);
-
-      // Clear session ID from database
-      databaseService.saveClaudeSessionId(projectId, null);
-      this.emitStatusChange(projectId, 'idle');
     }
+
+    this.emitStatusChange(projectId, 'idle');
   }
 
   /**
@@ -368,6 +416,14 @@ class ClaudeService extends EventEmitter {
    * @param modelName - Model to switch to (e.g., 'sonnet', 'opus', 'haiku')
    */
   async changeModel(projectId: string, modelName: string): Promise<void> {
+    // Default baseline tokens
+    const defaultBaseline = {
+      systemPrompt: 2600,
+      systemTools: 13300,
+      memoryFiles: 45,
+      messages: 8
+    };
+
     const session = this.sessions.get(projectId);
 
     // If no session or session is idle/completed, just update the context
@@ -378,22 +434,35 @@ class ClaudeService extends EventEmitter {
         this.emit('claude-model-changed', { projectId, model: modelName });
         this.emit('claude-context-updated', { projectId, context: session.context });
       } else {
-        // Create a minimal session to store the preference
+        // Load existing context from database or create minimal context
+        const existingContext = databaseService.getClaudeContext(projectId);
+        const context = existingContext ? {
+          ...existingContext,
+          model: modelName // Update model in existing context
+        } : {
+          // Create minimal session to store the preference (new project)
+          tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+          baseline: defaultBaseline,
+          cost: 0,
+          turns: 0,
+          model: modelName,
+          contextWindow: 200000
+        };
+
         this.sessions.set(projectId, {
           projectPath: '',
           sessionId: null,
           status: 'idle',
           abortController: null,
           query: null,
-          context: {
-            tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
-            cost: 0,
-            turns: 0,
-            model: modelName,
-            contextWindow: 200000
-          }
+          context
         });
+
+        // Save updated context to database
+        databaseService.saveClaudeContext(projectId, context);
+
         this.emit('claude-model-changed', { projectId, model: modelName });
+        this.emit('claude-context-updated', { projectId, context });
       }
       return;
     }
@@ -416,16 +485,17 @@ class ClaudeService extends EventEmitter {
    */
   async getAvailableModels(): Promise<Array<{ value: string; displayName: string; description: string }>> {
     // Return static list of current models
-    // Using short aliases that SDK accepts (sonnet, opus, haiku)
+    // Using full model IDs for Claude 4.x series with correct snapshot dates
     return [
-      { value: 'sonnet', displayName: 'Sonnet 4.5', description: 'Smartest model for daily use' },
-      { value: 'opus', displayName: 'Opus 4.1', description: 'Reaches usage limits faster' },
-      { value: 'haiku', displayName: 'Haiku 4.5', description: 'Fastest model for simple tasks' }
+      { value: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5', description: 'Smartest model for daily use' },
+      { value: 'claude-opus-4-1-20250805', displayName: 'Opus 4.1', description: 'Reaches usage limits faster' },
+      { value: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', description: 'Fastest model for simple tasks' }
     ];
   }
 
   /**
    * Destroy Claude session (abort current operation)
+   * NOTE: This only clears in-memory session, preserving database session ID for resume on app restart
    * @param projectId - Project identifier
    */
   destroySession(projectId: string): void {
@@ -440,8 +510,20 @@ class ClaudeService extends EventEmitter {
       console.error(`❌ Error aborting Claude session for ${projectId}:`, error);
     }
 
-    this.sessions.delete(projectId);
+    // IMPORTANT: Don't delete session immediately!
+    // The session needs to remain in memory so that when Claude finishes,
+    // it can still update token counts in the result handler.
+    // The session will be cleaned up when:
+    // 1. A new session starts for this project (overrides old one)
+    // 2. App quits (destroyAllSessions)
+    // 3. User explicitly clears context (clearSession)
+
+    // Just mark it as idle so UI knows it's not running
     this.emitStatusChange(projectId, 'idle');
+
+    // NOTE: We intentionally DO NOT clear the database session ID here
+    // This allows the session to resume when the app restarts or project is reopened
+    // Use clearSession() if you want to permanently clear the conversation history
   }
 
   /**
@@ -468,6 +550,14 @@ class ClaudeService extends EventEmitter {
   isRunning(projectId: string): boolean {
     const session = this.sessions.get(projectId);
     return session?.status === 'running';
+  }
+
+  /**
+   * Get session info (for validation in handlers)
+   * @param projectId - Project identifier
+   */
+  getSession(projectId: string): ClaudeSession | undefined {
+    return this.sessions.get(projectId);
   }
 
   /**

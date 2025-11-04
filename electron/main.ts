@@ -23,6 +23,7 @@ import { processPersistence } from './services/ProcessPersistence.js'
 import { terminalService } from './services/TerminalService.js'
 import { claudeService } from './services/ClaudeService.js'
 import { chatHistoryManager } from './services/ChatHistoryManager.js'
+import { projectLockService } from './services/ProjectLockService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -282,30 +283,58 @@ app.whenReady().then(async () => {
   })
 })
 
+// Track if we're already quitting to prevent multiple cleanup attempts
+let isQuitting = false
+
+// Handle graceful shutdown
+app.on('before-quit', async (event) => {
+  if (isQuitting) {
+    return // Already cleaning up, let it proceed
+  }
+
+  // Prevent quit until cleanup completes
+  event.preventDefault()
+  isQuitting = true
+
+  console.log('🛑 Gracefully shutting down...')
+
+  try {
+    // 1. Destroy Claude sessions first (abort any running operations)
+    console.log('🤖 Stopping Claude sessions...')
+    claudeService.destroyAllSessions()
+
+    // 2. Wait a moment for Claude operations to abort
+    await new Promise(resolve => setTimeout(resolve, 500))
+
+    // 3. Stop all dev servers
+    console.log('🔌 Stopping dev servers...')
+    await processManager.stopAll()
+
+    // 4. Destroy terminal sessions
+    console.log('💻 Closing terminals...')
+    terminalService.destroyAllSessions()
+
+    // 5. Destroy all previews
+    console.log('🖼️ Closing previews...')
+    previewService.destroyAll()
+
+    // 6. Close database last (after all operations complete)
+    console.log('📊 Closing database...')
+    databaseService.close()
+
+    console.log('✅ Cleanup complete')
+  } catch (error) {
+    console.error('❌ Error during cleanup:', error)
+  } finally {
+    // Now actually quit
+    app.quit()
+  }
+})
+
 app.on('window-all-closed', () => {
-  // Cleanup before quitting
-  console.log('🛑 Stopping all processes and cleaning up...')
-
-  // Stop all dev servers (sync version, no await needed for quit)
-  processManager.stopAll().catch((error) => {
-    console.error('Error stopping processes:', error)
-  })
-
-  // Destroy all terminal sessions
-  terminalService.destroyAllSessions()
-
-  // Destroy all Claude sessions
-  claudeService.destroyAllSessions()
-
-  // Destroy all previews
-  previewService.destroyAll()
-
-  // Close database
-  databaseService.close()
-
-  console.log('✅ Cleanup complete')
-
+  // On macOS, keep app running even when windows close
   if (process.platform !== 'darwin') {
+    // Trigger before-quit for graceful shutdown
     app.quit()
   }
 })

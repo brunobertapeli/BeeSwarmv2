@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, RotateCw, Smartphone } from 'lucide-react'
+import { ChevronDown, Repeat, Smartphone, RefreshCw } from 'lucide-react'
 import { Device, DeviceType, Orientation, MOBILE_DEVICES } from '../types/devices'
 
 interface DeviceSelectorProps {
@@ -8,6 +8,7 @@ interface DeviceSelectorProps {
   orientation: Orientation
   onSelectDevice: (device: Device) => void
   onToggleOrientation: () => void
+  onRefresh?: () => void
 }
 
 function DeviceSelector({
@@ -16,6 +17,7 @@ function DeviceSelector({
   orientation,
   onSelectDevice,
   onToggleOrientation,
+  onRefresh,
 }: DeviceSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -74,13 +76,29 @@ function DeviceSelector({
         {/* Divider */}
         <div className="w-px h-4 bg-dark-border" />
 
+        {/* Refresh Button */}
+        {onRefresh && (
+          <>
+            <button
+              onClick={onRefresh}
+              className="p-1 hover:bg-dark-bg/50 rounded transition-colors group"
+              title="Refresh preview"
+            >
+              <RefreshCw size={14} className="text-gray-400 group-hover:text-primary transition-colors" />
+            </button>
+
+            {/* Divider */}
+            <div className="w-px h-4 bg-dark-border" />
+          </>
+        )}
+
         {/* Rotate Button */}
         <button
           onClick={onToggleOrientation}
           className="p-1 hover:bg-dark-bg/50 rounded transition-colors group"
           title={`Rotate to ${orientation === 'portrait' ? 'landscape' : 'portrait'}`}
         >
-          <RotateCw size={14} className="text-gray-400 group-hover:text-primary transition-colors" />
+          <Repeat size={14} className="text-gray-400 group-hover:text-primary transition-colors" />
         </button>
       </div>
 
