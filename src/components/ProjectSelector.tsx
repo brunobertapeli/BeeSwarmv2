@@ -15,6 +15,7 @@ import {
 import TechIcon from './TechIcon'
 import { Project, Template } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
+import { useAppStore } from '../store/appStore'
 
 interface ProjectSelectorProps {
   isOpen: boolean
@@ -41,6 +42,7 @@ function ProjectSelector({
   onCreateProject,
   onProjectUpdated,
 }: ProjectSelectorProps) {
+  const { isAuthenticated } = useAppStore()
   const [projects, setProjects] = useState<ProjectWithMeta[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
@@ -104,7 +106,7 @@ function ProjectSelector({
     }
 
     fetchData()
-  }, [isOpen])
+  }, [isOpen, isAuthenticated])
 
   useEffect(() => {
     if (!isOpen) {

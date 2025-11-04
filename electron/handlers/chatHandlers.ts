@@ -1,6 +1,7 @@
 import { ipcMain, WebContents } from 'electron';
 import { databaseService, ChatBlock } from '../services/DatabaseService';
 import { chatHistoryManager } from '../services/ChatHistoryManager';
+import { getCurrentUserId } from '../main';
 
 let mainWindowContents: WebContents | null = null;
 
@@ -109,6 +110,15 @@ export function registerChatHandlers(): void {
   // Get chat history
   ipcMain.handle('chat:get-history', async (_event, projectId: string, limit?: number, offset?: number) => {
     try {
+      // Check if user is logged in
+      const userId = getCurrentUserId()
+      if (!userId) {
+        return {
+          success: true,
+          blocks: [],
+        };
+      }
+
       const blocks = databaseService.getChatHistory(projectId, limit, offset);
 
       return {

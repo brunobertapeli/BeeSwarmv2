@@ -66,8 +66,9 @@ export const useAppStore = create<AppState>((set) => ({
     // Clear secure storage
     localStorage.removeItem('codedeck_auth_encrypted')
     localStorage.removeItem('codedeck_auth_fallback')
+    localStorage.removeItem('codedeck_currentProjectId') // Clear current project
     localStorage.removeItem('beeswarm_auth') // Legacy - remove on logout
-    set({ user: null, isAuthenticated: false })
+    set({ user: null, isAuthenticated: false, currentProjectId: null })
   },
 
   // Project state
@@ -114,10 +115,6 @@ export const initAuth = async () => {
   const encryptedAuth = localStorage.getItem('codedeck_auth_encrypted')
   const isFallback = localStorage.getItem('codedeck_auth_fallback') === 'true'
 
-  console.log('🔐 Initializing auth from secure storage...')
-  console.log('🔐 Encrypted auth exists:', !!encryptedAuth)
-  console.log('🔐 ElectronAPI available:', !!window.electronAPI?.secureStorage)
-
   if (encryptedAuth && window.electronAPI?.secureStorage) {
     try {
       // Decrypt stored auth data
@@ -144,7 +141,9 @@ export const initAuth = async () => {
         }
 
         // All validations passed, restore session
-        console.log('✅ All validations passed, restoring session for:', user.email)
+        // Tell the backend about the restored user session
+        await window.electronAPI?.auth.restoreSession(user.id)
+
         useAppStore.setState({ user, isAuthenticated: true })
       } else {
         console.error('❌ Failed to decrypt auth data:', result.error)
@@ -166,10 +165,6 @@ export const initAuth = async () => {
   }
 }
 
-// Initialize current project from localStorage (synchronous, safe to run immediately)
-if (typeof window !== 'undefined') {
-  const storedProjectId = localStorage.getItem('codedeck_currentProjectId')
-  if (storedProjectId) {
-    useAppStore.setState({ currentProjectId: storedProjectId, lastProjectId: storedProjectId })
-  }
-}
+// NOTE: currentProjectId is NOT restored from localStorage on startup
+// It will be auto-selected when projects are fetched in ProjectView
+// This prevents loading the wrong project when switching between users

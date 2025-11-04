@@ -181,6 +181,7 @@ export interface ElectronAPI {
       error?: string
     }>
     signOut: () => Promise<{ success: boolean; error?: string }>
+    restoreSession: (userId: string) => Promise<{ success: boolean; error?: string }>
     onCallback: (callback: (url: string) => void) => () => void
     onAuthSuccess: (callback: (result: any) => void) => () => void
     onAuthError: (callback: (result: any) => void) => () => void

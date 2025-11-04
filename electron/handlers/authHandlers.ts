@@ -266,4 +266,14 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
       return { success: false, error: error.message }
     }
   })
+
+  // Restore user session (called when session is restored from localStorage)
+  ipcMain.handle('auth:restore-session', async (_event, userId: string) => {
+    try {
+      setCurrentUser(userId)
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  })
 }

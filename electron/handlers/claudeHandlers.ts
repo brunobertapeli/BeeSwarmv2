@@ -8,6 +8,7 @@ import { projectLockService } from '../services/ProjectLockService';
 import { emitChatEvent } from './chatHandlers';
 import { spawn } from 'child_process';
 import * as path from 'path';
+import { getCurrentUserId } from '../main';
 
 let mainWindowContents: WebContents | null = null;
 
@@ -243,6 +244,15 @@ export function registerClaudeHandlers(): void {
   // Get context information
   ipcMain.handle('claude:get-context', async (_event, projectId: string) => {
     try {
+      // Check if user is logged in
+      const userId = getCurrentUserId()
+      if (!userId) {
+        return {
+          success: true,
+          context: null,
+        };
+      }
+
       const context = claudeService.getContext(projectId);
 
       return {

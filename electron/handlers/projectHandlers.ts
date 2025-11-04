@@ -4,6 +4,7 @@ import { mongoService } from '../services/MongoService'
 import { databaseService } from '../services/DatabaseService'
 import { envService } from '../services/EnvService'
 import { dependencyService } from '../services/DependencyService'
+import { getCurrentUserId } from '../main'
 
 export function registerProjectHandlers() {
   // Create new project from template
@@ -41,7 +42,18 @@ export function registerProjectHandlers() {
   ipcMain.handle('project:get-all', async () => {
     try {
       console.log('📋 Fetching all projects...')
+
+      // Check if user is logged in
+      const userId = getCurrentUserId()
+      if (!userId) {
+        return {
+          success: true,
+          projects: []
+        }
+      }
+
       const projects = projectService.getAllProjects()
+      console.log('✅ Fetched', projects.length, 'projects from database')
 
       return {
         success: true,

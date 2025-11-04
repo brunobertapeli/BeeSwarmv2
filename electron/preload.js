@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     handleCallback: (url) => ipcRenderer.invoke('auth:handle-callback', url),
     getSession: () => ipcRenderer.invoke('auth:get-session'),
     signOut: () => ipcRenderer.invoke('auth:sign-out'),
+    restoreSession: (userId) => ipcRenderer.invoke('auth:restore-session', userId),
     onCallback: (callback) => {
       const listener = (event, url) => callback(url)
       ipcRenderer.on('auth:callback', listener)

@@ -16,6 +16,7 @@ import { Project, ProcessState, ProcessOutput, Template } from '../types/electro
 
 function ProjectView() {
   const {
+    isAuthenticated,
     currentProjectId,
     setCurrentProject,
     showProjectSelector,
@@ -68,9 +69,6 @@ function ProjectView() {
           if (result.projects.length > 0 && !currentProjectId) {
             const lastProject = result.projects[0] // Already sorted by lastOpenedAt DESC
             setCurrentProject(lastProject.id)
-          } else if (result.projects.length === 0) {
-            // No projects - open template selector
-            setShowTemplateSelector(true)
           }
         }
       } catch (error) {
@@ -81,7 +79,7 @@ function ProjectView() {
     }
 
     fetchProjects()
-  }, [refreshKey])
+  }, [refreshKey, isAuthenticated])
 
   const currentProject = projects.find((p) => p.id === currentProjectId)
 
@@ -333,7 +331,30 @@ function ProjectView() {
 
       {/* Preview Area - Desktop or Mobile Mode */}
       <div className="w-full flex-1 relative overflow-hidden">
-        {projects.length === 0 && !loading ? (
+        {loading ? (
+          // Loading State
+          <div className="w-full h-full flex items-center justify-center relative">
+            {/* Background Gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-950 via-blue-950 to-black" />
+            <div className="absolute inset-0 bg-black/40" />
+
+            {/* Dot Pattern Overlay */}
+            <div
+              className="absolute inset-0 opacity-30 pointer-events-none"
+              style={{
+                backgroundImage: `radial-gradient(circle, rgba(139, 92, 246, 0.5) 1px, transparent 1px)`,
+                backgroundSize: "24px 24px",
+              }}
+            />
+
+            <div className="text-center relative z-10">
+              <div className="w-16 h-16 mx-auto mb-4">
+                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+              </div>
+              <p className="text-gray-300 text-lg">Loading your projects...</p>
+            </div>
+          </div>
+        ) : projects.length === 0 ? (
           // No Projects State
           <div className="w-full h-full flex items-center justify-center relative">
             {/* Background Gradient */}
