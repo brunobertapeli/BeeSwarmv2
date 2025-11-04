@@ -514,7 +514,7 @@ function ProjectView() {
         }}
         projectName={currentProject?.name || 'Untitled Project'}
         projectId={currentProjectId || '1'}
-        projectPath="~/Documents/BeeSwarm/Projects/ecommerce-dashboard"
+        projectPath="~/Documents/CodeDeck/Projects/ecommerce-dashboard"
         isSetupMode={isProjectSetupMode}
         requiredTechConfigs={newProjectData?.requiredTechConfigs || []}
         onSetupComplete={handleSetupComplete}

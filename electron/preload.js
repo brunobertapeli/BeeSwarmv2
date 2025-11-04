@@ -39,6 +39,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
+  secureStorage: {
+    set: (key, value) => ipcRenderer.invoke('secure-storage:set', key, value),
+    get: (encrypted, isFallback) => ipcRenderer.invoke('secure-storage:get', encrypted, isFallback),
+    isAvailable: () => ipcRenderer.invoke('secure-storage:is-available')
+  },
+
   // Template methods
   templates: {
     fetch: () => ipcRenderer.invoke('templates:fetch'),

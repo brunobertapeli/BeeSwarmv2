@@ -29,8 +29,7 @@ function UserProfile() {
       const result = await window.electronAPI?.auth.signOut()
 
       if (result?.success) {
-        logout()
-        localStorage.removeItem('beeswarm_auth')
+        await logout() // Now async - clears all storage
         toast.success('Logged out', 'You have been successfully logged out')
       } else {
         toast.error('Logout failed', result?.error || 'Failed to log out')

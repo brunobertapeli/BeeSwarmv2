@@ -43,12 +43,13 @@ class DatabaseService {
 
   /**
    * Initialize database and create tables if they don't exist
+   * @param userId - User ID for database isolation
    */
-  init(): void {
+  init(userId: string): void {
     try {
-      // Database location: ~/Library/Application Support/BeeSwarm/database.db
+      // Database location: ~/Library/Application Support/CodeDeck/{userId}/database.db
       const userDataPath = app.getPath('userData')
-      this.dbPath = path.join(userDataPath, 'database.db')
+      this.dbPath = path.join(userDataPath, userId, 'database.db')
 
       console.log('📊 Database path:', this.dbPath)
 

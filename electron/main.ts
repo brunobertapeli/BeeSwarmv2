@@ -17,7 +17,37 @@ import { registerClaudeHandlers, setClaudeHandlersWindow } from './handlers/clau
 import { registerChatHandlers, setChatHandlersWindow } from './handlers/chatHandlers.js'
 import { registerSupportHandlers } from './handlers/supportHandlers.js'
 import { registerGitHandlers, setGitHandlersWindow } from './handlers/gitHandlers.js'
+import { registerSecureStorageHandlers } from './handlers/secureStorageHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
+
+// Global state for current user
+let currentUserId: string | null = null
+
+/**
+ * Set current user and reinitialize user-scoped services
+ */
+export function setCurrentUser(userId: string) {
+  console.log(`👤 Setting current user: ${userId}`)
+  currentUserId = userId
+
+  // Reinitialize database for this user
+  databaseService.init(userId)
+}
+
+/**
+ * Get current user ID
+ */
+export function getCurrentUserId(): string | null {
+  return currentUserId
+}
+
+/**
+ * Clear current user (on logout)
+ */
+export function clearCurrentUser() {
+  console.log(`👤 Clearing current user`)
+  currentUserId = null
+}
 import { previewService } from './services/PreviewService.js'
 import { processManager } from './services/ProcessManager.js'
 import { processPersistence } from './services/ProcessPersistence.js'
@@ -37,7 +67,7 @@ if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 }
 
-console.log('\n🔧 BeeSwarm Starting...')
+console.log('\n🔧 CodeDeck Starting...')
 console.log('🔧 Development mode:', isDev)
 console.log('📁 CWD:', process.cwd())
 console.log('📁 __dirname:', __dirname)
@@ -51,16 +81,16 @@ let mainWindow: BrowserWindow | null = null
 // Register custom protocol for OAuth callback
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
-    app.setAsDefaultProtocolClient('beeswarm', process.execPath, [path.resolve(process.argv[1])])
+    app.setAsDefaultProtocolClient('codedeck', process.execPath, [path.resolve(process.argv[1])])
   }
 } else {
-  app.setAsDefaultProtocolClient('beeswarm')
+  app.setAsDefaultProtocolClient('codedeck')
 }
 
 function createMenu() {
   const template: any[] = [
     {
-      label: 'BeeSwarm',
+      label: 'CodeDeck',
       submenu: [
         {
           label: 'Check for Updates',
@@ -82,14 +112,6 @@ function createMenu() {
     {
       label: 'File',
       submenu: [
-        {
-          label: 'New Window',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => {
-            createWindow()
-          }
-        },
-        { type: 'separator' },
         { role: 'close' }
       ]
     },
@@ -124,19 +146,19 @@ function createMenu() {
         {
           label: 'Discord',
           click: async () => {
-            await shell.openExternal('https://discord.gg/beeswarm')
+            await shell.openExternal('https://discord.gg/codedeck')
           }
         },
         {
           label: 'Wiki',
           click: async () => {
-            await shell.openExternal('https://wiki.beeswarm.app')
+            await shell.openExternal('https://wiki.codedeck.app')
           }
         },
         {
           label: 'FAQ',
           click: async () => {
-            await shell.openExternal('https://beeswarm.app/faq')
+            await shell.openExternal('https://codedeck.app/faq')
           }
         }
       ]
@@ -246,13 +268,14 @@ async function initializeApp() {
     console.log('🧹 Cleaning up orphaned processes from previous session...')
     await processPersistence.cleanupStaleProcesses()
 
-    // Initialize database
-    databaseService.init()
+    // Note: Database will be initialized after user login
+    // See authHandlers.ts which calls setCurrentUser()
 
     // Initialize chat history manager (tracks Claude events)
     chatHistoryManager.init()
 
     // Register IPC handlers (only once)
+    registerSecureStorageHandlers()
     registerTemplateHandlers()
     registerProjectHandlers()
     registerProcessHandlers()
@@ -365,7 +388,7 @@ app.on('window-all-closed', () => {
 app.on('open-url', (event, url) => {
   event.preventDefault()
 
-  if (url.startsWith('beeswarm://auth/callback')) {
+  if (url.startsWith('codedeck://auth/callback')) {
     // Send the callback URL to the renderer process
     if (mainWindow) {
       mainWindow.webContents.send('auth:callback', url)
@@ -386,8 +409,8 @@ if (!gotTheLock) {
       mainWindow.focus()
 
       // Check for auth callback in command line
-      const url = commandLine.find(arg => arg.startsWith('beeswarm://'))
-      if (url && url.startsWith('beeswarm://auth/callback')) {
+      const url = commandLine.find(arg => arg.startsWith('codedeck://'))
+      if (url && url.startsWith('codedeck://auth/callback')) {
         mainWindow.webContents.send('auth:callback', url)
       }
     }

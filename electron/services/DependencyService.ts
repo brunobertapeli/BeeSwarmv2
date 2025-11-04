@@ -1,6 +1,7 @@
 import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import { terminalAggregator } from './TerminalAggregator'
 
 /**
@@ -44,11 +45,20 @@ class DependencyService {
           terminalAggregator.addNpmLine(projectId, `Installing dependencies in ${path.basename(projectPath)}...\n`)
         }
 
+        // Setup environment with nvm Node path
+        const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm')
+        const nvmNodePath = path.join(nvmDir, 'versions', 'node', 'v20.19.5', 'bin')
+        const env = {
+          ...process.env,
+          PATH: `${nvmNodePath}:${process.env.PATH}`
+        }
+
         // Spawn npm install process
         const npmProcess = spawn('npm', ['install'], {
           cwd: projectPath,
           shell: true,
-          stdio: ['ignore', 'pipe', 'pipe']
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env
         })
 
         let output = ''

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { TechConfig } from '../components/TemplateSelector'
 import type { Device, DeviceType, Orientation } from '../types/devices'
 import { getDefaultDevice } from '../types/devices'
+import type { User } from '../types/auth'
 
 interface Project {
   id: string
@@ -14,14 +15,6 @@ interface Project {
   requiredApiKeys?: string[]
 }
 
-interface User {
-  id: string
-  email: string
-  name: string
-  photoUrl?: string
-  plan: 'free' | 'plus' | 'premium'
-}
-
 export type DeploymentStatus = 'idle' | 'creating' | 'building' | 'finalizing' | 'setting-keys' | 'live'
 
 interface AppState {
@@ -29,7 +22,7 @@ interface AppState {
   isAuthenticated: boolean
   user: User | null
   setUser: (user: User | null) => void
-  logout: () => void
+  logout: () => Promise<void>
 
   // Projects
   currentProjectId: string | null
@@ -66,17 +59,23 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set) => ({
   // Auth state
-  isAuthenticated: false, // Will check localStorage on init
+  isAuthenticated: false, // Will check secure storage on init
   user: null,
   setUser: (user) => set({ user, isAuthenticated: !!user }),
-  logout: () => set({ user: null, isAuthenticated: false }),
+  logout: async () => {
+    // Clear secure storage
+    localStorage.removeItem('codedeck_auth_encrypted')
+    localStorage.removeItem('codedeck_auth_fallback')
+    localStorage.removeItem('beeswarm_auth') // Legacy - remove on logout
+    set({ user: null, isAuthenticated: false })
+  },
 
   // Project state
   currentProjectId: null,
   lastProjectId: null,
   setCurrentProject: (projectId) => {
     // Persist to localStorage
-    localStorage.setItem('beeswarm_currentProjectId', projectId)
+    localStorage.setItem('codedeck_currentProjectId', projectId)
     set({ currentProjectId: projectId, lastProjectId: projectId })
   },
   netlifyConnected: true, // Set to true for demo purposes
@@ -110,28 +109,66 @@ export const useAppStore = create<AppState>((set) => ({
   })),
 }))
 
-// Initialize auth state from localStorage
-if (typeof window !== 'undefined') {
-  const storedAuth = localStorage.getItem('beeswarm_auth')
-  if (storedAuth) {
+// Export function to initialize auth (called from App.tsx after electronAPI is ready)
+export const initAuth = async () => {
+  const encryptedAuth = localStorage.getItem('codedeck_auth_encrypted')
+  const isFallback = localStorage.getItem('codedeck_auth_fallback') === 'true'
+
+  console.log('🔐 Initializing auth from secure storage...')
+  console.log('🔐 Encrypted auth exists:', !!encryptedAuth)
+  console.log('🔐 ElectronAPI available:', !!window.electronAPI?.secureStorage)
+
+  if (encryptedAuth && window.electronAPI?.secureStorage) {
     try {
-      const { user } = JSON.parse(storedAuth)
-      // Only restore session if user has required fields (photoUrl, plan)
-      // This prevents old mock data from being loaded
-      if (user && user.plan && user.email) {
+      // Decrypt stored auth data
+      const result = await window.electronAPI.secureStorage.get(encryptedAuth, isFallback)
+
+      if (result.success && result.value) {
+        const { user, timestamp } = JSON.parse(result.value)
+
+        // Validate user data structure
+        if (!user || !user.plan || !user.email || !user.id) {
+          console.warn('⚠️ Invalid user data in secure storage')
+          localStorage.removeItem('codedeck_auth_encrypted')
+          localStorage.removeItem('codedeck_auth_fallback')
+          return
+        }
+
+        // Check if session is expired (older than 30 days)
+        const SESSION_EXPIRY = 30 * 24 * 60 * 60 * 1000 // 30 days
+        if (Date.now() - timestamp > SESSION_EXPIRY) {
+          console.warn('⚠️ Session expired, user needs to re-authenticate')
+          localStorage.removeItem('codedeck_auth_encrypted')
+          localStorage.removeItem('codedeck_auth_fallback')
+          return
+        }
+
+        // All validations passed, restore session
+        console.log('✅ All validations passed, restoring session for:', user.email)
         useAppStore.setState({ user, isAuthenticated: true })
       } else {
-        // Clear invalid/old session data
-        localStorage.removeItem('beeswarm_auth')
+        console.error('❌ Failed to decrypt auth data:', result.error)
+        localStorage.removeItem('codedeck_auth_encrypted')
+        localStorage.removeItem('codedeck_auth_fallback')
       }
     } catch (e) {
-      console.error('Failed to parse stored auth:', e)
+      console.error('❌ Failed to restore auth session:', e)
+      localStorage.removeItem('codedeck_auth_encrypted')
+      localStorage.removeItem('codedeck_auth_fallback')
+    }
+  } else {
+    // Check for legacy BeeSwarm storage and clear it
+    const oldAuth = localStorage.getItem('beeswarm_auth')
+    if (oldAuth) {
+      console.warn('⚠️ Found legacy BeeSwarm auth storage, clearing')
       localStorage.removeItem('beeswarm_auth')
     }
   }
+}
 
-  // Initialize current project from localStorage
-  const storedProjectId = localStorage.getItem('beeswarm_currentProjectId')
+// Initialize current project from localStorage (synchronous, safe to run immediately)
+if (typeof window !== 'undefined') {
+  const storedProjectId = localStorage.getItem('codedeck_currentProjectId')
   if (storedProjectId) {
     useAppStore.setState({ currentProjectId: storedProjectId, lastProjectId: storedProjectId })
   }

@@ -29,20 +29,20 @@ class MongoService {
   private client: MongoClient | null = null
   private db: Db | null = null
   private uri: string = ''
-  private dbName: string = 'beeswarm'
+  private dbName: string = 'codedeck'
   private initialized: boolean = false
 
   private init() {
     if (this.initialized) return
 
     this.uri = process.env.MONGODB_URI || ''
-    this.dbName = process.env.MONGODB_DATABASE || 'beeswarm'
+    this.dbName = process.env.MONGODB_DATABASE || 'codedeck'
 
     if (!this.uri) {
       console.error('⚠️  MongoDB URI not found in environment variables')
       console.error('Please ensure .env file exists with:')
       console.error('  - MONGODB_URI')
-      console.error('  - MONGODB_DATABASE (optional, defaults to "beeswarm")')
+      console.error('  - MONGODB_DATABASE (optional, defaults to "codedeck")')
     } else {
       console.log('✅ MongoDB configuration loaded successfully')
     }

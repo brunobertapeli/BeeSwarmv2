@@ -196,16 +196,25 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
         const result = await window.electronAPI?.auth.getSession()
 
         if (result?.success && result.user) {
-          // Update user in store with fresh data from Supabase
+          // Update user in store with fresh data from MongoDB
           const { setUser } = useAppStore.getState()
           setUser(result.user)
 
-          // Update localStorage to stay in sync
-          const storedAuth = localStorage.getItem('beeswarm_auth')
-          if (storedAuth) {
-            const parsed = JSON.parse(storedAuth)
-            parsed.user = result.user
-            localStorage.setItem('beeswarm_auth', JSON.stringify(parsed))
+          // Update secure storage to stay in sync
+          if (window.electronAPI?.secureStorage) {
+            const authData = JSON.stringify({
+              user: result.user,
+              timestamp: Date.now()
+            })
+
+            const storeResult = await window.electronAPI.secureStorage.set('codedeck_auth', authData)
+
+            if (storeResult.success && storeResult.encrypted) {
+              localStorage.setItem('codedeck_auth_encrypted', storeResult.encrypted)
+              if (storeResult.fallback) {
+                localStorage.setItem('codedeck_auth_fallback', 'true')
+              }
+            }
           }
 
           console.log('✅ Refreshed user session, plan:', result.user.plan)
@@ -275,7 +284,7 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
     if (!selectedTemplate) return
 
     // Open subscription page in browser
-    const upgradeUrl = `https://beeswarm.app/upgrade?plan=${selectedTemplate.requiredPlan}`
+    const upgradeUrl = `https://codedeck.app/upgrade?plan=${selectedTemplate.requiredPlan}`
     window.open(upgradeUrl, '_blank')
 
     // Close the modal

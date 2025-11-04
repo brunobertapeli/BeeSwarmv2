@@ -3,6 +3,7 @@ import { templateService } from './TemplateService'
 import { templateValidator } from './TemplateValidator'
 import { portService } from './PortService'
 import { Template } from './MongoService'
+import { getCurrentUserId } from '../main'
 import fs from 'fs'
 import path from 'path'
 import { shell } from 'electron'
@@ -25,13 +26,19 @@ class ProjectService {
       console.log('   Template:', template.name)
       console.log('   Project Name:', projectName)
 
+      // Get current user ID
+      const userId = getCurrentUserId()
+      if (!userId) {
+        throw new Error('No user logged in')
+      }
+
       // Step 1: Check if project already exists
-      if (templateService.projectExists(projectName)) {
+      if (templateService.projectExists(projectName, userId)) {
         throw new Error(`A project with the name "${projectName}" already exists`)
       }
 
       // Step 2: Create project in database with 'creating' status
-      const projectPath = templateService.getProjectPath(projectName)
+      const projectPath = templateService.getProjectPath(projectName, userId)
       const project = databaseService.createProject({
         name: projectName,
         path: projectPath,
@@ -47,6 +54,7 @@ class ProjectService {
         const clonedPath = await templateService.cloneTemplate(
           template.githubUrl,
           projectName,
+          userId,
           project.id // Pass projectId for terminal output
         )
 
@@ -160,13 +168,19 @@ class ProjectService {
       throw new Error('Project not found')
     }
 
+    // Get current user ID
+    const userId = getCurrentUserId()
+    if (!userId) {
+      throw new Error('No user logged in')
+    }
+
     // Check if new project name already exists
-    if (templateService.projectExists(newName)) {
+    if (templateService.projectExists(newName, userId)) {
       throw new Error(`A project with the name "${newName}" already exists`)
     }
 
     // Get new path
-    const newPath = templateService.getProjectPath(newName)
+    const newPath = templateService.getProjectPath(newName, userId)
 
     // Rename directory
     if (fs.existsSync(project.path)) {

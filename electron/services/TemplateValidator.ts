@@ -11,7 +11,7 @@ export interface ValidationResult {
 }
 
 /**
- * Required file/directory structure for BeeSwarm templates
+ * Required file/directory structure for CodeDeck templates
  */
 interface StructureRequirement {
   path: string;
@@ -23,7 +23,7 @@ interface StructureRequirement {
 /**
  * TemplateValidator Service
  *
- * Validates that cloned templates follow the required BeeSwarm structure
+ * Validates that cloned templates follow the required CodeDeck structure
  */
 class TemplateValidator {
   private requirements: StructureRequirement[] = [
@@ -145,7 +145,7 @@ class TemplateValidator {
         // Check for port 5174 configuration
         if (!viteConfig.includes('5174')) {
           warnings.push(
-            'frontend/vite.config.ts should specify port 5174 to avoid conflict with BeeSwarm (port 5173)'
+            'frontend/vite.config.ts should specify port 5174 to avoid conflict with CodeDeck (port 5173)'
           );
         }
       } catch (error) {

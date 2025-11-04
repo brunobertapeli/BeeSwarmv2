@@ -1,75 +1,111 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { authService } from '../services/AuthService'
 import { mongoService } from '../services/MongoService'
+import { setCurrentUser, clearCurrentUser } from '../main'
+
+// Helper to setup OAuth popup with race-condition-safe callback handling
+function setupOAuthPopup(
+  popup: BrowserWindow,
+  mainWindow: BrowserWindow,
+  handleAuthCallback: (url: string) => Promise<any>
+) {
+  let handled = false
+  let isProcessing = false
+
+  // Cleanup function to remove all listeners
+  const cleanup = () => {
+    popup.webContents.removeAllListeners('will-navigate')
+    popup.webContents.removeAllListeners('will-redirect')
+    popup.webContents.removeAllListeners('did-navigate')
+    popup.webContents.removeAllListeners('did-navigate-in-page')
+    popup.webContents.removeAllListeners('did-finish-load')
+    popup.removeAllListeners('closed')
+  }
+
+  const handleAuth = async (url: string) => {
+    // Double-check pattern to prevent race conditions
+    if (handled || isProcessing) return
+    if (!url.includes('/auth/callback') && !url.includes('?code=')) return
+
+    // Set processing flag immediately (synchronously)
+    isProcessing = true
+
+    // Remove all event listeners to prevent duplicate calls
+    cleanup()
+
+    // Mark as handled
+    handled = true
+
+    try {
+      // Load blank page to stop further navigation
+      if (!popup.isDestroyed()) {
+        popup.loadURL('about:blank').catch(() => {})
+      }
+
+      const result = await handleAuthCallback(url)
+
+      // Close popup
+      if (!popup.isDestroyed()) {
+        popup.close()
+      }
+
+      // Send result to main window
+      if (result.success && result.user) {
+        mainWindow.webContents.send('auth:success', result)
+      } else {
+        mainWindow.webContents.send('auth:error', result)
+      }
+    } catch (error: any) {
+      if (!popup.isDestroyed()) {
+        popup.close()
+      }
+      mainWindow.webContents.send('auth:error', { error: error.message })
+    }
+  }
+
+  // Setup all event listeners
+  popup.webContents.on('will-navigate', (event, url) => {
+    if (url.includes('/auth/callback') || url.includes('?code=')) {
+      event.preventDefault()
+    }
+    handleAuth(url)
+  })
+
+  popup.webContents.on('will-redirect', (event, url) => {
+    if (url.includes('/auth/callback') || url.includes('?code=')) {
+      event.preventDefault()
+    }
+    handleAuth(url)
+  })
+
+  popup.webContents.on('did-navigate', (event, url) => {
+    handleAuth(url)
+  })
+
+  popup.webContents.on('did-navigate-in-page', (event, url) => {
+    handleAuth(url)
+  })
+
+  popup.webContents.on('did-finish-load', () => {
+    const url = popup.webContents.getURL()
+    handleAuth(url)
+  })
+
+  // Handle popup close (user cancelled)
+  popup.on('closed', () => {
+    cleanup()
+    if (!handled) {
+      mainWindow.webContents.send('auth:error', { error: 'Authentication cancelled' })
+    }
+  })
+}
 
 export function registerAuthHandlers(mainWindow: BrowserWindow) {
   // Sign in with Google
   ipcMain.handle('auth:sign-in-google', async () => {
     try {
       const { popup } = await authService.signInWithGoogle(mainWindow)
-
-      let handled = false
-
-      const handleAuth = async (url: string) => {
-        if (handled) return
-        if (url.includes('/auth/callback') || url.includes('?code=')) {
-          handled = true
-
-          // Load blank page to stop navigation attempts
-          if (!popup.isDestroyed()) {
-            popup.loadURL('about:blank')
-          }
-
-          const result = await handleAuthCallback(url)
-
-          if (!popup.isDestroyed()) {
-            popup.close()
-          }
-
-          if (result.success && result.user) {
-            mainWindow.webContents.send('auth:success', result)
-          } else {
-            mainWindow.webContents.send('auth:error', result)
-          }
-        }
-      }
-
-      // Listen for all navigation events
-      popup.webContents.on('will-navigate', (event, url) => {
-        if (url.includes('/auth/callback') || url.includes('?code=')) {
-          event.preventDefault()
-        }
-        handleAuth(url)
-      })
-
-      popup.webContents.on('will-redirect', (event, url) => {
-        if (url.includes('/auth/callback') || url.includes('?code=')) {
-          event.preventDefault()
-        }
-        handleAuth(url)
-      })
-
-      popup.webContents.on('did-navigate', (event, url) => {
-        handleAuth(url)
-      })
-
-      popup.webContents.on('did-navigate-in-page', (event, url) => {
-        handleAuth(url)
-      })
-
-      // Check URL after page loads
-      popup.webContents.on('did-finish-load', () => {
-        const url = popup.webContents.getURL()
-        handleAuth(url)
-      })
-
-      // Handle popup close
-      popup.on('closed', () => {
-        if (!handled) {
-          mainWindow.webContents.send('auth:error', { error: 'Authentication cancelled' })
-        }
-      })
-
+      setupOAuthPopup(popup, mainWindow, handleAuthCallback)
       return { success: true }
     } catch (error: any) {
       return { success: false, error: error.message }
@@ -80,65 +116,7 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
   ipcMain.handle('auth:sign-in-facebook', async () => {
     try {
       const { popup } = await authService.signInWithFacebook(mainWindow)
-      let handled = false
-
-      const handleAuth = async (url: string) => {
-        if (handled) return
-        if (url.includes('/auth/callback') || url.includes('?code=')) {
-          handled = true
-
-          // Load blank page to stop navigation attempts
-          if (!popup.isDestroyed()) {
-            popup.loadURL('about:blank')
-          }
-
-          const result = await handleAuthCallback(url)
-
-          if (!popup.isDestroyed()) {
-            popup.close()
-          }
-
-          if (result.success && result.user) {
-            mainWindow.webContents.send('auth:success', result)
-          } else {
-            mainWindow.webContents.send('auth:error', result)
-          }
-        }
-      }
-
-      popup.webContents.on('will-navigate', (event, url) => {
-        if (url.includes('/auth/callback') || url.includes('?code=')) {
-          event.preventDefault()
-        }
-        handleAuth(url)
-      })
-
-      popup.webContents.on('will-redirect', (event, url) => {
-        if (url.includes('/auth/callback') || url.includes('?code=')) {
-          event.preventDefault()
-        }
-        handleAuth(url)
-      })
-
-      popup.webContents.on('did-navigate', (event, url) => {
-        handleAuth(url)
-      })
-
-      popup.webContents.on('did-navigate-in-page', (event, url) => {
-        handleAuth(url)
-      })
-
-      popup.webContents.on('did-finish-load', () => {
-        const url = popup.webContents.getURL()
-        handleAuth(url)
-      })
-
-      popup.on('closed', () => {
-        if (!handled) {
-          mainWindow.webContents.send('auth:error', { error: 'Authentication cancelled' })
-        }
-      })
-
+      setupOAuthPopup(popup, mainWindow, handleAuthCallback)
       return { success: true }
     } catch (error: any) {
       return { success: false, error: error.message }
@@ -149,65 +127,7 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
   ipcMain.handle('auth:sign-in-github', async () => {
     try {
       const { popup } = await authService.signInWithGithub(mainWindow)
-      let handled = false
-
-      const handleAuth = async (url: string) => {
-        if (handled) return
-        if (url.includes('/auth/callback') || url.includes('?code=')) {
-          handled = true
-
-          // Load blank page to stop navigation attempts
-          if (!popup.isDestroyed()) {
-            popup.loadURL('about:blank')
-          }
-
-          const result = await handleAuthCallback(url)
-
-          if (!popup.isDestroyed()) {
-            popup.close()
-          }
-
-          if (result.success && result.user) {
-            mainWindow.webContents.send('auth:success', result)
-          } else {
-            mainWindow.webContents.send('auth:error', result)
-          }
-        }
-      }
-
-      popup.webContents.on('will-navigate', (event, url) => {
-        if (url.includes('/auth/callback') || url.includes('?code=')) {
-          event.preventDefault()
-        }
-        handleAuth(url)
-      })
-
-      popup.webContents.on('will-redirect', (event, url) => {
-        if (url.includes('/auth/callback') || url.includes('?code=')) {
-          event.preventDefault()
-        }
-        handleAuth(url)
-      })
-
-      popup.webContents.on('did-navigate', (event, url) => {
-        handleAuth(url)
-      })
-
-      popup.webContents.on('did-navigate-in-page', (event, url) => {
-        handleAuth(url)
-      })
-
-      popup.webContents.on('did-finish-load', () => {
-        const url = popup.webContents.getURL()
-        handleAuth(url)
-      })
-
-      popup.on('closed', () => {
-        if (!handled) {
-          mainWindow.webContents.send('auth:error', { error: 'Authentication cancelled' })
-        }
-      })
-
+      setupOAuthPopup(popup, mainWindow, handleAuthCallback)
       return { success: true }
     } catch (error: any) {
       return { success: false, error: error.message }
@@ -235,15 +155,20 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         })
       }
 
+      const userResult = {
+        id: user.id,
+        email: userData.email,
+        name: userData.name,
+        photoUrl: userData.photoUrl,
+        plan: userData.plan
+      }
+
+      // Set current user and initialize user-scoped services
+      setCurrentUser(user.id)
+
       return {
         success: true,
-        user: {
-          id: user.id,
-          email: userData.email,
-          name: userData.name,
-          photoUrl: userData.photoUrl,
-          plan: userData.plan
-        },
+        user: userResult,
         session
       }
     } catch (error: any) {
@@ -273,15 +198,20 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         })
       }
 
+      const userResult = {
+        id: user.id,
+        email: userData.email,
+        name: userData.name,
+        photoUrl: userData.photoUrl,
+        plan: userData.plan
+      }
+
+      // Set current user and initialize user-scoped services
+      setCurrentUser(user.id)
+
       return {
         success: true,
-        user: {
-          id: user.id,
-          email: userData.email,
-          name: userData.name,
-          photoUrl: userData.photoUrl,
-          plan: userData.plan
-        },
+        user: userResult,
         session
       }
     } catch (error: any) {
@@ -305,16 +235,21 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         return { success: true, session: null, user: null }
       }
 
+      const userResult = {
+        id: session.user.id,
+        email: userData.email,
+        name: userData.name,
+        photoUrl: userData.photoUrl,
+        plan: userData.plan
+      }
+
+      // Set current user and initialize user-scoped services
+      setCurrentUser(session.user.id)
+
       return {
         success: true,
         session,
-        user: {
-          id: session.user.id,
-          email: userData.email,
-          name: userData.name,
-          photoUrl: userData.photoUrl,
-          plan: userData.plan
-        }
+        user: userResult
       }
     } catch (error: any) {
       return { success: false, error: error.message }
@@ -325,6 +260,7 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
   ipcMain.handle('auth:sign-out', async () => {
     try {
       await authService.signOut()
+      clearCurrentUser()
       return { success: true }
     } catch (error: any) {
       return { success: false, error: error.message }

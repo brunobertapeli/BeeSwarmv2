@@ -186,6 +186,24 @@ export interface ElectronAPI {
     onAuthError: (callback: (result: any) => void) => () => void
   }
 
+  secureStorage: {
+    set: (key: string, value: string) => Promise<{
+      success: boolean
+      encrypted?: string
+      fallback?: boolean
+      error?: string
+    }>
+    get: (encrypted: string, isFallback?: boolean) => Promise<{
+      success: boolean
+      value?: string
+      error?: string
+    }>
+    isAvailable: () => Promise<{
+      success: boolean
+      available?: boolean
+    }>
+  }
+
   templates: {
     fetch: () => Promise<{
       success: boolean

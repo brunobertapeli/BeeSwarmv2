@@ -1,9 +1,10 @@
 import { Mail, Loader2 } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
 import { useState, useEffect } from 'react'
+import type { User } from '../types/auth'
 
 interface LoginProps {
-  onLoginSuccess: (user: any) => void
+  onLoginSuccess: (user: User) => void
 }
 
 function Login({ onLoginSuccess }: LoginProps) {
@@ -14,14 +15,14 @@ function Login({ onLoginSuccess }: LoginProps) {
   useEffect(() => {
     // Listen for auth success from popup window
     if (window.electronAPI?.auth) {
-      const cleanupSuccess = window.electronAPI.auth.onAuthSuccess((result: any) => {
+      const cleanupSuccess = window.electronAPI.auth.onAuthSuccess((result: { user: User; session?: any }) => {
         setIsLoading(false)
         setLoadingProvider(null)
         toast.success('Welcome!', `Successfully logged in as ${result.user.name}`)
         onLoginSuccess(result.user)
       })
 
-      const cleanupError = window.electronAPI.auth.onAuthError((result: any) => {
+      const cleanupError = window.electronAPI.auth.onAuthError((result: { error?: string }) => {
         setIsLoading(false)
         setLoadingProvider(null)
         toast.error('Login failed', result.error || 'An unknown error occurred')
@@ -115,7 +116,7 @@ function Login({ onLoginSuccess }: LoginProps) {
 
         {/* Title */}
         <h1 className="text-3xl font-bold text-white text-center mb-2">
-          Welcome to BeeSwarm
+          Welcome to CodeDeck
         </h1>
         <p className="text-gray-400 text-center mb-10">
           Sign in to start building your apps
@@ -191,7 +192,7 @@ function Login({ onLoginSuccess }: LoginProps) {
 
         {/* Terms */}
         <p className="text-xs text-gray-500 text-center mt-8 leading-relaxed">
-          By continuing, you agree to BeeSwarm's{' '}
+          By continuing, you agree to CodeDeck's{' '}
           <a href="#" className="text-primary hover:underline">Terms of Service</a>
           {' '}and{' '}
           <a href="#" className="text-primary hover:underline">Privacy Policy</a>

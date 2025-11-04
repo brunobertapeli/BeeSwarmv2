@@ -13,18 +13,18 @@ class TemplateService {
 
   /**
    * Get the base directory for projects
-   * ~/Documents/BeeSwarm/Projects/
+   * ~/Documents/CodeDeck/{userId}/Projects/
    */
-  private getProjectsBaseDir(): string {
+  private getProjectsBaseDir(userId: string): string {
     const homeDir = app.getPath('home')
-    return path.join(homeDir, 'Documents', 'BeeSwarm', 'Projects')
+    return path.join(homeDir, 'Documents', 'CodeDeck', userId, 'Projects')
   }
 
   /**
    * Ensure the projects base directory exists
    */
-  private ensureProjectsDir(): void {
-    const baseDir = this.getProjectsBaseDir()
+  private ensureProjectsDir(userId: string): void {
+    const baseDir = this.getProjectsBaseDir(userId)
     if (!fs.existsSync(baseDir)) {
       fs.mkdirSync(baseDir, { recursive: true })
       console.log('✅ Created projects directory:', baseDir)
@@ -35,17 +35,18 @@ class TemplateService {
    * Clone a template from GitHub
    * @param githubUrl - GitHub repository URL
    * @param projectName - Name of the project (will be sanitized for directory name)
+   * @param userId - User ID for project isolation
    * @param projectId - Optional project ID for terminal output
    * @returns Full path to the cloned project
    */
-  async cloneTemplate(githubUrl: string, projectName: string, projectId?: string): Promise<string> {
+  async cloneTemplate(githubUrl: string, projectName: string, userId: string, projectId?: string): Promise<string> {
     try {
       // Ensure projects directory exists
-      this.ensureProjectsDir()
+      this.ensureProjectsDir(userId)
 
       // Sanitize project name for directory
       const dirName = this.sanitizeProjectName(projectName)
-      const projectPath = path.join(this.getProjectsBaseDir(), dirName)
+      const projectPath = path.join(this.getProjectsBaseDir(userId), dirName)
 
       // Check if directory already exists
       if (fs.existsSync(projectPath)) {
@@ -121,18 +122,18 @@ class TemplateService {
   /**
    * Check if a project directory exists
    */
-  projectExists(projectName: string): boolean {
+  projectExists(projectName: string, userId: string): boolean {
     const dirName = this.sanitizeProjectName(projectName)
-    const projectPath = path.join(this.getProjectsBaseDir(), dirName)
+    const projectPath = path.join(this.getProjectsBaseDir(userId), dirName)
     return fs.existsSync(projectPath)
   }
 
   /**
    * Get full project path
    */
-  getProjectPath(projectName: string): string {
+  getProjectPath(projectName: string, userId: string): string {
     const dirName = this.sanitizeProjectName(projectName)
-    return path.join(this.getProjectsBaseDir(), dirName)
+    return path.join(this.getProjectsBaseDir(userId), dirName)
   }
 
   /**

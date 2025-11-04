@@ -1,5 +1,5 @@
 {
-  "name": "beeswarm",
+  "name": "codedeck",
   "version": "1.0.0",
   "description": "Visual wrapper for Claude Code SDK",
   "main": "dist-electron/main.js",
@@ -17,7 +17,7 @@
     "ai",
     "low-code"
   ],
-  "author": "BeeSwarm",
+  "author": "CodeDeck",
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.30",
@@ -58,8 +58,8 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.beeswarm.app",
-    "productName": "BeeSwarm",
+    "appId": "com.codedeck.app",
+    "productName": "CodeDeck",
     "files": [
       "dist/**/*",
       "dist-electron/**/*"

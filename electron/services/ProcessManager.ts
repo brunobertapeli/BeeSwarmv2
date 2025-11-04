@@ -4,6 +4,7 @@ import stripAnsi from 'strip-ansi';
 import { portService } from './PortService';
 import { processPersistence } from './ProcessPersistence';
 import path from 'path';
+import os from 'os';
 
 /**
  * Process state enum
@@ -143,12 +144,17 @@ class ProcessManager extends EventEmitter {
     this.processes.set(projectId, processInfo);
     this.emit('process-status-changed', projectId, ProcessState.STARTING);
 
+    // Setup environment with nvm Node path
+    const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm');
+    const nvmNodePath = path.join(nvmDir, 'versions', 'node', 'v20.19.5', 'bin');
+
     // Spawn netlify dev
     const childProcess = spawn('npx', ['netlify', 'dev', '--port', port.toString()], {
       cwd: projectPath,
       shell: true,
       env: {
         ...process.env,
+        PATH: `${nvmNodePath}:${process.env.PATH}`,
         FORCE_COLOR: '1', // Preserve ANSI colors
         NODE_ENV: 'development',
         BROWSER: 'none', // Prevent react-scripts from opening browser
