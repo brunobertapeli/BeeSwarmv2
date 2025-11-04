@@ -3,7 +3,7 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 // Now import everything else
-import { app, BrowserWindow, Menu, shell } from 'electron'
+import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { registerAuthHandlers } from './handlers/authHandlers.js'
@@ -263,6 +263,25 @@ async function initializeApp() {
     registerChatHandlers()
     registerSupportHandlers()
     registerGitHandlers()
+
+    // App-level IPC handlers
+    ipcMain.on('app:flash-window', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        // Flash the taskbar/dock icon if window is not focused
+        if (!mainWindow.isFocused()) {
+          mainWindow.flashFrame(true)
+
+          // Stop flashing when window gets focused
+          const stopFlashing = () => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.flashFrame(false)
+            }
+            mainWindow?.off('focus', stopFlashing)
+          }
+          mainWindow.once('focus', stopFlashing)
+        }
+      }
+    })
 
     handlersRegistered = true
   }

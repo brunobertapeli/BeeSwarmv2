@@ -8,6 +8,7 @@ import AnthropicIcon from '../assets/images/anthropic.svg'
 import GitIcon from '../assets/images/git.svg'
 import DeployIcon from '../assets/images/deploy.svg'
 import bgImage from '../assets/images/bg.jpg'
+import successSound from '../assets/sounds/success.wav'
 
 interface ConversationMessage {
   type: 'user' | 'assistant' | 'tool'
@@ -388,6 +389,30 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
       setAllBlocks(prev => prev.map(b =>
         b.id === block.id ? transformBlock(block) : b
       ))
+
+      // Check if block was interrupted
+      let wasInterrupted = false
+      try {
+        if (block.claudeMessages) {
+          const messages = JSON.parse(block.claudeMessages)
+          wasInterrupted = messages.some((m: string) => m.includes('⚠️ Stopped by user'))
+        }
+      } catch (e) {
+        console.error('Failed to parse claude messages:', e)
+      }
+
+      // Play success sound and flash icon if not interrupted
+      if (!wasInterrupted) {
+        // Play success sound
+        const audio = new Audio(successSound)
+        audio.volume = 0.5
+        audio.play().catch(err => console.error('Failed to play sound:', err))
+
+        // Flash app icon if window not focused
+        if (window.electronAPI?.app?.flashWindow) {
+          window.electronAPI.app.flashWindow()
+        }
+      }
     })
 
     return () => {

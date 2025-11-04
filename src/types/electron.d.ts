@@ -406,6 +406,10 @@ export interface ElectronAPI {
     }>
   }
 
+  app: {
+    flashWindow: () => void
+  }
+
   support: {
     // Check if human support is available
     checkAvailability: () => Promise<{
