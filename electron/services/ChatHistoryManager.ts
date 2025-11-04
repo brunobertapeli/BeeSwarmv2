@@ -27,6 +27,7 @@ interface ActiveBlock {
   commitHash: string | null;
   filesChanged: number | null;
   operationStartTime: number; // When Claude started working
+  isInterrupted: boolean; // Flag to track if user interrupted this block
 }
 
 /**
@@ -39,6 +40,7 @@ interface ActiveBlock {
  */
 class ChatHistoryManager extends EventEmitter {
   private activeBlocks: Map<string, ActiveBlock> = new Map();
+  private interruptedBlocks: Set<string> = new Set(); // Track recently interrupted blocks
 
   /**
    * Initialize the chat history manager
@@ -58,6 +60,9 @@ class ChatHistoryManager extends EventEmitter {
   startBlock(projectId: string, blockId: string): void {
     console.log(`💬 Starting block tracking: ${blockId} for project ${projectId}`);
 
+    // Clear any previous interrupted flag for this project
+    this.interruptedBlocks.delete(projectId);
+
     this.activeBlocks.set(projectId, {
       blockId,
       projectId,
@@ -66,6 +71,7 @@ class ChatHistoryManager extends EventEmitter {
       commitHash: null,
       filesChanged: null,
       operationStartTime: Date.now(),
+      isInterrupted: false,
     });
   }
 
@@ -136,6 +142,14 @@ class ChatHistoryManager extends EventEmitter {
 
     // Completion - extract stats, summary, and mark complete
     if (event.type === 'result') {
+      // Check if block was interrupted by user
+      if (activeBlock.isInterrupted) {
+        console.log(`⚠️ Block ${activeBlock.blockId} was interrupted - skipping normal completion`);
+        // Just clean up and exit - cancelBlock() already handled everything
+        this.activeBlocks.delete(projectId);
+        return;
+      }
+
       console.log(`💬 Completing block: ${activeBlock.blockId}`);
 
       const timeSeconds = ((Date.now() - activeBlock.operationStartTime) / 1000).toFixed(1);
@@ -219,7 +233,7 @@ class ChatHistoryManager extends EventEmitter {
    * Add an action to active block (git commit, build, dev server)
    */
   addAction(projectId: string, action: {
-    type: 'git_commit' | 'build' | 'dev_server'
+    type: 'git_commit' | 'build' | 'dev_server' | 'checkpoint_restore'
     status: 'in_progress' | 'success' | 'error'
     message?: string
     data?: any
@@ -364,6 +378,20 @@ class ChatHistoryManager extends EventEmitter {
   }
 
   /**
+   * Check if project was recently interrupted
+   */
+  wasInterrupted(projectId: string): boolean {
+    return this.interruptedBlocks.has(projectId);
+  }
+
+  /**
+   * Clear interrupted flag for project
+   */
+  clearInterrupted(projectId: string): void {
+    this.interruptedBlocks.delete(projectId);
+  }
+
+  /**
    * Cancel/abort active block
    */
   cancelBlock(projectId: string): void {
@@ -375,6 +403,22 @@ class ChatHistoryManager extends EventEmitter {
 
     console.log(`💬 Canceling block: ${activeBlock.blockId}`);
 
+    // Mark as interrupted BEFORE any completion logic
+    activeBlock.isInterrupted = true;
+
+    // Track this project as interrupted so claude-complete handler can check it
+    this.interruptedBlocks.add(projectId);
+    console.log(`🔴 Marked project ${projectId} as interrupted`);
+
+    // Add interrupted message to the block
+    const interruptedMessage = '⚠️ Stopped by user';
+    activeBlock.claudeMessages.push(interruptedMessage);
+
+    // Update block with interrupted message
+    databaseService.updateChatBlock(activeBlock.blockId, {
+      claudeMessages: JSON.stringify(activeBlock.claudeMessages),
+    });
+
     // Mark as complete (even though it was canceled)
     databaseService.completeChatBlock(activeBlock.blockId);
 
@@ -384,8 +428,9 @@ class ChatHistoryManager extends EventEmitter {
       emitChatEvent('chat:block-completed', projectId, completedBlock);
     }
 
-    // Remove from active blocks
-    this.activeBlocks.delete(projectId);
+    // DON'T delete from active blocks yet!
+    // Keep it in memory so handleClaudeEvent can check isInterrupted flag
+    // It will be removed when next block starts or in the completion handler
   }
 }
 

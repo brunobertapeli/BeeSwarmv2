@@ -251,6 +251,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
+  // Git methods
+  git: {
+    restoreCheckpoint: (projectId, commitHash) => ipcRenderer.invoke('git:restore-checkpoint', projectId, commitHash)
+  },
+
   // Support methods
   support: {
     checkAvailability: () => ipcRenderer.invoke('support:checkAvailability'),

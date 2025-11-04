@@ -398,6 +398,14 @@ export interface ElectronAPI {
     onModelChanged: (callback: (projectId: string, model: string) => void) => () => void
   }
 
+  git: {
+    restoreCheckpoint: (projectId: string, commitHash: string) => Promise<{
+      success: boolean
+      commitHash?: string
+      error?: string
+    }>
+  }
+
   support: {
     // Check if human support is available
     checkAvailability: () => Promise<{

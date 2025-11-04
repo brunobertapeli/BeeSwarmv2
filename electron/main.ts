@@ -16,6 +16,7 @@ import { registerTerminalHandlers, setTerminalHandlersWindow } from './handlers/
 import { registerClaudeHandlers, setClaudeHandlersWindow } from './handlers/claudeHandlers.js'
 import { registerChatHandlers, setChatHandlersWindow } from './handlers/chatHandlers.js'
 import { registerSupportHandlers } from './handlers/supportHandlers.js'
+import { registerGitHandlers, setGitHandlersWindow } from './handlers/gitHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { previewService } from './services/PreviewService.js'
 import { processManager } from './services/ProcessManager.js'
@@ -231,6 +232,7 @@ function createWindow() {
   setTerminalHandlersWindow(mainWindow.webContents)
   setClaudeHandlersWindow(mainWindow.webContents)
   setChatHandlersWindow(mainWindow.webContents)
+  setGitHandlersWindow(mainWindow.webContents)
 }
 
 // Initialize database and register IPC handlers only once
@@ -260,6 +262,7 @@ async function initializeApp() {
     registerClaudeHandlers()
     registerChatHandlers()
     registerSupportHandlers()
+    registerGitHandlers()
 
     handlersRegistered = true
   }

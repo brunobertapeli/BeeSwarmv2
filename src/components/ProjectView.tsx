@@ -413,6 +413,16 @@ function ProjectView() {
                         <span>{serverStatus === 'starting' ? 'Starting servers...' : 'Loading preview...'}</span>
                       </div>
                     )}
+                    {(serverStatus === 'error' || serverStatus === 'crashed') && (
+                      <div className="mt-8">
+                        <button
+                          onClick={startDevServer}
+                          className="px-6 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors font-medium"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

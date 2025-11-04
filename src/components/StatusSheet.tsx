@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 
 // Import workflow icons
@@ -29,7 +29,7 @@ interface CompletionStats {
 }
 
 interface Action {
-  type: 'git_commit' | 'build' | 'dev_server'
+  type: 'git_commit' | 'build' | 'dev_server' | 'checkpoint_restore'
   status: 'in_progress' | 'success' | 'error'
   message?: string
   data?: any
@@ -39,6 +39,7 @@ interface Action {
 interface ConversationBlock {
   id: string
   type: 'conversation' | 'deployment'
+  projectId?: string
   userPrompt?: string
   messages?: ConversationMessage[]
   isComplete: boolean
@@ -225,6 +226,7 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
     return {
       id: block.id,
       type: 'conversation' as const,
+      projectId: block.projectId,
       userPrompt: block.userPrompt,
       messages,
       isComplete: block.isComplete,
@@ -296,6 +298,38 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
       console.error('Failed to load more blocks:', error)
     } finally {
       setIsLoadingMore(false)
+    }
+  }
+
+  // Handle restore to checkpoint
+  const handleRestoreCheckpoint = async (block: ConversationBlock) => {
+    if (!projectId || !window.electronAPI?.git || !block.commitHash) return
+
+    // Safety check: Validate commit hash
+    if (block.commitHash === 'unknown' || block.commitHash.length < 7) {
+      console.error(`❌ Invalid commit hash: ${block.commitHash}`)
+      alert('Cannot restore: Invalid commit hash')
+      return
+    }
+
+    // Safety check: Ensure block belongs to current project
+    if (block.projectId !== projectId) {
+      console.error(`❌ Cannot restore checkpoint from different project. Block project: ${block.projectId}, Current project: ${projectId}`)
+      alert('Cannot restore checkpoint from a different project')
+      return
+    }
+
+    try {
+      console.log(`🔄 Restoring to checkpoint ${block.commitHash}...`)
+      const result = await window.electronAPI.git.restoreCheckpoint(projectId, block.commitHash)
+
+      if (result.success) {
+        console.log(`✅ Successfully restored to checkpoint ${block.commitHash}`)
+      } else {
+        console.error(`❌ Failed to restore checkpoint: ${result.error}`)
+      }
+    } catch (error) {
+      console.error('❌ Error restoring checkpoint:', error)
     }
   }
 
@@ -656,33 +690,145 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
                 // Render conversation block with timeline workflow
                 const hasGitAction = block.actions?.some(a => a.type === 'git_commit')
                 const hasDeployAction = block.actions?.some(a => a.type === 'dev_server')
+                const hasRestoreAction = block.actions?.some(a => a.type === 'checkpoint_restore')
                 const gitAction = block.actions?.find(a => a.type === 'git_commit')
                 const deployAction = block.actions?.find(a => a.type === 'dev_server')
+                const restoreAction = block.actions?.find(a => a.type === 'checkpoint_restore')
+                const isRestoreBlock = hasRestoreAction || block.userPrompt?.startsWith('Restore to checkpoint')
+                const wasInterrupted = block.messages?.some(m => m.content.includes('⚠️ Stopped by user'))
 
                 return (
                   <div key={block.id} className="mb-6">
                     {/* Workflow Block Container */}
                     <div className="bg-white/[0.02] rounded-lg border border-white/10 p-4 relative">
-                      {/* Checkpoint or Stop button (top right) */}
-                      {block.isComplete ? (
-                        <button
-                          className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors group z-10"
-                          title="Restore to this checkpoint"
-                        >
-                          <RotateCcw size={12} className="text-gray-400 group-hover:text-primary transition-colors" />
-                        </button>
-                      ) : showStopButton ? (
-                        <button
-                          onClick={onStopClick}
-                          className="absolute top-3 right-3 p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group z-10"
-                          title="Stop generation"
-                        >
-                          <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
-                        </button>
-                      ) : null}
+                      {/* Checkpoint or Stop button (top right) - only for non-restore blocks */}
+                      {!isRestoreBlock && (
+                        <>
+                          {block.isComplete && block.commitHash && block.commitHash !== 'unknown' ? (
+                            <button
+                              onClick={() => handleRestoreCheckpoint(block)}
+                              className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors group z-10"
+                              title="Restore to this checkpoint"
+                            >
+                              <RotateCcw size={12} className="text-gray-400 group-hover:text-primary transition-colors" />
+                            </button>
+                          ) : showStopButton ? (
+                            <button
+                              onClick={onStopClick}
+                              className="absolute top-3 right-3 p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group z-10"
+                              title="Stop generation"
+                            >
+                              <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
+                            </button>
+                          ) : null}
+                        </>
+                      )}
 
-                      {/* Timeline Workflow */}
-                      <div className="relative pr-8">
+                      {/* RESTORE BLOCK - Timeline design matching other blocks */}
+                      {isRestoreBlock ? (
+                        <div className="relative pr-8">
+                          {/* Continuous dotted line */}
+                          <div className="absolute left-[12px] top-0 bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
+
+                          {/* Git Restore Step */}
+                          <div className="relative pb-4">
+                            {/* Step header */}
+                            <div className="flex items-center gap-3 mb-3">
+                              {/* Git Icon */}
+                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                <img src={GitIcon} alt="Git" className="w-6 h-6 opacity-90" />
+                              </div>
+
+                              {/* Title + Status */}
+                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-gray-200">
+                                    {restoreAction?.status === 'in_progress'
+                                      ? 'Restoring checkpoint...'
+                                      : restoreAction?.status === 'success'
+                                      ? `Restored to checkpoint #${restoreAction?.data?.commitHash || ''}`
+                                      : 'Restore failed'
+                                    }
+                                  </span>
+                                  {restoreAction?.status === 'success' && (
+                                    <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                      <Check size={10} className="text-green-400" />
+                                    </div>
+                                  )}
+                                  {restoreAction?.status === 'success' && (
+                                    <span className="text-[10px] text-gray-500">
+                                      0.1s
+                                    </span>
+                                  )}
+                                  {restoreAction?.status === 'in_progress' && (
+                                    <Loader2 size={12} className="text-primary animate-spin" />
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Dev Server Step */}
+                          {hasDeployAction && deployAction && (
+                            <div className="relative">
+                              {/* Step header */}
+                              <div className="flex items-center gap-3 mb-3">
+                                {/* Deploy Icon */}
+                                <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                  <img src={DeployIcon} alt="Deploy" className="w-6 h-6 opacity-90" />
+                                </div>
+
+                                {/* Title + Status */}
+                                <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium text-gray-200">
+                                      {deployAction.status === 'in_progress'
+                                        ? 'Starting dev server...'
+                                        : deployAction.status === 'success'
+                                        ? 'Dev server running'
+                                        : 'Failed to start dev server'
+                                      }
+                                    </span>
+                                    {deployAction.status === 'success' && (
+                                      <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                        <Check size={10} className="text-green-400" />
+                                      </div>
+                                    )}
+                                    {deployAction.status === 'success' && deployAction.data?.restartTime && (
+                                      <span className="text-[10px] text-gray-500">
+                                        {deployAction.data.restartTime}s
+                                      </span>
+                                    )}
+                                    {deployAction.status === 'in_progress' && (
+                                      <Loader2 size={12} className="text-primary animate-spin" />
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Deploy step content (always visible) */}
+                              {deployAction.status === 'success' && deployAction.data?.url && (
+                                <div className="ml-10">
+                                  <div className="flex items-center gap-2 text-[11px]">
+                                    <span className="text-gray-400">Server:</span>
+                                    <a
+                                      href={deployAction.data.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group"
+                                    >
+                                      <span>{deployAction.data.url}</span>
+                                      <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
+                                    </a>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Timeline Workflow */
+                        <div className="relative pr-8">
                         {/* Continuous dotted line from top to bottom - behind icons */}
                         <div className="absolute left-[12px] top-0 bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
 
@@ -767,7 +913,7 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
 
                             {/* Messages */}
                             <div className="space-y-1.5">
-                              {block.messages?.map((message, idx) => {
+                              {block.messages?.filter(m => !m.content.includes('⚠️ Stopped by user')).map((message, idx) => {
                                 const messageId = `${block.id}-msg-${idx}`
                                 const isLong = isLongMessage(message.content)
                                 const isMessageExpanded = expandedMessages.has(messageId)
@@ -1016,8 +1162,35 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
                         </div>
                       )}
 
+                      {/* STEP: INTERRUPTED (Stopped by user) */}
+                      {wasInterrupted && (
+                        <div className="relative">
+                          {/* Step header */}
+                          <div className="flex items-center gap-3 mb-3">
+                            {/* X Icon */}
+                            <div className="flex-shrink-0 bg-red-500/10 rounded-full p-1 relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                              <X size={14} className="text-red-400" />
+                            </div>
+
+                            {/* Title + Status */}
+                            <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-200">
+                                  Stopped by user
+                                </span>
+                                <div className="flex-shrink-0 w-4 h-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                                  <Check size={10} className="text-red-400" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                        </div>
+                      )}
+
                     </div>
-                  </div>
                   </div>
                 )
               })}

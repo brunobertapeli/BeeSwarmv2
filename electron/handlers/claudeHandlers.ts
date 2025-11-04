@@ -5,6 +5,7 @@ import { databaseService } from '../services/DatabaseService';
 import { processManager } from '../services/ProcessManager';
 import { chatHistoryManager } from '../services/ChatHistoryManager';
 import { projectLockService } from '../services/ProjectLockService';
+import { emitChatEvent } from './chatHandlers';
 import { spawn } from 'child_process';
 import * as path from 'path';
 
@@ -174,9 +175,58 @@ export function registerClaudeHandlers(): void {
   // Destroy Claude session
   ipcMain.handle('claude:destroy-session', async (_event, projectId: string) => {
     try {
-      console.log(`🗑️ Destroying Claude session for project: ${projectId}`);
+      console.log(`🛑 Stopping Claude session for project: ${projectId}`);
 
-      claudeService.destroySession(projectId);
+      // 1. Interrupt the Claude session (not destroy - keeps conversation history)
+      claudeService.interrupt(projectId);
+
+      // 2. Check if there were any file edits in the active block
+      const activeBlock = chatHistoryManager.getActiveBlock(projectId);
+      const hadFileEdits = activeBlock?.toolExecutions?.some(
+        (tool) => tool.toolName === 'Edit' || tool.toolName === 'Write'
+      ) || false;
+
+      console.log(`📝 Had file edits: ${hadFileEdits}`);
+
+      // 3. Cancel the active block and mark as interrupted
+      if (activeBlock) {
+        console.log(`💬 Canceling active block: ${activeBlock.blockId}`);
+        chatHistoryManager.cancelBlock(projectId);
+      }
+
+      // 4. Only revert if there were actual file changes
+      if (hadFileEdits) {
+        // Find last valid commit from chat history
+        const history = databaseService.getChatHistory(projectId, 10);
+        const lastValidBlock = history.find(
+          (block) => block.commitHash && block.commitHash !== 'unknown' && block.commitHash.length >= 7
+        );
+
+        if (lastValidBlock?.commitHash) {
+          console.log(`🔄 Reverting to last checkpoint: ${lastValidBlock.commitHash}`);
+
+          const project = databaseService.getProjectById(projectId);
+          if (project) {
+            // Import and call restore function directly (not via IPC)
+            const gitHandlers = await import('./gitHandlers.js');
+
+            // Small delay to ensure block is completed first
+            setTimeout(async () => {
+              try {
+                // Call the restore function - we need to extract it from the module
+                // Since registerGitHandlers wraps it, we'll create a new restore directly
+                await performRestore(projectId, lastValidBlock.commitHash, project.path);
+              } catch (error) {
+                console.error(`❌ Error reverting to checkpoint:`, error);
+              }
+            }, 100);
+          }
+        } else {
+          console.log(`⚠️ No valid checkpoint found to revert to`);
+        }
+      } else {
+        console.log(`✅ No file edits detected, skipping revert`);
+      }
 
       return {
         success: true,
@@ -465,6 +515,14 @@ function setupClaudeEventForwarding(): void {
   claudeService.on('claude-complete', async ({ projectId }: { projectId: string }) => {
     console.log(`✅ Claude completed for project: ${projectId}`);
 
+    // Check if project was interrupted - skip post-completion workflow
+    if (chatHistoryManager.wasInterrupted(projectId)) {
+      console.log(`⚠️ Skipping post-completion workflow for interrupted project ${projectId}`);
+      // Clear the interrupted flag now that we've handled it
+      chatHistoryManager.clearInterrupted(projectId);
+      return;
+    }
+
     // Get project details
     const project = databaseService.getProjectById(projectId);
     if (!project) {
@@ -535,6 +593,34 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
   try {
     console.log(`🔄 Starting post-completion workflow for ${projectId}`);
 
+    // Check if there were any file-modifying tools used
+    const blocks = databaseService.getChatHistory(projectId, 1);
+    if (blocks.length > 0) {
+      const lastBlock = blocks[0];
+      let toolExecutions: any[] = [];
+
+      try {
+        if (lastBlock.toolExecutions) {
+          toolExecutions = JSON.parse(lastBlock.toolExecutions);
+        }
+      } catch (e) {
+        console.error('Failed to parse tool executions:', e);
+      }
+
+      // Check if any file-modifying tools were used
+      const hasFileModifications = toolExecutions.some(
+        (tool: any) => tool.toolName === 'Edit' || tool.toolName === 'Write' || tool.toolName === 'Bash'
+      );
+
+      if (!hasFileModifications) {
+        console.log(`ℹ️ No file modifications detected, skipping post-completion workflow for ${projectId}`);
+        terminalAggregator.addSystemLine(projectId, '\n');
+        terminalAggregator.addSystemLine(projectId, 'ℹ️  No file changes detected - skipping commit and restart\n');
+        terminalAggregator.addSystemLine(projectId, '\n');
+        return;
+      }
+    }
+
     // 1. Git commit
     await gitCommitChanges(projectId, projectPath);
 
@@ -594,7 +680,7 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
           raw: '✅ Stopped | ⏳ Starting...\n'
         });
 
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
 
         const port = await processManager.startDevServer(projectId, projectPath);
 
@@ -770,9 +856,30 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
             return;
           }
 
-          // Parse commit hash from output
-          const commitHashMatch = commitOutput.match(/\[[\w-]+\s+([a-f0-9]+)\]/);
-          const commitHash = commitHashMatch ? commitHashMatch[1].substring(0, 7) : 'unknown';
+          // Parse commit hash from output - try multiple patterns
+          console.log(`🔍 DEBUG - Git commit output: ${commitOutput}`);
+
+          let commitHash = 'unknown';
+
+          // Try pattern 1: [branch abc1234] (normal commits)
+          let match = commitOutput.match(/\[[\w-]+\s+([a-f0-9]+)\]/);
+          if (match) {
+            commitHash = match[1].substring(0, 7);
+          } else {
+            // Try pattern 2: [branch (root-commit) abc1234] (initial commits)
+            match = commitOutput.match(/\[[\w-]+\s+\([\w-]+\)\s+([a-f0-9]+)\]/);
+            if (match) {
+              commitHash = match[1].substring(0, 7);
+            } else {
+              // Try pattern 3: Just find any 7+ character hex string
+              match = commitOutput.match(/\b([a-f0-9]{7,40})\b/);
+              if (match) {
+                commitHash = match[1].substring(0, 7);
+              }
+            }
+          }
+
+          console.log(`🔍 DEBUG - Parsed commit hash: ${commitHash}`);
 
           const gitElapsed = ((Date.now() - gitStartTime) / 1000).toFixed(1);
 
@@ -796,6 +903,53 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
           resolve();
         });
       });
+    });
+  });
+}
+
+/**
+ * Perform restore to checkpoint (called directly, not via IPC)
+ * Used when interrupting Claude to revert code changes
+ */
+async function performRestore(projectId: string, commitHash: string, projectPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    console.log(`🔄 Performing restore to ${commitHash} for ${projectId}`);
+
+    // Execute git checkout
+    const checkoutProcess = spawn('git', ['checkout', commitHash], {
+      cwd: projectPath,
+    });
+
+    let errorOutput = '';
+    checkoutProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+
+    checkoutProcess.on('close', async (code) => {
+      if (code !== 0) {
+        console.error(`❌ Git checkout failed for ${projectId}:`, errorOutput);
+        reject(new Error('Git checkout failed'));
+        return;
+      }
+
+      console.log(`✅ Code reverted to ${commitHash}`);
+
+      // Restart dev server if running
+      const processState = processManager.getProcessStatus(projectId);
+      if (processState === 'running') {
+        console.log(`🔄 Restarting dev server for ${projectId}`);
+
+        try {
+          await processManager.stopDevServer(projectId);
+          await new Promise((res) => setTimeout(res, 2000)); // Wait 2s
+          await processManager.startDevServer(projectId, projectPath);
+          console.log(`✅ Dev server restarted`);
+        } catch (error) {
+          console.error(`❌ Failed to restart dev server:`, error);
+        }
+      }
+
+      resolve();
     });
   });
 }

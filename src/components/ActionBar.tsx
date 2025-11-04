@@ -378,9 +378,10 @@ function ActionBar({
 
     try {
       await window.electronAPI?.claude.destroySession(projectId)
-      toast.info('Stopped', 'Claude session stopped')
+      toast.info('Stopped', 'Generation stopped and reverted to last checkpoint')
     } catch (error) {
       console.error('Error stopping Claude:', error)
+      toast.error('Error', 'Failed to stop generation')
     }
   }
 

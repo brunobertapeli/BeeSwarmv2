@@ -494,6 +494,39 @@ class ClaudeService extends EventEmitter {
   }
 
   /**
+   * Interrupt current generation (stop mid-execution)
+   * Preserves session and allows resuming conversation
+   * @param projectId - Project identifier
+   */
+  interrupt(projectId: string): void {
+    const session = this.sessions.get(projectId);
+    if (!session) {
+      console.log(`⚠️ No active session to interrupt for ${projectId}`);
+      return;
+    }
+
+    console.log(`🛑 Interrupting Claude generation for ${projectId}`);
+
+    try {
+      // Use SDK's interrupt method if available on query object
+      if (session.query && typeof (session.query as any).interrupt === 'function') {
+        (session.query as any).interrupt();
+        console.log(`✅ Called query.interrupt() for ${projectId}`);
+      }
+
+      // Also abort via AbortController as fallback
+      session.abortController?.abort();
+    } catch (error) {
+      console.error(`❌ Error interrupting Claude session for ${projectId}:`, error);
+    }
+
+    // Mark as idle so UI knows it stopped
+    this.emitStatusChange(projectId, 'idle');
+
+    // Session remains intact - conversation can continue
+  }
+
+  /**
    * Destroy Claude session (abort current operation)
    * NOTE: This only clears in-memory session, preserving database session ID for resume on app restart
    * @param projectId - Project identifier
