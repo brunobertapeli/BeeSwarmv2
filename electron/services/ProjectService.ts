@@ -4,6 +4,7 @@ import { templateValidator } from './TemplateValidator'
 import { portService } from './PortService'
 import { Template } from './MongoService'
 import { getCurrentUserId } from '../main'
+import { pathValidator } from '../utils/PathValidator'
 import fs from 'fs'
 import path from 'path'
 import { shell } from 'electron'
@@ -11,43 +12,49 @@ import { shell } from 'electron'
 class ProjectService {
   /**
    * Create a new project from a template
+   * @param userId - User ID who owns this project (SECURITY: passed from authenticated handler)
    * @param templateId - Template ID
    * @param projectName - Name for the new project
    * @param template - Full template object from MongoDB
    * @returns Created project metadata
    */
   async createProject(
+    userId: string,
     templateId: string,
     projectName: string,
     template: Template
   ): Promise<Project> {
     try {
       console.log('🚀 Starting project creation...')
+      console.log('   User:', userId)
       console.log('   Template:', template.name)
       console.log('   Project Name:', projectName)
 
-      // Get current user ID
-      const userId = getCurrentUserId()
-      if (!userId) {
-        throw new Error('No user logged in')
-      }
-
-      // Step 1: Check if project already exists
-      if (templateService.projectExists(projectName, userId)) {
+      // Step 1: Check if project name already exists for this user
+      if (databaseService.projectNameExists(projectName, userId)) {
         throw new Error(`A project with the name "${projectName}" already exists`)
       }
 
       // Step 2: Create project in database with 'creating' status
-      const projectPath = templateService.getProjectPath(projectName, userId)
+      // Generate project record first to get ID (used as immutable folder name)
+      const tempPath = 'temp' // Temporary, will be updated after we have the ID
       const project = databaseService.createProject({
+        userId: userId, // SECURITY: Store userId with project
         name: projectName,
-        path: projectPath,
+        path: tempPath, // Will be updated to use project ID
         templateId: templateId,
         templateName: template.name,
         status: 'creating'
       })
 
-      console.log('✅ Project record created in database')
+      // Now that we have project ID, generate the real path using ID as folder name
+      const projectPath = templateService.getProjectPath(project.id, userId)
+
+      // Update project with correct path
+      databaseService.renameProject(project.id, projectName, projectPath)
+
+      console.log('✅ Project record created in database with ID:', project.id)
+      console.log('📁 Project path:', projectPath)
 
       try {
         // Step 3: Clone template from GitHub
@@ -142,10 +149,13 @@ class ProjectService {
     const project = databaseService.getProjectById(id)
 
     if (project) {
+      // SECURITY: Validate path to prevent deletion of files outside project directory
+      const validatedPath = pathValidator.validateProjectPath(project.path, project.userId)
+
       // Delete from filesystem
-      if (fs.existsSync(project.path)) {
-        fs.rmSync(project.path, { recursive: true, force: true })
-        console.log('✅ Project deleted from filesystem:', project.path)
+      if (fs.existsSync(validatedPath)) {
+        fs.rmSync(validatedPath, { recursive: true, force: true })
+        console.log('✅ Project deleted from filesystem:', validatedPath)
       }
     }
 
@@ -159,7 +169,10 @@ class ProjectService {
   }
 
   /**
-   * Rename project (update name in database and folder name)
+   * Rename project (update name in database only - folder stays the same)
+   *
+   * NOTE: Folder name is based on project ID which is immutable.
+   * This allows renaming without breaking Claude sessions, dev servers, etc.
    */
   renameProject(id: string, newName: string): Project {
     const project = databaseService.getProjectById(id)
@@ -168,29 +181,14 @@ class ProjectService {
       throw new Error('Project not found')
     }
 
-    // Get current user ID
-    const userId = getCurrentUserId()
-    if (!userId) {
-      throw new Error('No user logged in')
-    }
-
-    // Check if new project name already exists
-    if (templateService.projectExists(newName, userId)) {
+    // Check if new project name already exists for this user (excluding current project)
+    if (databaseService.projectNameExists(newName, project.userId, id)) {
       throw new Error(`A project with the name "${newName}" already exists`)
     }
 
-    // Get new path
-    const newPath = templateService.getProjectPath(newName, userId)
-
-    // Rename directory
-    if (fs.existsSync(project.path)) {
-      fs.renameSync(project.path, newPath)
-      console.log('✅ Project folder renamed:', project.path, '→', newPath)
-    }
-
-    // Update database
-    const updatedProject = databaseService.renameProject(id, newName, newPath)
-    console.log('✅ Project renamed in database:', newName)
+    // Update database (path stays the same since it's based on immutable project ID)
+    const updatedProject = databaseService.renameProject(id, newName, project.path)
+    console.log('✅ Project renamed in database:', project.name, '→', newName)
 
     return updatedProject
   }
@@ -205,12 +203,15 @@ class ProjectService {
       throw new Error('Project not found')
     }
 
-    if (!fs.existsSync(project.path)) {
+    // SECURITY: Validate path before opening in file explorer
+    const validatedPath = pathValidator.validateProjectPath(project.path, project.userId)
+
+    if (!fs.existsSync(validatedPath)) {
       throw new Error('Project folder not found')
     }
 
-    shell.showItemInFolder(project.path)
-    console.log('✅ Opened in Finder/Explorer:', project.path)
+    shell.showItemInFolder(validatedPath)
+    console.log('✅ Opened in Finder/Explorer:', validatedPath)
   }
 
   /**

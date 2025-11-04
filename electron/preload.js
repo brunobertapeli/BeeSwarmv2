@@ -265,7 +265,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // App methods
   app: {
-    flashWindow: () => ipcRenderer.send('app:flash-window')
+    flashWindow: () => ipcRenderer.send('app:flash-window'),
+    getCrashLogs: () => ipcRenderer.invoke('app:get-crash-logs'),
+    clearCrashLogs: () => ipcRenderer.invoke('app:clear-crash-logs')
   },
 
   // Support methods

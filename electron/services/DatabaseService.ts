@@ -5,6 +5,7 @@ import fs from 'fs'
 
 export interface Project {
   id: string
+  userId: string // SECURITY: User who owns this project
   name: string
   path: string
   templateId: string
@@ -47,16 +48,17 @@ class DatabaseService {
    */
   init(userId: string): void {
     try {
-      // Database location: ~/Library/Application Support/CodeDeck/{userId}/database.db
-      const userDataPath = app.getPath('userData')
-      this.dbPath = path.join(userDataPath, userId, 'database.db')
+      // Database location: ~/Documents/CodeDeck/{userId}/database.db
+      // Keeps all user data (database, projects, logs) in one accessible location
+      const homeDir = app.getPath('home')
+      const userDataDir = path.join(homeDir, 'Documents', 'CodeDeck', userId)
+      this.dbPath = path.join(userDataDir, 'database.db')
 
       console.log('📊 Database path:', this.dbPath)
 
       // Ensure directory exists
-      const dbDir = path.dirname(this.dbPath)
-      if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir, { recursive: true })
+      if (!fs.existsSync(userDataDir)) {
+        fs.mkdirSync(userDataDir, { recursive: true })
       }
 
       // Open database
@@ -85,6 +87,7 @@ class DatabaseService {
     const sql = `
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
         name TEXT NOT NULL,
         path TEXT NOT NULL UNIQUE,
         templateId TEXT NOT NULL,
@@ -190,7 +193,17 @@ class DatabaseService {
         console.log('✅ Migration complete: claudeContext column added')
       }
 
-      // Migration 7-10: Add chat_history table columns if they don't exist
+      // Migration 7: Add userId column if it doesn't exist (SECURITY FIX)
+      const hasUserId = tableInfo.some(col => col.name === 'userId')
+      if (!hasUserId) {
+        console.log('📦 Running migration: Adding userId column...')
+        // Add column with default empty string for existing projects
+        // NOTE: In production, you'd need to populate this with actual user IDs
+        this.db.exec('ALTER TABLE projects ADD COLUMN userId TEXT NOT NULL DEFAULT \'\'')
+        console.log('✅ Migration complete: userId column added')
+      }
+
+      // Migration 8-11: Add chat_history table columns if they don't exist
       try {
         const chatTableInfo = this.db.prepare('PRAGMA table_info(chat_history)').all() as any[]
 
@@ -235,7 +248,7 @@ class DatabaseService {
   /**
    * Create a new project
    */
-  createProject(project: Omit<Project, 'id' | 'createdAt' | 'lastOpenedAt' | 'isFavorite' | 'configCompleted' | 'envVars' | 'dependenciesInstalled' | 'claudeSessionId'>): Project {
+  createProject(project: Omit<Project, 'id' | 'createdAt' | 'lastOpenedAt' | 'isFavorite' | 'configCompleted' | 'envVars' | 'dependenciesInstalled' | 'claudeSessionId' | 'claudeContext'>): Project {
     if (!this.db) {
       throw new Error('Database not initialized')
     }
@@ -248,18 +261,20 @@ class DatabaseService {
       envVars: null,
       dependenciesInstalled: false,
       claudeSessionId: null,
+      claudeContext: null,
       createdAt: Date.now(),
       lastOpenedAt: null
     }
 
     const sql = `
-      INSERT INTO projects (id, name, path, templateId, templateName, status, isFavorite, configCompleted, envVars, dependenciesInstalled, claudeSessionId, createdAt, lastOpenedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, userId, name, path, templateId, templateName, status, isFavorite, configCompleted, envVars, dependenciesInstalled, claudeSessionId, createdAt, lastOpenedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
 
     try {
       this.db.prepare(sql).run(
         newProject.id,
+        newProject.userId,
         newProject.name,
         newProject.path,
         newProject.templateId,
@@ -331,6 +346,32 @@ class DatabaseService {
       } as Project
     } catch (error) {
       console.error('❌ Failed to fetch project:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Check if a project with the given name exists for a user
+   */
+  projectNameExists(name: string, userId: string, excludeProjectId?: string): boolean {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    try {
+      let sql = 'SELECT COUNT(*) as count FROM projects WHERE name = ? AND userId = ?'
+      const params: any[] = [name, userId]
+
+      // Optionally exclude a specific project (useful for rename validation)
+      if (excludeProjectId) {
+        sql += ' AND id != ?'
+        params.push(excludeProjectId)
+      }
+
+      const result = this.db.prepare(sql).get(...params) as any
+      return result.count > 0
+    } catch (error) {
+      console.error('❌ Failed to check project name:', error)
       throw error
     }
   }

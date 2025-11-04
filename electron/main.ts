@@ -5,6 +5,7 @@ dotenv.config()
 // Now import everything else
 import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron'
 import path from 'path'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { registerAuthHandlers } from './handlers/authHandlers.js'
 import { registerTemplateHandlers } from './handlers/templateHandlers.js'
@@ -32,6 +33,29 @@ export function setCurrentUser(userId: string) {
 
   // Reinitialize database for this user
   databaseService.init(userId)
+
+  try {
+    // Ensure user data directory structure exists
+    const userDataDir = path.join(app.getPath('home'), 'Documents', 'CodeDeck', userId)
+    const userLogsDir = path.join(userDataDir, 'Logs')
+    const userProjectsDir = path.join(userDataDir, 'Projects')
+
+    // Create directories if they don't exist
+    if (!fs.existsSync(userLogsDir)) {
+      fs.mkdirSync(userLogsDir, { recursive: true })
+    }
+    if (!fs.existsSync(userProjectsDir)) {
+      fs.mkdirSync(userProjectsDir, { recursive: true })
+    }
+
+    // Log user data location
+    console.log(`📁 User data folder: ${userDataDir}`)
+    console.log('   ├── database.db')
+    console.log('   ├── Projects/')
+    console.log('   └── Logs/')
+  } catch (error) {
+    console.error('❌ Error setting up user directories:', error)
+  }
 }
 
 /**
@@ -202,6 +226,69 @@ function createWindow() {
     }
   })
 
+  // === CRASH REPORTING & ERROR HANDLING ===
+
+  // Renderer process crashed
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    console.error('💥 RENDERER PROCESS CRASHED:', {
+      reason: details.reason,
+      exitCode: details.exitCode,
+      timestamp: new Date().toISOString()
+    })
+
+    // Log to file for debugging
+    const crashLog = `
+================================================================================
+RENDERER CRASH - ${new Date().toISOString()}
+================================================================================
+Reason: ${details.reason}
+Exit Code: ${details.exitCode}
+User: ${currentUserId || 'not logged in'}
+================================================================================
+`
+    writeCrashLog(crashLog)
+    const crashLogPath = getCrashLogPath()
+
+    // Show error dialog to user
+    if (details.reason !== 'clean-exit') {
+      const { dialog } = require('electron')
+      dialog.showErrorBox(
+        'Application Crashed',
+        `The application has encountered an error and needs to restart.\n\nReason: ${details.reason}\n\nCrash log saved to:\n${crashLogPath}`
+      )
+
+      // Reload the window after crash
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.reload()
+        }
+      }, 1000)
+    }
+  })
+
+  // Renderer became unresponsive
+  mainWindow.on('unresponsive', () => {
+    console.warn('⚠️ WINDOW UNRESPONSIVE:', new Date().toISOString())
+
+    const { dialog } = require('electron')
+    dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'Application Not Responding',
+      message: 'The application is not responding. Would you like to wait or reload?',
+      buttons: ['Wait', 'Reload'],
+      defaultId: 0
+    }).then((result) => {
+      if (result.response === 1 && mainWindow) {
+        mainWindow.reload()
+      }
+    })
+  })
+
+  // Renderer became responsive again
+  mainWindow.on('responsive', () => {
+    console.log('✅ Window became responsive again')
+  })
+
   // Set Content Security Policy
   mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
@@ -309,6 +396,130 @@ async function initializeApp() {
     handlersRegistered = true
   }
 }
+
+// === CRASH LOG UTILITIES ===
+
+/**
+ * Get the crash log path for the current user
+ * Falls back to app userData if no user is logged in
+ */
+function getCrashLogPath(): string {
+  if (currentUserId) {
+    // User-specific logs directory: ~/Documents/CodeDeck/{userId}/Logs/
+    const userLogsDir = path.join(app.getPath('home'), 'Documents', 'CodeDeck', currentUserId, 'Logs')
+
+    // Ensure Logs directory exists
+    if (!fs.existsSync(userLogsDir)) {
+      fs.mkdirSync(userLogsDir, { recursive: true })
+    }
+
+    return path.join(userLogsDir, 'crash.log')
+  } else {
+    // Fallback for crashes before login
+    return path.join(app.getPath('userData'), 'crash.log')
+  }
+}
+
+/**
+ * Write crash log to file
+ */
+function writeCrashLog(logContent: string) {
+  const crashLogPath = getCrashLogPath()
+
+  try {
+    fs.appendFileSync(crashLogPath, logContent)
+    console.log(`📝 Crash log written to: ${crashLogPath}`)
+  } catch (e) {
+    console.error('Failed to write crash log:', e)
+  }
+}
+
+// === GLOBAL ERROR HANDLERS ===
+
+// Catch uncaught exceptions in main process
+process.on('uncaughtException', (error) => {
+  console.error('💥 UNCAUGHT EXCEPTION IN MAIN PROCESS:', error)
+
+  const crashLog = `
+================================================================================
+UNCAUGHT EXCEPTION - ${new Date().toISOString()}
+================================================================================
+Error: ${error.message}
+Stack: ${error.stack}
+User: ${currentUserId || 'not logged in'}
+================================================================================
+`
+  writeCrashLog(crashLog)
+
+  // Don't exit in development
+  if (!isDev) {
+    app.quit()
+  }
+})
+
+// Catch unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 UNHANDLED PROMISE REJECTION:', reason)
+
+  const crashLog = `
+================================================================================
+UNHANDLED REJECTION - ${new Date().toISOString()}
+================================================================================
+Reason: ${reason}
+User: ${currentUserId || 'not logged in'}
+================================================================================
+`
+  writeCrashLog(crashLog)
+})
+
+// Log when app is ready
+app.on('ready', () => {
+  console.log('✅ Electron app ready')
+
+  // Log user data location (will show actual path after user logs in)
+  if (currentUserId) {
+    const userDataDir = path.join(app.getPath('home'), 'Documents', 'CodeDeck', currentUserId)
+    console.log('📁 User data folder:', userDataDir)
+    console.log('   ├── database.db')
+    console.log('   ├── Projects/')
+    console.log('   └── Logs/')
+  } else {
+    console.log('📁 User data folder: ~/Documents/CodeDeck/{userId}/ (set after login)')
+  }
+})
+
+// IPC Handler to get crash logs
+ipcMain.handle('app:get-crash-logs', async () => {
+  const crashLogPath = getCrashLogPath()
+
+  try {
+    if (fs.existsSync(crashLogPath)) {
+      const logs = fs.readFileSync(crashLogPath, 'utf-8')
+      return { success: true, logs, path: crashLogPath }
+    } else {
+      return { success: true, logs: '', path: crashLogPath }
+    }
+  } catch (error) {
+    console.error('Failed to read crash logs:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to read crash logs' }
+  }
+})
+
+// IPC Handler to clear crash logs
+ipcMain.handle('app:clear-crash-logs', async () => {
+  const crashLogPath = getCrashLogPath()
+
+  try {
+    if (fs.existsSync(crashLogPath)) {
+      fs.unlinkSync(crashLogPath)
+      console.log('✅ Crash logs cleared')
+    }
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to clear crash logs:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to clear crash logs' }
+  }
+})
 
 app.whenReady().then(async () => {
   await initializeApp()

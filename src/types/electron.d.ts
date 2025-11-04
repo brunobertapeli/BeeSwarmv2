@@ -251,6 +251,8 @@ export interface ElectronAPI {
       success: boolean
       project?: Project
       error?: string
+      reason?: 'claude_active'
+      claudeStatus?: ClaudeStatus
     }>
     showInFinder: (id: string) => Promise<{
       success: boolean
@@ -427,6 +429,16 @@ export interface ElectronAPI {
 
   app: {
     flashWindow: () => void
+    getCrashLogs: () => Promise<{
+      success: boolean
+      logs?: string
+      path?: string
+      error?: string
+    }>
+    clearCrashLogs: () => Promise<{
+      success: boolean
+      error?: string
+    }>
   }
 
   support: {

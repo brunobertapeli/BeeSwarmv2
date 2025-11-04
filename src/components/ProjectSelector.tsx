@@ -16,6 +16,7 @@ import TechIcon from './TechIcon'
 import { Project, Template } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 import { useAppStore } from '../store/appStore'
+import { useToast } from '../hooks/useToast'
 
 interface ProjectSelectorProps {
   isOpen: boolean
@@ -43,6 +44,7 @@ function ProjectSelector({
   onProjectUpdated,
 }: ProjectSelectorProps) {
   const { isAuthenticated } = useAppStore()
+  const toast = useToast()
   const [projects, setProjects] = useState<ProjectWithMeta[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
   const [loading, setLoading] = useState(true)
@@ -187,9 +189,18 @@ function ProjectSelector({
 
         // Notify parent to refresh
         onProjectUpdated?.()
+      } else if (result && 'reason' in result && result.reason === 'claude_active') {
+        // RACE-2 FIX: Show error when trying to rename while Claude is working
+        toast.warning(
+          'Cannot rename project',
+          'Claude is currently working on this project. Please wait for Claude to complete or stop the session first.'
+        )
+      } else if (result?.error) {
+        toast.error('Rename failed', result.error)
       }
     } catch (error) {
       console.error('Error renaming project:', error)
+      toast.error('Error', error instanceof Error ? error.message : 'Failed to rename project')
     }
   }
 

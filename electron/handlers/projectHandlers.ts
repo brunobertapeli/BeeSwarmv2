@@ -5,11 +5,16 @@ import { databaseService } from '../services/DatabaseService'
 import { envService } from '../services/EnvService'
 import { dependencyService } from '../services/DependencyService'
 import { getCurrentUserId } from '../main'
+import { requireAuth, validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware'
+import { claudeService } from '../services/ClaudeService'
 
 export function registerProjectHandlers() {
   // Create new project from template
   ipcMain.handle('project:create', async (_event, templateId: string, projectName: string) => {
     try {
+      // SECURITY: Ensure user is authenticated
+      const userId = requireAuth()
+
       console.log(`🚀 Creating project: "${projectName}" from template: ${templateId}`)
 
       // Fetch template details from MongoDB
@@ -22,8 +27,8 @@ export function registerProjectHandlers() {
         }
       }
 
-      // Create the project
-      const project = await projectService.createProject(templateId, projectName, template)
+      // Create the project with userId
+      const project = await projectService.createProject(userId, templateId, projectName, template)
 
       return {
         success: true,
@@ -31,6 +36,14 @@ export function registerProjectHandlers() {
       }
     } catch (error) {
       console.error('❌ Error creating project:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create project'
@@ -71,15 +84,10 @@ export function registerProjectHandlers() {
   // Get project by ID
   ipcMain.handle('project:get-by-id', async (_event, projectId: string) => {
     try {
-      console.log(`📋 Fetching project: ${projectId}`)
-      const project = projectService.getProjectById(projectId)
+      // SECURITY: Validate user owns this project
+      const project = validateProjectOwnership(projectId)
 
-      if (!project) {
-        return {
-          success: false,
-          error: 'Project not found'
-        }
-      }
+      console.log(`📋 Fetching project: ${projectId}`)
 
       return {
         success: true,
@@ -87,6 +95,14 @@ export function registerProjectHandlers() {
       }
     } catch (error) {
       console.error('❌ Error fetching project:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch project'
@@ -97,6 +113,9 @@ export function registerProjectHandlers() {
   // Delete project
   ipcMain.handle('project:delete', async (_event, projectId: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
       console.log(`🗑️  Deleting project: ${projectId}`)
       projectService.deleteProject(projectId)
 
@@ -105,6 +124,14 @@ export function registerProjectHandlers() {
       }
     } catch (error) {
       console.error('❌ Error deleting project:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to delete project'
@@ -115,6 +142,9 @@ export function registerProjectHandlers() {
   // Toggle project favorite
   ipcMain.handle('project:toggle-favorite', async (_event, projectId: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
       console.log(`⭐ Toggling favorite: ${projectId}`)
       const isFavorite = projectService.toggleFavorite(projectId)
 
@@ -124,6 +154,14 @@ export function registerProjectHandlers() {
       }
     } catch (error) {
       console.error('❌ Error toggling favorite:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to toggle favorite'
@@ -134,6 +172,9 @@ export function registerProjectHandlers() {
   // Update last opened timestamp
   ipcMain.handle('project:update-last-opened', async (_event, projectId: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
       console.log(`🕐 Updating last opened: ${projectId}`)
       projectService.updateLastOpened(projectId)
 
@@ -142,6 +183,14 @@ export function registerProjectHandlers() {
       }
     } catch (error) {
       console.error('❌ Error updating last opened:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update last opened'
@@ -152,7 +201,25 @@ export function registerProjectHandlers() {
   // Rename project
   ipcMain.handle('project:rename', async (_event, projectId: string, newName: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      // RACE CONDITION FIX: Check if Claude is actively working on this project
+      const claudeStatus = claudeService.getStatus(projectId)
+      if (claudeStatus === 'starting' || claudeStatus === 'running') {
+        console.warn(`⚠️ Cannot rename project ${projectId} - Claude is ${claudeStatus}`)
+        return {
+          success: false,
+          error: 'Cannot rename project while Claude is working. Please wait for Claude to complete or stop the session first.',
+          reason: 'claude_active',
+          claudeStatus
+        }
+      }
+
       console.log(`✏️ Renaming project: ${projectId} → ${newName}`)
+
+      // NOTE: No need to stop services! Folder path is based on immutable project ID,
+      // so renaming only updates the display name in the database. All services keep working.
       const project = projectService.renameProject(projectId, newName)
 
       return {
@@ -161,6 +228,14 @@ export function registerProjectHandlers() {
       }
     } catch (error) {
       console.error('❌ Error renaming project:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to rename project'
@@ -171,6 +246,9 @@ export function registerProjectHandlers() {
   // Show project in Finder/Explorer
   ipcMain.handle('project:show-in-finder', async (_event, projectId: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
       console.log(`📁 Opening in Finder/Explorer: ${projectId}`)
       projectService.showInFinder(projectId)
 
@@ -179,6 +257,14 @@ export function registerProjectHandlers() {
       }
     } catch (error) {
       console.error('❌ Error showing in Finder:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to open in Finder'
@@ -189,16 +275,10 @@ export function registerProjectHandlers() {
   // Save environment configuration
   ipcMain.handle('project:save-env-config', async (_event, projectId: string, envVars: Record<string, string>) => {
     try {
-      console.log(`🔑 Saving environment configuration for: ${projectId}`)
+      // SECURITY: Validate user owns this project
+      const project = validateProjectOwnership(projectId)
 
-      // Get project details
-      const project = databaseService.getProjectById(projectId)
-      if (!project) {
-        return {
-          success: false,
-          error: 'Project not found'
-        }
-      }
+      console.log(`🔑 Saving environment configuration for: ${projectId}`)
 
       // Save to database
       databaseService.saveEnvConfig(projectId, envVars)
@@ -211,6 +291,14 @@ export function registerProjectHandlers() {
       }
     } catch (error) {
       console.error('❌ Error saving env config:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to save environment configuration'
@@ -221,6 +309,9 @@ export function registerProjectHandlers() {
   // Get environment configuration
   ipcMain.handle('project:get-env-config', async (_event, projectId: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
       console.log(`🔑 Getting environment configuration for: ${projectId}`)
       const envVars = databaseService.getEnvConfig(projectId)
 
@@ -230,6 +321,14 @@ export function registerProjectHandlers() {
       }
     } catch (error) {
       console.error('❌ Error getting env config:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get environment configuration'
@@ -240,16 +339,10 @@ export function registerProjectHandlers() {
   // Install dependencies
   ipcMain.handle('project:install-dependencies', async (event, projectId: string) => {
     try {
-      console.log(`📦 Installing dependencies for: ${projectId}`)
+      // SECURITY: Validate user owns this project
+      const project = validateProjectOwnership(projectId)
 
-      // Get project details
-      const project = databaseService.getProjectById(projectId)
-      if (!project) {
-        return {
-          success: false,
-          error: 'Project not found'
-        }
-      }
+      console.log(`📦 Installing dependencies for: ${projectId}`)
 
       // Install dependencies with progress streaming
       const result = await dependencyService.installFullstackDependencies(
@@ -269,6 +362,14 @@ export function registerProjectHandlers() {
       return result
     } catch (error) {
       console.error('❌ Error installing dependencies:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to install dependencies'

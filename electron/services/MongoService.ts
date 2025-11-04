@@ -32,6 +32,22 @@ class MongoService {
   private dbName: string = 'codedeck'
   private initialized: boolean = false
 
+  /**
+   * SECURITY: Sanitize user input to prevent MongoDB injection attacks
+   * Ensures input is a primitive string, not an object with MongoDB operators
+   */
+  private sanitizeInput(input: any, fieldName: string): string {
+    if (typeof input !== 'string') {
+      throw new Error(`Invalid ${fieldName}: must be a string`)
+    }
+
+    if (input.trim().length === 0) {
+      throw new Error(`Invalid ${fieldName}: cannot be empty`)
+    }
+
+    return input.trim()
+  }
+
   private init() {
     if (this.initialized) return
 
@@ -72,12 +88,15 @@ class MongoService {
     this.init()
 
     try {
+      // SECURITY: Sanitize email to prevent MongoDB injection
+      const sanitizedEmail = this.sanitizeInput(email, 'email')
+
       if (!this.db) {
         await this.connect()
       }
 
       const usersCollection = this.db!.collection('users')
-      const user = await usersCollection.findOne({ email })
+      const user = await usersCollection.findOne({ email: sanitizedEmail })
 
       if (!user) {
         console.log('User not found:', email)
@@ -166,12 +185,15 @@ class MongoService {
     this.init()
 
     try {
+      // SECURITY: Sanitize templateId to prevent MongoDB injection
+      const sanitizedTemplateId = this.sanitizeInput(templateId, 'templateId')
+
       if (!this.db) {
         await this.connect()
       }
 
       const templatesCollection = this.db!.collection('templates')
-      const template = await templatesCollection.findOne({ id: templateId })
+      const template = await templatesCollection.findOne({ id: sanitizedTemplateId })
 
       if (!template) {
         console.log('Template not found:', templateId)

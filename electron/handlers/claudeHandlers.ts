@@ -9,6 +9,7 @@ import { emitChatEvent } from './chatHandlers';
 import { spawn } from 'child_process';
 import * as path from 'path';
 import { getCurrentUserId } from '../main';
+import { validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware';
 
 let mainWindowContents: WebContents | null = null;
 
@@ -26,16 +27,10 @@ export function registerClaudeHandlers(): void {
   // Start Claude Code session
   ipcMain.handle('claude:start-session', async (_event, projectId: string, prompt?: string, model?: string) => {
     try {
-      console.log(`🤖 Starting Claude session for project: ${projectId}`);
+      // SECURITY: Validate user owns this project
+      const project = validateProjectOwnership(projectId);
 
-      // Get project details
-      const project = databaseService.getProjectById(projectId);
-      if (!project) {
-        return {
-          success: false,
-          error: 'Project not found',
-        };
-      }
+      console.log(`🤖 Starting Claude session for project: ${projectId}`);
 
       // Only start if we have a prompt - prevents auto-start on project load
       if (!prompt) {
@@ -62,6 +57,14 @@ export function registerClaudeHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error starting Claude session:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to start Claude session',
@@ -75,16 +78,10 @@ export function registerClaudeHandlers(): void {
     // Prevents multiple Claude operations from running concurrently on same project
     return await projectLockService.withLock(projectId, async () => {
       try {
-        console.log(`📤 Sending prompt to Claude for project: ${projectId}`);
+        // SECURITY: Validate user owns this project
+        const project = validateProjectOwnership(projectId);
 
-        // Get project details
-        const project = databaseService.getProjectById(projectId);
-        if (!project) {
-          return {
-            success: false,
-            error: 'Project not found',
-          };
-        }
+        console.log(`📤 Sending prompt to Claude for project: ${projectId}`);
 
         // CRITICAL FIX: Validate that any existing session's path matches current project
         // This prevents Claude from editing files in the wrong directory
@@ -118,6 +115,14 @@ export function registerClaudeHandlers(): void {
         };
       } catch (error) {
         console.error('❌ Error sending prompt to Claude:', error);
+
+        if (error instanceof UnauthorizedError) {
+          return {
+            success: false,
+            error: 'Unauthorized'
+          };
+        }
+
         return {
           success: false,
           error: error instanceof Error ? error.message : 'Failed to send prompt',
@@ -129,6 +134,9 @@ export function registerClaudeHandlers(): void {
   // Get Claude session status
   ipcMain.handle('claude:get-status', async (_event, projectId: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId);
+
       const status = claudeService.getStatus(projectId);
       const sessionId = claudeService.getSessionId(projectId);
 
@@ -139,6 +147,16 @@ export function registerClaudeHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error getting Claude status:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized',
+          status: 'idle' as ClaudeStatus,
+          sessionId: null,
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get status',
@@ -151,6 +169,9 @@ export function registerClaudeHandlers(): void {
   // Clear Claude session (start fresh, no --resume)
   ipcMain.handle('claude:clear-session', async (_event, projectId: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId);
+
       console.log(`🗑️ Clearing Claude session for project: ${projectId}`);
 
       claudeService.clearSession(projectId);
@@ -166,6 +187,14 @@ export function registerClaudeHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error clearing Claude session:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to clear session',
@@ -176,6 +205,9 @@ export function registerClaudeHandlers(): void {
   // Destroy Claude session
   ipcMain.handle('claude:destroy-session', async (_event, projectId: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      const project = validateProjectOwnership(projectId);
+
       console.log(`🛑 Stopping Claude session for project: ${projectId}`);
 
       // 1. Interrupt the Claude session (not destroy - keeps conversation history)
@@ -206,22 +238,19 @@ export function registerClaudeHandlers(): void {
         if (lastValidBlock?.commitHash) {
           console.log(`🔄 Reverting to last checkpoint: ${lastValidBlock.commitHash}`);
 
-          const project = databaseService.getProjectById(projectId);
-          if (project) {
-            // Import and call restore function directly (not via IPC)
-            const gitHandlers = await import('./gitHandlers.js');
+          // Import and call restore function directly (not via IPC)
+          const gitHandlers = await import('./gitHandlers.js');
 
-            // Small delay to ensure block is completed first
-            setTimeout(async () => {
-              try {
-                // Call the restore function - we need to extract it from the module
-                // Since registerGitHandlers wraps it, we'll create a new restore directly
-                await performRestore(projectId, lastValidBlock.commitHash, project.path);
-              } catch (error) {
-                console.error(`❌ Error reverting to checkpoint:`, error);
-              }
-            }, 100);
-          }
+          // Small delay to ensure block is completed first
+          setTimeout(async () => {
+            try {
+              // Call the restore function - we need to extract it from the module
+              // Since registerGitHandlers wraps it, we'll create a new restore directly
+              await performRestore(projectId, lastValidBlock.commitHash, project.path);
+            } catch (error) {
+              console.error(`❌ Error reverting to checkpoint:`, error);
+            }
+          }, 100);
         } else {
           console.log(`⚠️ No valid checkpoint found to revert to`);
         }
@@ -234,6 +263,14 @@ export function registerClaudeHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error destroying Claude session:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to destroy session',
@@ -244,14 +281,8 @@ export function registerClaudeHandlers(): void {
   // Get context information
   ipcMain.handle('claude:get-context', async (_event, projectId: string) => {
     try {
-      // Check if user is logged in
-      const userId = getCurrentUserId()
-      if (!userId) {
-        return {
-          success: true,
-          context: null,
-        };
-      }
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId);
 
       const context = claudeService.getContext(projectId);
 
@@ -261,6 +292,15 @@ export function registerClaudeHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error getting Claude context:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized',
+          context: null,
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get context',
@@ -272,6 +312,9 @@ export function registerClaudeHandlers(): void {
   // Change model
   ipcMain.handle('claude:change-model', async (_event, projectId: string, modelName: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId);
+
       console.log(`🔄 Changing model for ${projectId} to ${modelName}`);
 
       await claudeService.changeModel(projectId, modelName);
@@ -287,6 +330,14 @@ export function registerClaudeHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error changing model:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to change model',

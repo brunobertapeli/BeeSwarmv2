@@ -44,8 +44,12 @@ class TemplateService {
       // Ensure projects directory exists
       this.ensureProjectsDir(userId)
 
-      // Sanitize project name for directory
-      const dirName = this.sanitizeProjectName(projectName)
+      // Use project ID as folder name (immutable) instead of project name
+      // This prevents issues when renaming projects - folder never changes
+      if (!projectId) {
+        throw new Error('Project ID is required for cloning template')
+      }
+      const dirName = projectId
       const projectPath = path.join(this.getProjectsBaseDir(userId), dirName)
 
       // Check if directory already exists
@@ -120,20 +124,20 @@ class TemplateService {
   }
 
   /**
-   * Check if a project directory exists
+   * Check if a project directory exists by project ID
    */
-  projectExists(projectName: string, userId: string): boolean {
-    const dirName = this.sanitizeProjectName(projectName)
-    const projectPath = path.join(this.getProjectsBaseDir(userId), dirName)
+  projectExists(projectId: string, userId: string): boolean {
+    const projectPath = path.join(this.getProjectsBaseDir(userId), projectId)
     return fs.existsSync(projectPath)
   }
 
   /**
-   * Get full project path
+   * Get full project path from project ID
+   * @param projectId - Project ID (used as folder name)
+   * @param userId - User ID
    */
-  getProjectPath(projectName: string, userId: string): string {
-    const dirName = this.sanitizeProjectName(projectName)
-    return path.join(this.getProjectsBaseDir(userId), dirName)
+  getProjectPath(projectId: string, userId: string): string {
+    return path.join(this.getProjectsBaseDir(userId), projectId)
   }
 
   /**

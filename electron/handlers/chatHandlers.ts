@@ -2,6 +2,7 @@ import { ipcMain, WebContents } from 'electron';
 import { databaseService, ChatBlock } from '../services/DatabaseService';
 import { chatHistoryManager } from '../services/ChatHistoryManager';
 import { getCurrentUserId } from '../main';
+import { validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware';
 
 let mainWindowContents: WebContents | null = null;
 
@@ -28,6 +29,9 @@ export function registerChatHandlers(): void {
   // Create new chat block
   ipcMain.handle('chat:create-block', async (_event, projectId: string, userPrompt: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId);
+
       console.log(`💬 Creating chat block for project: ${projectId}`);
 
       const block = databaseService.createChatBlock(projectId, userPrompt);
@@ -44,6 +48,14 @@ export function registerChatHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error creating chat block:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create chat block',
@@ -54,6 +66,16 @@ export function registerChatHandlers(): void {
   // Update chat block
   ipcMain.handle('chat:update-block', async (_event, blockId: string, updates: Partial<ChatBlock>) => {
     try {
+      // SECURITY: Get block and validate user owns the project
+      const existingBlock = databaseService.getChatBlock(blockId);
+      if (!existingBlock) {
+        return {
+          success: false,
+          error: 'Block not found'
+        };
+      }
+      validateProjectOwnership(existingBlock.projectId);
+
       console.log(`💬 Updating chat block: ${blockId}`);
 
       databaseService.updateChatBlock(blockId, updates);
@@ -72,6 +94,14 @@ export function registerChatHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error updating chat block:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update chat block',
@@ -82,6 +112,16 @@ export function registerChatHandlers(): void {
   // Complete chat block
   ipcMain.handle('chat:complete-block', async (_event, blockId: string) => {
     try {
+      // SECURITY: Get block and validate user owns the project
+      const existingBlock = databaseService.getChatBlock(blockId);
+      if (!existingBlock) {
+        return {
+          success: false,
+          error: 'Block not found'
+        };
+      }
+      validateProjectOwnership(existingBlock.projectId);
+
       console.log(`💬 Completing chat block: ${blockId}`);
 
       databaseService.completeChatBlock(blockId);
@@ -100,6 +140,14 @@ export function registerChatHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error completing chat block:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to complete chat block',
@@ -110,14 +158,8 @@ export function registerChatHandlers(): void {
   // Get chat history
   ipcMain.handle('chat:get-history', async (_event, projectId: string, limit?: number, offset?: number) => {
     try {
-      // Check if user is logged in
-      const userId = getCurrentUserId()
-      if (!userId) {
-        return {
-          success: true,
-          blocks: [],
-        };
-      }
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId);
 
       const blocks = databaseService.getChatHistory(projectId, limit, offset);
 
@@ -127,6 +169,14 @@ export function registerChatHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error getting chat history:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get chat history',
@@ -137,7 +187,15 @@ export function registerChatHandlers(): void {
   // Get specific chat block
   ipcMain.handle('chat:get-block', async (_event, blockId: string) => {
     try {
+      // SECURITY: Get block and validate user owns the project
       const block = databaseService.getChatBlock(blockId);
+      if (!block) {
+        return {
+          success: false,
+          error: 'Block not found'
+        };
+      }
+      validateProjectOwnership(block.projectId);
 
       return {
         success: true,
@@ -145,6 +203,14 @@ export function registerChatHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error getting chat block:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get chat block',
@@ -155,6 +221,9 @@ export function registerChatHandlers(): void {
   // Delete chat history for project
   ipcMain.handle('chat:delete-history', async (_event, projectId: string) => {
     try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId);
+
       console.log(`💬 Deleting chat history for project: ${projectId}`);
 
       databaseService.deleteChatHistory(projectId);
@@ -167,6 +236,14 @@ export function registerChatHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error deleting chat history:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to delete chat history',
