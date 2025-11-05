@@ -17,17 +17,28 @@ interface ToolExecution {
 }
 
 /**
+ * Claude message (text or thinking)
+ */
+interface ClaudeMessage {
+  type: 'text' | 'thinking';
+  content: string;
+  thinkingDuration?: number; // Duration in seconds (only for thinking)
+  timestamp?: number; // When message was created
+}
+
+/**
  * Active chat block being tracked
  */
 interface ActiveBlock {
   blockId: string;
   projectId: string;
-  claudeMessages: string[]; // Claude's text messages
+  claudeMessages: ClaudeMessage[]; // Claude's text messages and thinking
   toolExecutions: ToolExecution[];
   commitHash: string | null;
   filesChanged: number | null;
   operationStartTime: number; // When Claude started working
   isInterrupted: boolean; // Flag to track if user interrupted this block
+  thinkingStartTime: number | null; // When thinking started (for duration calculation)
 }
 
 /**
@@ -72,6 +83,7 @@ class ChatHistoryManager extends EventEmitter {
       filesChanged: null,
       operationStartTime: Date.now(),
       isInterrupted: false,
+      thinkingStartTime: null,
     });
   }
 
@@ -95,7 +107,55 @@ class ChatHistoryManager extends EventEmitter {
       for (const block of content) {
         // Track Claude's text messages
         if (block.type === 'text' && block.text) {
-          activeBlock.claudeMessages.push(block.text);
+          // IMPORTANT: Text blocks end the current thinking session
+          // Complete any active thinking before adding the text
+          if (activeBlock.thinkingStartTime) {
+            const activeThinking = activeBlock.claudeMessages.find(m => m.type === 'thinking' && !m.thinkingDuration);
+            if (activeThinking) {
+              const duration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
+              activeThinking.thinkingDuration = parseInt(duration);
+              activeBlock.thinkingStartTime = null; // Reset timer
+              console.log(`🧠 Thinking completed by text block: ${duration}s`);
+            }
+          }
+
+          activeBlock.claudeMessages.push({
+            type: 'text',
+            content: block.text,
+            timestamp: Date.now(),
+          });
+        }
+
+        // Track thinking blocks
+        if (block.type === 'thinking' && block.thinking) {
+          // Check if there's an active thinking message (without duration)
+          const existingThinking = activeBlock.claudeMessages.find(m => m.type === 'thinking' && !m.thinkingDuration);
+
+          if (existingThinking) {
+            // Update existing thinking content (streaming)
+            existingThinking.content = block.thinking;
+          } else {
+            // New thinking session - complete previous one if exists
+            if (activeBlock.thinkingStartTime) {
+              const previousThinking = activeBlock.claudeMessages
+                .filter(m => m.type === 'thinking')
+                .pop();
+              if (previousThinking && !previousThinking.thinkingDuration) {
+                const duration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
+                previousThinking.thinkingDuration = parseInt(duration);
+                console.log(`🧠 Previous thinking completed: ${duration}s`);
+              }
+            }
+
+            // Start new thinking session
+            activeBlock.thinkingStartTime = Date.now();
+            activeBlock.claudeMessages.push({
+              type: 'thinking',
+              content: block.thinking,
+              timestamp: Date.now(),
+            });
+            console.log(`🧠 Thinking started for block ${activeBlock.blockId}`);
+          }
         }
 
         // Track tool executions with details
@@ -154,6 +214,19 @@ class ChatHistoryManager extends EventEmitter {
 
       const timeSeconds = ((Date.now() - activeBlock.operationStartTime) / 1000).toFixed(1);
 
+      // Finalize ALL thinking durations that don't have one yet
+      if (activeBlock.thinkingStartTime) {
+        const thinkingDuration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
+        // Find ALL thinking messages without durations and complete them
+        const unfinishedThinking = activeBlock.claudeMessages.filter(m => m.type === 'thinking' && !m.thinkingDuration);
+        for (const thinkingMsg of unfinishedThinking) {
+          thinkingMsg.thinkingDuration = parseInt(thinkingDuration);
+        }
+        if (unfinishedThinking.length > 0) {
+          console.log(`🧠 Thinking completed: ${thinkingDuration}s (${unfinishedThinking.length} session(s))`);
+        }
+      }
+
       // Extract completion stats
       const completionStats = {
         timeSeconds: parseFloat(timeSeconds),
@@ -162,11 +235,11 @@ class ChatHistoryManager extends EventEmitter {
         cost: msg?.total_cost_usd || 0,
       };
 
-      // Extract summary from last Claude message if it looks like a summary
+      // Extract summary from last text message if it looks like a summary
       let summary: string | null = null;
-      const lastMessage = activeBlock.claudeMessages[activeBlock.claudeMessages.length - 1];
-      if (lastMessage && (lastMessage.includes('## Summary') || lastMessage.includes('### Summary'))) {
-        summary = lastMessage;
+      const lastTextMessage = activeBlock.claudeMessages.filter(m => m.type === 'text').pop();
+      if (lastTextMessage && (lastTextMessage.content.includes('## Summary') || lastTextMessage.content.includes('### Summary'))) {
+        summary = lastTextMessage.content;
       }
 
       // Update block with final data and mark complete

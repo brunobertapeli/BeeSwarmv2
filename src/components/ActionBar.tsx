@@ -376,11 +376,13 @@ function ActionBar({
         if (statusResult?.status === 'idle') {
           // Start session with the prompt and selected model (lazy initialization)
           console.log('🔍 Starting new session with model:', selectedModel)
+          console.log('🧠 Thinking enabled:', thinkingEnabled)
           const result = await window.electronAPI?.claude.startSession(
             projectId,
             prompt,
             selectedModel,
-            claudeAttachments.length > 0 ? claudeAttachments : undefined
+            claudeAttachments.length > 0 ? claudeAttachments : undefined,
+            thinkingEnabled
           )
 
           if (!result?.success) {
@@ -390,11 +392,13 @@ function ActionBar({
         } else {
           // Send prompt to existing session with current selected model
           console.log('🔍 Sending to existing session with model:', selectedModel)
+          console.log('🧠 Thinking enabled:', thinkingEnabled)
           const result = await window.electronAPI?.claude.sendPrompt(
             projectId,
             prompt,
             selectedModel,
-            claudeAttachments.length > 0 ? claudeAttachments : undefined
+            claudeAttachments.length > 0 ? claudeAttachments : undefined,
+            thinkingEnabled
           )
 
           if (!result?.success) {

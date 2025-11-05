@@ -25,7 +25,7 @@ export function setClaudeHandlersWindow(webContents: WebContents): void {
  */
 export function registerClaudeHandlers(): void {
   // Start Claude Code session
-  ipcMain.handle('claude:start-session', async (_event, projectId: string, prompt?: string, model?: string, attachments?: ClaudeAttachment[]) => {
+  ipcMain.handle('claude:start-session', async (_event, projectId: string, prompt?: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean) => {
     try {
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId);
@@ -47,6 +47,11 @@ export function registerClaudeHandlers(): void {
         );
       }
 
+      // Log thinking mode
+      if (thinkingEnabled) {
+        console.log(`🧠 [IPC HANDLER] Extended thinking enabled`);
+      }
+
       // Add user message block to terminal
       console.log('📝 Adding user prompt to terminal:', prompt);
       terminalAggregator.addUserLine(projectId, '\n\n');
@@ -57,10 +62,13 @@ export function registerClaudeHandlers(): void {
       if (attachments && attachments.length > 0) {
         terminalAggregator.addUserLine(projectId, `📎 ${attachments.length} attachment(s)\n`);
       }
+      if (thinkingEnabled) {
+        terminalAggregator.addUserLine(projectId, `🧠 Extended thinking enabled\n`);
+      }
       terminalAggregator.addUserLine(projectId, '\n');
 
-      // Start Claude session with optional model and attachments
-      await claudeService.startSession(projectId, project.path, prompt, model, attachments);
+      // Start Claude session with optional model, attachments, and thinking
+      await claudeService.startSession(projectId, project.path, prompt, model, attachments, thinkingEnabled);
 
       return {
         success: true,
@@ -83,7 +91,7 @@ export function registerClaudeHandlers(): void {
   });
 
   // Send prompt to Claude
-  ipcMain.handle('claude:send-prompt', async (_event, projectId: string, prompt: string, model?: string, attachments?: ClaudeAttachment[]) => {
+  ipcMain.handle('claude:send-prompt', async (_event, projectId: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean) => {
     // CRITICAL FIX: Use project lock to prevent race conditions
     // Prevents multiple Claude operations from running concurrently on same project
     return await projectLockService.withLock(projectId, async () => {
@@ -98,6 +106,11 @@ export function registerClaudeHandlers(): void {
           console.log(`📎 [IPC HANDLER] Received ${attachments.length} attachment(s):`,
             attachments.map(a => ({ name: a.name, type: a.type, mediaType: a.mediaType, dataLength: a.data.length }))
           );
+        }
+
+        // Log thinking mode
+        if (thinkingEnabled) {
+          console.log(`🧠 [IPC HANDLER] Extended thinking enabled`);
         }
 
         // CRITICAL FIX: Validate that any existing session's path matches current project
@@ -125,10 +138,13 @@ export function registerClaudeHandlers(): void {
         if (attachments && attachments.length > 0) {
           terminalAggregator.addUserLine(projectId, `📎 ${attachments.length} attachment(s)\n`);
         }
+        if (thinkingEnabled) {
+          terminalAggregator.addUserLine(projectId, `🧠 Extended thinking enabled\n`);
+        }
         terminalAggregator.addUserLine(projectId, '\n');
 
-        // Send prompt using session resume pattern with optional model and attachments
-        await claudeService.sendPrompt(projectId, project.path, prompt, model, attachments);
+        // Send prompt using session resume pattern with optional model, attachments, and thinking
+        await claudeService.sendPrompt(projectId, project.path, prompt, model, attachments, thinkingEnabled);
 
         return {
           success: true,
@@ -434,8 +450,18 @@ function setupClaudeEventForwarding(): void {
 
       if (Array.isArray(content)) {
         for (const block of content) {
+          // Thinking blocks - Claude's internal reasoning
+          if (block.type === 'thinking' && block.thinking) {
+            terminalAggregator.addClaudeLine(projectId, '\n');
+            terminalAggregator.addClaudeLine(projectId, '### 🧠 Claude is thinking:\n');
+            terminalAggregator.addClaudeLine(projectId, block.thinking + '\n');
+            terminalAggregator.addClaudeLine(projectId, '###\n');
+            terminalAggregator.addClaudeLine(projectId, '\n');
+          }
+
           // Text blocks - Claude's explanations
           if (block.type === 'text' && block.text) {
+
             terminalAggregator.addClaudeLine(projectId, '\n');
             terminalAggregator.addClaudeLine(projectId, '### 💭 Claude:\n');
             terminalAggregator.addClaudeLine(projectId, block.text + '\n');

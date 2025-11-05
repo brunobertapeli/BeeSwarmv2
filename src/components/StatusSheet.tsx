@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X, Brain, Clock } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 
 // Import workflow icons
@@ -11,10 +11,13 @@ import bgImage from '../assets/images/bg.jpg'
 import successSound from '../assets/sounds/success.wav'
 
 interface ConversationMessage {
-  type: 'user' | 'assistant' | 'tool'
+  type: 'user' | 'assistant' | 'tool' | 'thinking'
   content: string
   timestamp?: Date
   toolName?: string // For highlighting tool names
+  toolId?: string // Unique ID for tool execution
+  toolDuration?: number // Duration in seconds for completed tools
+  thinkingDuration?: number // Duration in seconds for completed thinking
 }
 
 interface DeploymentStage {
@@ -71,10 +74,14 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set())
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set())
   const [expandedUserPrompts, setExpandedUserPrompts] = useState<Set<string>>(new Set())
+  const [expandedThinking, setExpandedThinking] = useState<Set<string>>(new Set())
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMoreBlocks, setHasMoreBlocks] = useState(true)
   const [currentOffset, setCurrentOffset] = useState(0)
   const [actionBarHeight, setActionBarHeight] = useState(0)
+  const [thinkingTimers, setThinkingTimers] = useState<Map<string, number>>(new Map())
+  const [thinkingDots, setThinkingDots] = useState('')
+  const [latestToolTimer, setLatestToolTimer] = useState<Map<string, number>>(new Map()) // blockId -> elapsed time
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Random loading phrases - use block ID for consistent selection
@@ -122,36 +129,51 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       timestamp: new Date(block.createdAt),
     })
 
-    // Parse and add Claude messages
+    // Collect all Claude messages and tools with timestamps for chronological sorting
+    const timedMessages: ConversationMessage[] = []
+
+    // Parse Claude messages
     if (block.claudeMessages) {
       try {
-        const claudeMessages = JSON.parse(block.claudeMessages) as string[]
-        claudeMessages.forEach(msg => {
-          messages.push({
-            type: 'assistant',
-            content: msg,
-          })
+        const claudeMessages = JSON.parse(block.claudeMessages)
+
+        // Handle both old format (string[]) and new format (object[])
+        claudeMessages.forEach((msg: any) => {
+          if (typeof msg === 'string') {
+            // Old format - plain string (no timestamp, will be sorted to end)
+            timedMessages.push({
+              type: 'assistant',
+              content: msg,
+            })
+          } else if (msg.type === 'text') {
+            // New format - text message
+            timedMessages.push({
+              type: 'assistant',
+              content: msg.content,
+              timestamp: msg.timestamp ? new Date(msg.timestamp) : undefined,
+            })
+          } else if (msg.type === 'thinking') {
+            // New format - thinking message
+            timedMessages.push({
+              type: 'thinking',
+              content: msg.content,
+              timestamp: msg.timestamp ? new Date(msg.timestamp) : undefined,
+              thinkingDuration: msg.thinkingDuration,
+            })
+          }
         })
       } catch (e) {
         console.error('Failed to parse Claude messages:', e)
       }
     }
 
-    // If no Claude messages yet, show random loading message
-    if (messages.filter(m => m.type === 'assistant').length === 0 && !block.isComplete) {
-      messages.push({
-        type: 'assistant',
-        content: getLoadingPhrase(block.id),
-      })
-    }
-
-    // Parse and add tool executions
+    // Parse tool executions
     if (block.toolExecutions) {
       try {
         const toolData = JSON.parse(block.toolExecutions)
 
         if (block.isComplete) {
-          // Completed: toolData might be grouped object or array - handle both
+          // Completed: show grouped summary
           if (Array.isArray(toolData)) {
             // Group the array
             const grouped: Record<string, number> = {}
@@ -163,7 +185,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             ).join(', ')
             // Only add tool message if there's actual content
             if (toolMessages) {
-              messages.push({
+              timedMessages.push({
                 type: 'tool',
                 content: toolMessages,
               })
@@ -175,14 +197,14 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             ).join(', ')
             // Only add tool message if there's actual content
             if (toolMessages) {
-              messages.push({
+              timedMessages.push({
                 type: 'tool',
                 content: toolMessages,
               })
             }
           }
         } else {
-          // In progress: show verbose tool executions
+          // In progress: show verbose tool executions with timestamps
           if (Array.isArray(toolData)) {
             toolData.forEach((tool: any) => {
               let toolMsg = `Claude using tool ${tool.toolName}`
@@ -193,10 +215,20 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
               } else if (tool.command) {
                 toolMsg += ` @ ${tool.command}`
               }
-              messages.push({
+
+              // Calculate duration if tool is complete
+              let toolDuration: number | undefined
+              if (tool.endTime && tool.startTime) {
+                toolDuration = Math.round((tool.endTime - tool.startTime) / 1000)
+              }
+
+              timedMessages.push({
                 type: 'tool',
                 content: toolMsg,
-                toolName: tool.toolName, // Store tool name for highlighting
+                toolName: tool.toolName,
+                toolId: tool.toolId,
+                timestamp: tool.startTime ? new Date(tool.startTime) : undefined,
+                toolDuration: toolDuration,
               })
             })
           }
@@ -204,6 +236,26 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       } catch (e) {
         console.error('Failed to parse tool executions:', e)
       }
+    }
+
+    // Sort all messages by timestamp (messages without timestamps go to end)
+    timedMessages.sort((a, b) => {
+      if (!a.timestamp && !b.timestamp) return 0
+      if (!a.timestamp) return 1
+      if (!b.timestamp) return -1
+      return a.timestamp.getTime() - b.timestamp.getTime()
+    })
+
+    // Add sorted messages to the main messages array
+    messages.push(...timedMessages)
+
+    // If no Claude messages yet, show random loading message
+    const hasAssistantMessages = messages.some(m => m.type === 'assistant' || m.type === 'thinking')
+    if (!hasAssistantMessages && !block.isComplete) {
+      messages.push({
+        type: 'assistant',
+        content: getLoadingPhrase(block.id),
+      })
     }
 
     // Parse completion stats
@@ -397,7 +449,15 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       try {
         if (block.claudeMessages) {
           const messages = JSON.parse(block.claudeMessages)
-          wasInterrupted = messages.some((m: string) => m.includes('⚠️ Stopped by user'))
+          wasInterrupted = messages.some((m: any) => {
+            // Handle both old format (string) and new format (object)
+            if (typeof m === 'string') {
+              return m.includes('⚠️ Stopped by user')
+            } else if (m.content) {
+              return m.content.includes('⚠️ Stopped by user')
+            }
+            return false
+          })
         }
       } catch (e) {
         console.error('Failed to parse claude messages:', e)
@@ -482,6 +542,93 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
     }
   }, [allBlocks, isExpanded])
+
+  // Animate dots for thinking state: '' -> '.' -> '..' -> '...'
+  useEffect(() => {
+    const hasActiveThinking = allBlocks.some(block =>
+      block.messages?.some(m => m.type === 'thinking' && !m.thinkingDuration)
+    )
+
+    if (hasActiveThinking) {
+      const interval = setInterval(() => {
+        setThinkingDots(prev => {
+          if (prev === '...') return ''
+          return prev + '.'
+        })
+      }, 400)
+
+      return () => clearInterval(interval)
+    } else {
+      setThinkingDots('')
+    }
+  }, [allBlocks])
+
+  // Track thinking timers for active blocks
+  useEffect(() => {
+    const intervals: NodeJS.Timeout[] = []
+
+    allBlocks.forEach(block => {
+      // Check if block has active thinking (no duration set = still thinking)
+      const hasActiveThinking = block.messages?.some(m =>
+        m.type === 'thinking' && !m.thinkingDuration
+      )
+
+      if (hasActiveThinking) {
+        const thinkingMsg = block.messages?.find(m => m.type === 'thinking' && !m.thinkingDuration)
+        if (thinkingMsg?.timestamp) {
+          // Update timer every 100ms for smooth display
+          const interval = setInterval(() => {
+            setThinkingTimers(prev => {
+              const newMap = new Map(prev)
+              const elapsed = (Date.now() - thinkingMsg.timestamp!.getTime()) / 1000
+              newMap.set(block.id, elapsed)
+              return newMap
+            })
+          }, 100)
+          intervals.push(interval)
+        }
+      }
+    })
+
+    return () => {
+      intervals.forEach(interval => clearInterval(interval))
+    }
+  }, [allBlocks])
+
+  // Track elapsed time for the LATEST tool in each block
+  useEffect(() => {
+    const intervals: NodeJS.Timeout[] = []
+
+    allBlocks.forEach(block => {
+      // Find the last tool message without a duration (active tool)
+      const toolMessages = block.messages?.filter(m => m.type === 'tool') || []
+      const latestTool = toolMessages[toolMessages.length - 1]
+
+      if (latestTool && latestTool.timestamp && latestTool.toolDuration === undefined) {
+        // This is an active tool - track its time
+        const interval = setInterval(() => {
+          setLatestToolTimer(prev => {
+            const newMap = new Map(prev)
+            const elapsed = (Date.now() - latestTool.timestamp!.getTime()) / 1000
+            newMap.set(block.id, elapsed)
+            return newMap
+          })
+        }, 100)
+        intervals.push(interval)
+      } else {
+        // No active tool - clear timer for this block
+        setLatestToolTimer(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(block.id)
+          return newMap
+        })
+      }
+    })
+
+    return () => {
+      intervals.forEach(interval => clearInterval(interval))
+    }
+  }, [allBlocks])
 
   // Infinite scroll - detect when user scrolls near top
   useEffect(() => {
@@ -975,6 +1122,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                 const isLong = isLongMessage(message.content)
                                 const isMessageExpanded = expandedMessages.has(messageId)
 
+                                // Check if this is the latest tool (for timer display)
+                                const toolMessages = block.messages?.filter(m => m.type === 'tool') || []
+                                const isLatestTool = message.type === 'tool' && message === toolMessages[toolMessages.length - 1]
+
                                 return (
                                   <div key={idx}>
                                     <div className="flex items-start gap-2">
@@ -1010,21 +1161,77 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                       {message.type === 'tool' && (
                                         <>
                                           <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
-                                          <span className="text-[11px] text-gray-400 leading-relaxed">
+                                          <span className="text-[11px] text-gray-400 leading-relaxed flex items-center gap-2">
                                             {message.toolName ? (
-                                              // Highlight the tool name
+                                              // Individual tool with timing (only show timer for latest active tool)
                                               <>
-                                                Claude using tool{' '}
-                                                <span className="text-primary font-medium">{message.toolName}</span>
-                                                {message.content.includes('@') && (
-                                                  <> @ {message.content.split('@')[1].trim()}</>
+                                                <span>
+                                                  Claude using tool{' '}
+                                                  <span className="text-primary font-medium">{message.toolName}</span>
+                                                  {message.content.includes('@') && (
+                                                    <> @ {message.content.split('@')[1].trim()}</>
+                                                  )}
+                                                </span>
+                                                {isLatestTool && message.toolDuration === undefined && (
+                                                  // Only show timer for the latest active tool
+                                                  <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                    <Clock size={10} />
+                                                    <>{latestToolTimer.get(block.id)?.toFixed(1) || '0.0'}s</>
+                                                  </span>
                                                 )}
                                               </>
                                             ) : (
-                                              // Grouped tools (completed)
-                                              <span className="font-mono">{message.content}</span>
+                                              // Grouped tools (completed) - add "Total tools used:" prefix
+                                              <span className="font-mono">Total tools used: {message.content}</span>
                                             )}
                                           </span>
+                                        </>
+                                      )}
+                                      {message.type === 'thinking' && (
+                                        <>
+                                          {message.thinkingDuration !== undefined ? (
+                                            // Complete thinking - expandable
+                                            <div className="flex-1">
+                                              <button
+                                                onClick={() => {
+                                                  const newSet = new Set(expandedThinking)
+                                                  if (newSet.has(messageId)) {
+                                                    newSet.delete(messageId)
+                                                  } else {
+                                                    newSet.add(messageId)
+                                                  }
+                                                  setExpandedThinking(newSet)
+                                                }}
+                                                className="flex items-center gap-2 text-[11px] text-purple-400 hover:text-purple-300 transition-colors"
+                                              >
+                                                <Brain size={9} className="flex-shrink-0" style={{ marginLeft: '1px' }} />
+                                                <span className="font-medium">
+                                                  Thought for {message.thinkingDuration}s
+                                                </span>
+                                                <ChevronDown
+                                                  size={10}
+                                                  className={`transition-transform ${expandedThinking.has(messageId) ? 'rotate-180' : ''}`}
+                                                />
+                                              </button>
+                                              {expandedThinking.has(messageId) && (
+                                                <div className="mt-2 pl-6 text-[10px] text-gray-400 leading-relaxed whitespace-pre-wrap border-l-2 border-purple-500/30">
+                                                  {message.content}
+                                                </div>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            // Active thinking - animated
+                                            <div className="flex items-center gap-2">
+                                              <Brain size={9} className="flex-shrink-0 text-purple-400" style={{ marginLeft: '1px' }} />
+                                              <span className="text-[11px] text-purple-400 font-medium">
+                                                Thinking{thinkingDots}
+                                              </span>
+                                              <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                <Clock size={10} />
+                                                {thinkingTimers.get(block.id)?.toFixed(1) || '0.0'}s
+                                              </span>
+                                            </div>
+                                          )}
                                         </>
                                       )}
                                     </div>

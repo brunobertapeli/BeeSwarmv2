@@ -382,11 +382,11 @@ export interface ElectronAPI {
   }
 
   claude: {
-    startSession: (projectId: string, prompt?: string, model?: string, attachments?: ClaudeAttachment[]) => Promise<{
+    startSession: (projectId: string, prompt?: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean) => Promise<{
       success: boolean
       error?: string
     }>
-    sendPrompt: (projectId: string, prompt: string, model?: string, attachments?: ClaudeAttachment[]) => Promise<{
+    sendPrompt: (projectId: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean) => Promise<{
       success: boolean
       error?: string
     }>

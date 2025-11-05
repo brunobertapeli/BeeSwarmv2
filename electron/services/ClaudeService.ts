@@ -82,8 +82,9 @@ class ClaudeService extends EventEmitter {
    * @param prompt - Prompt to send
    * @param model - Optional model to use (defaults to claude-sonnet-4-5)
    * @param attachments - Optional file/image attachments
+   * @param thinkingEnabled - Optional flag to enable extended thinking
    */
-  async startSession(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[]): Promise<void> {
+  async startSession(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean): Promise<void> {
     const existingSession = this.sessions.get(projectId);
 
     // CRITICAL FIX: Validate that project path matches existing session
@@ -204,15 +205,20 @@ class ClaudeService extends EventEmitter {
     const options = {
       cwd: projectPath, // Current working directory
       permissionMode: 'bypassPermissions' as const, // Bypass all permission prompts
-      maxTurns: 10,
+      maxTurns: 30, // Increased from 10 to allow more tool usage with thinking
       signal: abortController.signal,
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(), // Path to claude CLI
       model: effectiveModel, // Always set model
       ...(sessionId && { resume: sessionId }), // Resume if we have session ID
+      ...(thinkingEnabled && { maxThinkingTokens: 5000 }), // Enable extended thinking (5k tokens = ~3750 words)
     };
 
     console.log('🔍 DEBUG - SDK Options:', JSON.stringify(options, null, 2));
     console.log('🔍 DEBUG - Model being sent to SDK:', effectiveModel);
+    console.log('🔍 DEBUG - Max turns:', options.maxTurns);
+    if (thinkingEnabled) {
+      console.log('🧠 DEBUG - Extended thinking enabled with maxThinkingTokens:', 5000);
+    }
 
     try {
       // Update status to running
@@ -406,12 +412,13 @@ class ClaudeService extends EventEmitter {
    * @param prompt - User prompt/message
    * @param model - Optional model to use for new sessions
    * @param attachments - Optional file/image attachments
+   * @param thinkingEnabled - Optional flag to enable extended thinking
    */
-  async sendPrompt(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[]): Promise<void> {
+  async sendPrompt(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean): Promise<void> {
     console.log(`📝 Sending prompt to Claude [${projectId}]: ${prompt.substring(0, 100)}...`);
 
     // Use startSession which handles resume automatically
-    await this.startSession(projectId, projectPath, prompt, model, attachments);
+    await this.startSession(projectId, projectPath, prompt, model, attachments, thinkingEnabled);
   }
 
   /**

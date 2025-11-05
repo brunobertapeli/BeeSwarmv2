@@ -48,11 +48,6 @@ export function setCurrentUser(userId: string) {
       fs.mkdirSync(userProjectsDir, { recursive: true })
     }
 
-    // Log user data location
-    console.log(`📁 User data folder: ${userDataDir}`)
-    console.log('   ├── database.db')
-    console.log('   ├── Projects/')
-    console.log('   └── Logs/')
   } catch (error) {
     console.error('❌ Error setting up user directories:', error)
   }
@@ -475,17 +470,6 @@ User: ${currentUserId || 'not logged in'}
 // Log when app is ready
 app.on('ready', () => {
   console.log('✅ Electron app ready')
-
-  // Log user data location (will show actual path after user logs in)
-  if (currentUserId) {
-    const userDataDir = path.join(app.getPath('home'), 'Documents', 'CodeDeck', currentUserId)
-    console.log('📁 User data folder:', userDataDir)
-    console.log('   ├── database.db')
-    console.log('   ├── Projects/')
-    console.log('   └── Logs/')
-  } else {
-    console.log('📁 User data folder: ~/Documents/CodeDeck/{userId}/ (set after login)')
-  }
 })
 
 // IPC Handler to get crash logs
