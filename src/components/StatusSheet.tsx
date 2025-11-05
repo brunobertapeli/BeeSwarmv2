@@ -57,12 +57,13 @@ interface ConversationBlock {
 
 interface StatusSheetProps {
   projectId?: string
+  actionBarRef?: React.RefObject<HTMLDivElement>
   onMouseEnter?: () => void
   onMouseLeave?: () => void
   onStopClick?: () => void
 }
 
-function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: StatusSheetProps) {
+function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick }: StatusSheetProps) {
   const { deploymentStatus } = useAppStore()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
@@ -73,6 +74,7 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMoreBlocks, setHasMoreBlocks] = useState(true)
   const [currentOffset, setCurrentOffset] = useState(0)
+  const [actionBarHeight, setActionBarHeight] = useState(0)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Random loading phrases - use block ID for consistent selection
@@ -512,6 +514,26 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
     }
   }, [hasHistory])
 
+  // Use ResizeObserver to watch ActionBar height changes in real-time
+  useEffect(() => {
+    if (!actionBarRef?.current) return
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setActionBarHeight(entry.target.clientHeight)
+      }
+    })
+
+    resizeObserver.observe(actionBarRef.current)
+
+    // Set initial height
+    setActionBarHeight(actionBarRef.current.clientHeight)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [actionBarRef])
+
   // Don't render if no history
   if (!hasHistory) {
     return null
@@ -566,13 +588,23 @@ function StatusSheet({ projectId, onMouseEnter, onMouseLeave, onStopClick }: Sta
     return latestMessage?.content || ''
   }
 
+  // Calculate bottom position based on action bar height
+  const baseOffset = -2 // Gap between action bar and status sheet
+  const bottomPosition = isVisible
+    ? (actionBarHeight > 0 ? actionBarHeight + baseOffset : 100)
+    : (actionBarHeight > 0 ? actionBarHeight - 4 : 80)
+
   return (
     <div
-      className={`fixed left-1/2 transform -translate-x-1/2 z-[99] transition-all duration-500 ease-out pointer-events-none ${
-        isVisible ? 'bottom-[110px] opacity-100' : 'bottom-[90px] opacity-0'
+      className={`fixed left-1/2 transform -translate-x-1/2 z-[99] pointer-events-none ${
+        isVisible ? 'opacity-100' : 'opacity-0'
       }`}
+      style={{
+        bottom: `${bottomPosition}px`,
+        transition: 'opacity 300ms ease-out'
+      }}
     >
-      <div className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[680px] overflow-hidden transition-all duration-300 pb-4 relative pointer-events-auto"
+      <div className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[782px] overflow-hidden pb-4 relative pointer-events-auto"
         style={{
           boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
         }}

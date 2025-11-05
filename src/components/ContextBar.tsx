@@ -13,32 +13,25 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const tooltipRef = useRef<HTMLDivElement>(null)
-  const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Cleanup tooltip timeout on unmount
+  // Close tooltip when clicking outside
   useEffect(() => {
-    return () => {
-      if (tooltipTimeoutRef.current) {
-        clearTimeout(tooltipTimeoutRef.current)
+    if (!showTooltip) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
+        setShowTooltip(false)
       }
     }
-  }, [])
 
-  const handleShowTooltip = () => {
-    if (tooltipTimeoutRef.current) {
-      clearTimeout(tooltipTimeoutRef.current)
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
     }
-    setShowTooltip(true)
-  }
+  }, [showTooltip])
 
-  const handleHideTooltip = () => {
-    // Don't hide if confirmation dialog is open
-    if (showConfirmDialog) return
-
-    // Add a small delay to allow moving from bar to tooltip
-    tooltipTimeoutRef.current = setTimeout(() => {
-      setShowTooltip(false)
-    }, 150)
+  const handleToggleTooltip = () => {
+    setShowTooltip(!showTooltip)
   }
 
   const handleClearContext = () => {
@@ -53,6 +46,7 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
 
   const cancelClearContext = () => {
     setShowConfirmDialog(false)
+    setShowTooltip(false)
   }
 
   const formatTokens = (tokens: number) => {
@@ -97,9 +91,8 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
     <div ref={tooltipRef} className="relative flex items-center">
       {/* Compact Context Bar */}
       <div
-        className="relative group bg-dark-bg/30 border border-dark-border/30 rounded-lg px-2 py-1.5 hover:border-primary/30 transition-all flex items-center gap-2"
-        onMouseEnter={handleShowTooltip}
-        onMouseLeave={handleHideTooltip}
+        className="relative group bg-dark-bg/30 border border-dark-border/30 rounded-lg px-2 py-1.5 hover:border-primary/30 transition-all flex items-center gap-2 cursor-pointer"
+        onClick={handleToggleTooltip}
       >
         {/* Icon */}
         <Database size={12} className="text-gray-400 flex-shrink-0" />
@@ -119,12 +112,10 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
         </span>
       </div>
 
-      {/* Hover Tooltip */}
+      {/* Tooltip Popup */}
       {showTooltip && (
         <div
-          className="absolute bottom-full right-0 mb-2 bg-dark-card border border-dark-border rounded-lg shadow-2xl p-3 min-w-[260px] z-[70] animate-fadeIn overflow-hidden"
-          onMouseEnter={handleShowTooltip}
-          onMouseLeave={handleHideTooltip}
+          className="absolute bottom-full left-0 mb-2 bg-dark-card border border-dark-border rounded-lg shadow-2xl p-3 min-w-[260px] z-[70] animate-fadeIn overflow-hidden"
         >
             {/* Background Image */}
             <div

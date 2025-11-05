@@ -11,7 +11,11 @@ import {
   ExternalLink,
   Terminal,
   Monitor,
-  Smartphone
+  Smartphone,
+  Plus,
+  Sliders,
+  FileText,
+  X as CloseIcon
 } from 'lucide-react'
 import { useAppStore, type DeploymentStatus } from '../store/appStore'
 import { useToast } from '../hooks/useToast'
@@ -68,9 +72,17 @@ function ActionBar({
   const [deployProgress, setDeployProgress] = useState(0)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const [loadingDots, setLoadingDots] = useState('')
+  const [showPlusMenu, setShowPlusMenu] = useState(false)
+  const [showTweakMenu, setShowTweakMenu] = useState(false)
+  const [thinkingEnabled, setThinkingEnabled] = useState(false)
+  const [planModeActive, setPlanModeActive] = useState(false)
+  const [attachments, setAttachments] = useState<Array<{id: string, type: 'image' | 'file', name: string, preview?: string}>>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const actionBarRef = useRef<HTMLDivElement>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
+  const plusMenuRef = useRef<HTMLDivElement>(null)
+  const tweakMenuRef = useRef<HTMLDivElement>(null)
 
   // Check if Claude is working (also block if status is undefined to prevent race condition)
   const isClaudeWorking = claudeStatus === 'starting' || claudeStatus === 'running' || claudeStatus === undefined
@@ -175,29 +187,41 @@ function ActionBar({
   // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      const scrollHeight = textareaRef.current.scrollHeight
-      const maxHeight = 8 * 24 // 8 lines * 24px line height
-      textareaRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`
+      // Only auto-resize when there's a message
+      if (message) {
+        textareaRef.current.style.height = 'auto'
+        const scrollHeight = textareaRef.current.scrollHeight
+        const maxHeight = 8 * 24 // 8 lines * 24px line height
+        textareaRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`
+      } else {
+        // Reset to base height when no message
+        textareaRef.current.style.height = attachments.length > 0 ? '70px' : '42px'
+      }
     }
-  }, [message])
+  }, [message, attachments])
 
-  // Close model dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(event.target as Node)) {
         setShowModelDropdown(false)
       }
+      if (plusMenuRef.current && !plusMenuRef.current.contains(event.target as Node)) {
+        setShowPlusMenu(false)
+      }
+      if (tweakMenuRef.current && !tweakMenuRef.current.contains(event.target as Node)) {
+        setShowTweakMenu(false)
+      }
     }
 
-    if (showModelDropdown) {
+    if (showModelDropdown || showPlusMenu || showTweakMenu) {
       document.addEventListener('mousedown', handleClickOutside)
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showModelDropdown])
+  }, [showModelDropdown, showPlusMenu, showTweakMenu])
 
   const startHideTimer = () => {
     if (!isLocked) {
@@ -392,6 +416,65 @@ function ActionBar({
     }
   }
 
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData.items
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        e.preventDefault()
+        const blob = items[i].getAsFile()
+        if (blob) {
+          const reader = new FileReader()
+          reader.onload = (event) => {
+            const preview = event.target?.result as string
+            setAttachments([...attachments, {
+              id: Math.random().toString(36),
+              type: 'image',
+              name: blob.name || 'pasted-image.png',
+              preview
+            }])
+          }
+          reader.readAsDataURL(blob)
+        }
+      }
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLTextAreaElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = async (e: React.DragEvent<HTMLTextAreaElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const files = Array.from(e.dataTransfer.files)
+    const validImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    const validFileTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/csv', 'text/plain', 'text/html', 'application/vnd.oasis.opendocument.text', 'application/rtf', 'application/epub+zip']
+
+    for (const file of files) {
+      if (validImageTypes.includes(file.type)) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const preview = event.target?.result as string
+          setAttachments(prev => [...prev, {
+            id: Math.random().toString(36),
+            type: 'image',
+            name: file.name,
+            preview
+          }])
+        }
+        reader.readAsDataURL(file)
+      } else if (validFileTypes.includes(file.type) || file.name.endsWith('.docx') || file.name.endsWith('.odt') || file.name.endsWith('.rtf') || file.name.endsWith('.epub')) {
+        setAttachments(prev => [...prev, {
+          id: Math.random().toString(36),
+          type: 'file',
+          name: file.name
+        }])
+      }
+    }
+  }
+
   return (
     <>
       {/* Bottom hover trigger zone */}
@@ -411,6 +494,7 @@ function ActionBar({
       {!isHidden && (
         <StatusSheet
           projectId={projectId}
+          actionBarRef={actionBarRef}
           onMouseEnter={() => {
             clearHideTimer()
             setIsTextareaFocused(true) // Prevent auto-hide
@@ -427,7 +511,7 @@ function ActionBar({
 
       {/* Action Bar */}
       <div
-        className={`fixed bottom-6 left-1/2 transform -translate-x-1/2 z-[100] transition-all duration-500 ease-out ${
+        className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] transition-all duration-500 ease-out ${
           isVisible && !isHidden
             ? 'translate-y-0 opacity-100'
             : 'translate-y-32 opacity-0'
@@ -435,15 +519,56 @@ function ActionBar({
         onMouseEnter={handleMouseEnterBar}
         onMouseLeave={handleMouseLeaveBar}
       >
-        <div className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 rounded-2xl shadow-2xl overflow-visible w-[680px] relative action-bar-container">
+        <div ref={actionBarRef} className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 rounded-2xl shadow-2xl overflow-visible w-[782px] relative action-bar-container">
           {/* Top Row - Textarea with Send Icon Inside */}
           <div className="px-3 pt-3 pb-2">
             <div className="relative flex items-start">
+              {/* Custom Plan Mode Placeholder */}
+              {planModeActive && !message && attachments.length === 0 && (
+                <div className="absolute left-[14px] top-[10px] pointer-events-none text-sm text-gray-500 z-[5]">
+                  Describe the task you need Claude to plan ahead.
+                </div>
+              )}
+
+              {/* Attachment Chips - Inside textarea at top */}
+              {attachments.length > 0 && (
+                <div className="absolute left-[14px] top-[10px] flex gap-1.5 z-[5] pointer-events-auto max-w-[calc(100%-60px)] overflow-x-auto overflow-y-hidden scrollbar-hide">
+                  {attachments.map((attachment) => (
+                    <div
+                      key={attachment.id}
+                      className="relative bg-dark-bg/90 border border-dark-border/50 rounded-full px-2.5 py-1 flex items-center gap-1.5 group hover:bg-dark-bg transition-colors flex-shrink-0"
+                    >
+                      {attachment.type === 'image' && attachment.preview ? (
+                        <img
+                          src={attachment.preview}
+                          alt={attachment.name}
+                          className="w-3 h-3 rounded-full object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <FileText size={12} className="text-gray-400 flex-shrink-0" />
+                      )}
+                      <span className="text-[10px] text-gray-300 max-w-[60px] truncate">
+                        {attachment.name}
+                      </span>
+                      <button
+                        onClick={() => setAttachments(attachments.filter(a => a.id !== attachment.id))}
+                        className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                      >
+                        <CloseIcon size={10} className="text-gray-400 hover:text-red-400" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <textarea
                 ref={textareaRef}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
                 onFocus={() => setIsTextareaFocused(true)}
                 onBlur={() => setIsTextareaFocused(false)}
                 placeholder={
@@ -451,16 +576,23 @@ function ActionBar({
                     ? "Deploying your app..."
                     : isClaudeWorking
                     ? `Claude is working${loadingDots}`
-                    : "Tell Claude what to build..."
+                    : planModeActive
+                    ? ""
+                    : "Ask Claude to build..."
                 }
                 disabled={isInputBlocked}
-                className={`flex-1 border border-dark-border/50 rounded-xl px-3.5 py-2.5 pr-11 text-sm outline-none transition-all resize-none overflow-y-auto ${
+                className={`flex-1 border rounded-xl px-3.5 pr-11 text-sm outline-none transition-all resize-none overflow-y-auto ${
                   isInputBlocked
-                    ? 'bg-dark-bg/30 text-gray-500 placeholder-gray-600 cursor-not-allowed'
-                    : 'bg-dark-bg/50 text-white placeholder-gray-500 focus:border-primary/30'
-                }`}
+                    ? 'bg-dark-bg/30 text-gray-500 placeholder-gray-600 cursor-not-allowed border-dark-border/50'
+                    : planModeActive
+                    ? 'bg-dark-bg/50 text-white placeholder-gray-500 border-blue-400/50 focus:border-blue-400/70'
+                    : 'bg-dark-bg/50 text-white placeholder-gray-500 border-dark-border/50 focus:border-primary/30'
+                } ${attachments.length > 0 ? 'pt-[38px] pb-2.5' : 'py-2.5'}`}
                 rows={1}
-                style={{ lineHeight: '24px', minHeight: '42px', maxHeight: '192px' }}
+                style={{
+                  lineHeight: '24px',
+                  maxHeight: '192px'
+                }}
               />
               {isClaudeWorking ? (
                 <div
@@ -499,6 +631,144 @@ function ActionBar({
 
           {/* Bottom Row - Model Dropdown + Icons */}
           <div className="flex items-center gap-1.5 px-3 pb-2.5">
+            {/* Plus Button */}
+            <div className="relative" ref={plusMenuRef}>
+              <button
+                onClick={() => setShowPlusMenu(!showPlusMenu)}
+                className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
+              >
+                <Plus size={15} className="text-gray-400 hover:text-primary transition-colors" />
+                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                  Attach files
+                </span>
+              </button>
+
+              {/* Plus Menu */}
+              {showPlusMenu && (
+                <>
+                  <div className="fixed inset-0 z-[200]" onClick={() => setShowPlusMenu(false)} />
+                  <div className="absolute bottom-full left-0 mb-1 bg-dark-card border border-dark-border rounded-lg shadow-2xl p-2 min-w-[180px] z-[201] overflow-hidden">
+                    <div
+                      className="absolute inset-0 opacity-10 pointer-events-none"
+                      style={{
+                        backgroundImage: `url(${bgImage})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }}
+                    />
+                    <div className="relative z-10 space-y-1">
+                      <button
+                        onClick={async () => {
+                          setShowPlusMenu(false)
+                          const input = document.createElement('input')
+                          input.type = 'file'
+                          input.accept = 'image/jpeg,image/png,image/gif,image/webp'
+                          input.onchange = async (e) => {
+                            const file = (e.target as HTMLInputElement).files?.[0]
+                            if (file) {
+                              const reader = new FileReader()
+                              reader.onload = (event) => {
+                                const preview = event.target?.result as string
+                                setAttachments([...attachments, {
+                                  id: Math.random().toString(36),
+                                  type: 'image',
+                                  name: file.name,
+                                  preview
+                                }])
+                              }
+                              reader.readAsDataURL(file)
+                            }
+                          }
+                          input.click()
+                        }}
+                        className="w-full px-3 py-2 rounded-lg text-left text-[11px] text-gray-300 hover:bg-dark-bg/50 transition-colors flex items-center gap-2"
+                      >
+                        <ImageIcon size={14} />
+                        <span>Import an image</span>
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setShowPlusMenu(false)
+                          const input = document.createElement('input')
+                          input.type = 'file'
+                          input.accept = '.pdf,.docx,.csv,.txt,.html,.odt,.rtf,.epub'
+                          input.onchange = async (e) => {
+                            const file = (e.target as HTMLInputElement).files?.[0]
+                            if (file) {
+                              setAttachments([...attachments, {
+                                id: Math.random().toString(36),
+                                type: 'file',
+                                name: file.name
+                              }])
+                            }
+                          }
+                          input.click()
+                        }}
+                        className="w-full px-3 py-2 rounded-lg text-left text-[11px] text-gray-300 hover:bg-dark-bg/50 transition-colors flex items-center gap-2"
+                      >
+                        <FileText size={14} />
+                        <span>Import a file</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Tweak Button */}
+            <div className="relative" ref={tweakMenuRef}>
+              <button
+                onClick={() => setShowTweakMenu(!showTweakMenu)}
+                className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
+              >
+                <Sliders size={15} className="text-gray-400 hover:text-primary transition-colors" />
+                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                  Settings
+                </span>
+              </button>
+
+              {/* Tweak Menu */}
+              {showTweakMenu && (
+                <>
+                  <div className="fixed inset-0 z-[200]" onClick={() => setShowTweakMenu(false)} />
+                  <div className="absolute bottom-full left-0 mb-1 bg-dark-card border border-dark-border rounded-lg shadow-2xl p-2 min-w-[180px] z-[201] overflow-hidden">
+                    <div
+                      className="absolute inset-0 opacity-10 pointer-events-none"
+                      style={{
+                        backgroundImage: `url(${bgImage})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }}
+                    />
+                    <div className="relative z-10 space-y-1">
+                      <button
+                        onClick={() => {
+                          setPlanModeActive(!planModeActive)
+                          setShowTweakMenu(false)
+                        }}
+                        className="w-full px-3 py-2 rounded-lg text-left text-[11px] text-gray-300 hover:text-blue-400 hover:bg-dark-bg/50 transition-colors"
+                      >
+                        {planModeActive ? 'Cancel plan mode' : 'Plan mode'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setThinkingEnabled(!thinkingEnabled)
+                        }}
+                        className={`w-full px-3 py-2 rounded-lg text-left text-[11px] transition-colors flex items-center justify-between ${
+                          thinkingEnabled
+                            ? 'bg-green-500/10 text-green-400'
+                            : 'bg-red-500/10 text-red-400'
+                        }`}
+                      >
+                        <span>Thinking {thinkingEnabled ? 'on' : 'off'}</span>
+                        <div className={`w-2 h-2 rounded-full ${thinkingEnabled ? 'bg-green-400' : 'bg-red-400'}`} />
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
             {/* Model Dropdown */}
             <div className="relative" ref={modelDropdownRef}>
               <button
