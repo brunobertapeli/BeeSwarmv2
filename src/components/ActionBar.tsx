@@ -735,10 +735,12 @@ function ActionBar({
                       <button
                         onClick={async () => {
                           setShowPlusMenu(false)
+                          setIsLocked(true) // Lock the action bar
                           const input = document.createElement('input')
                           input.type = 'file'
                           input.accept = 'image/jpeg,image/png,image/gif,image/webp'
                           input.onchange = async (e) => {
+                            setIsLocked(false) // Unlock when file selected
                             const file = (e.target as HTMLInputElement).files?.[0]
                             if (file) {
                               const reader = new FileReader()
@@ -754,6 +756,10 @@ function ActionBar({
                               reader.readAsDataURL(file)
                             }
                           }
+                          // Handle cancel (when user closes picker without selecting)
+                          window.addEventListener('focus', () => {
+                            setTimeout(() => setIsLocked(false), 500)
+                          }, { once: true })
                           input.click()
                         }}
                         className="w-full px-3 py-2 rounded-lg text-left text-[11px] text-gray-300 hover:bg-dark-bg/50 transition-colors flex items-center gap-2"
@@ -764,10 +770,12 @@ function ActionBar({
                       <button
                         onClick={async () => {
                           setShowPlusMenu(false)
+                          setIsLocked(true) // Lock the action bar
                           const input = document.createElement('input')
                           input.type = 'file'
                           input.accept = '.pdf,.docx,.csv,.txt,.html,.odt,.rtf,.epub'
                           input.onchange = async (e) => {
+                            setIsLocked(false) // Unlock when file selected
                             const file = (e.target as HTMLInputElement).files?.[0]
                             if (file) {
                               const reader = new FileReader()
@@ -783,6 +791,10 @@ function ActionBar({
                               reader.readAsDataURL(file)
                             }
                           }
+                          // Handle cancel (when user closes picker without selecting)
+                          window.addEventListener('focus', () => {
+                            setTimeout(() => setIsLocked(false), 500)
+                          }, { once: true })
                           input.click()
                         }}
                         className="w-full px-3 py-2 rounded-lg text-left text-[11px] text-gray-300 hover:bg-dark-bg/50 transition-colors flex items-center gap-2"
