@@ -301,27 +301,13 @@ class ChatHistoryManager extends EventEmitter {
       return;
     }
 
-    // Get current block to find last action index
-    const block = databaseService.getChatBlock(blockId);
-    if (!block || !block.actions) {
-      return;
-    }
+    // Use atomic updateLastActionInBlock to prevent race conditions
+    databaseService.updateLastActionInBlock(blockId, updates);
 
-    try {
-      const actions = JSON.parse(block.actions);
-      const lastActionIndex = actions.length - 1;
-
-      if (lastActionIndex >= 0) {
-        databaseService.updateAction(blockId, lastActionIndex, updates);
-
-        // Emit update event
-        const updatedBlock = databaseService.getChatBlock(blockId);
-        if (updatedBlock) {
-          emitChatEvent('chat:block-updated', projectId, updatedBlock);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to update action:', e);
+    // Emit update event
+    const updatedBlock = databaseService.getChatBlock(blockId);
+    if (updatedBlock) {
+      emitChatEvent('chat:block-updated', projectId, updatedBlock);
     }
   }
 

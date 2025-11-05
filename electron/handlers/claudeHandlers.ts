@@ -917,51 +917,53 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
             return;
           }
 
-          // Parse commit hash from output - try multiple patterns
+          // Get commit hash reliably using git rev-parse
           console.log(`🔍 DEBUG - Git commit output: ${commitOutput}`);
 
-          let commitHash = 'unknown';
-
-          // Try pattern 1: [branch abc1234] (normal commits)
-          let match = commitOutput.match(/\[[\w-]+\s+([a-f0-9]+)\]/);
-          if (match) {
-            commitHash = match[1].substring(0, 7);
-          } else {
-            // Try pattern 2: [branch (root-commit) abc1234] (initial commits)
-            match = commitOutput.match(/\[[\w-]+\s+\([\w-]+\)\s+([a-f0-9]+)\]/);
-            if (match) {
-              commitHash = match[1].substring(0, 7);
-            } else {
-              // Try pattern 3: Just find any 7+ character hex string
-              match = commitOutput.match(/\b([a-f0-9]{7,40})\b/);
-              if (match) {
-                commitHash = match[1].substring(0, 7);
-              }
-            }
-          }
-
-          console.log(`🔍 DEBUG - Parsed commit hash: ${commitHash}`);
-
-          const gitElapsed = ((Date.now() - gitStartTime) / 1000).toFixed(1);
-
-          console.log(`✅ Changes committed for ${projectId}`);
-          terminalAggregator.addGitLine(projectId, `✅ Committed: ${commitHash} | ⏱️  ${gitElapsed}s\n`);
-          terminalAggregator.addGitLine(projectId, '\n');
-
-          // Update action to success with commit details
-          chatHistoryManager.updateLastAction(projectId, {
-            status: 'success',
-            data: {
-              commitHash,
-              filesChanged: changedFiles,
-              commitTime: parseFloat(gitElapsed),
-            },
+          // Use git rev-parse HEAD to get the actual commit hash (100% reliable)
+          const revParseProcess = spawn('git', ['rev-parse', 'HEAD'], {
+            cwd: projectPath,
           });
 
-          // Also update old commit info for backward compatibility
-          chatHistoryManager.updateCommitInfo(projectId, commitHash, changedFiles);
+          let commitHash = 'unknown';
+          let revParseOutput = '';
 
-          resolve();
+          revParseProcess.stdout.on('data', (data) => {
+            revParseOutput += data.toString();
+          });
+
+          revParseProcess.on('close', (revParseCode) => {
+            if (revParseCode === 0 && revParseOutput.trim()) {
+              // Get full hash and trim to 7 characters for display
+              commitHash = revParseOutput.trim().substring(0, 7);
+            } else {
+              console.error(`❌ Failed to get commit hash via rev-parse`);
+              commitHash = 'unknown';
+            }
+
+            console.log(`🔍 DEBUG - Parsed commit hash: ${commitHash}`);
+
+            const gitElapsed = ((Date.now() - gitStartTime) / 1000).toFixed(1);
+
+            console.log(`✅ Changes committed for ${projectId}`);
+            terminalAggregator.addGitLine(projectId, `✅ Committed: ${commitHash} | ⏱️  ${gitElapsed}s\n`);
+            terminalAggregator.addGitLine(projectId, '\n');
+
+            // Update action to success with commit details
+            chatHistoryManager.updateLastAction(projectId, {
+              status: 'success',
+              data: {
+                commitHash,
+                filesChanged: changedFiles,
+                commitTime: parseFloat(gitElapsed),
+              },
+            });
+
+            // Also update old commit info for backward compatibility
+            chatHistoryManager.updateCommitInfo(projectId, commitHash, changedFiles);
+
+            resolve();
+          });
         });
       });
     });

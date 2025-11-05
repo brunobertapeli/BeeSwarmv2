@@ -65,6 +65,11 @@ class DatabaseService {
       this.db = new Database(this.dbPath)
       console.log('✅ SQLite database connected')
 
+      // Enable WAL mode for better concurrency
+      this.db.pragma('journal_mode = WAL')
+      this.db.pragma('busy_timeout = 5000')
+      console.log('✅ WAL mode enabled')
+
       // Create projects table
       this.createProjectsTable()
 
@@ -790,28 +795,37 @@ class DatabaseService {
     data?: any
     timestamp: number
   }): void {
-    const block = this.getChatBlock(blockId)
-    if (!block) {
-      throw new Error(`Chat block not found: ${blockId}`)
+    if (!this.db) {
+      throw new Error('Database not initialized')
     }
 
-    // Get existing actions or initialize empty array
-    let actions: any[] = []
-    if (block.actions) {
-      try {
-        actions = JSON.parse(block.actions)
-      } catch (e) {
-        console.error('Failed to parse existing actions:', e)
+    // Wrap in transaction to prevent race conditions
+    const transaction = this.db.transaction(() => {
+      const block = this.getChatBlock(blockId)
+      if (!block) {
+        throw new Error(`Chat block not found: ${blockId}`)
       }
-    }
 
-    // Add new action
-    actions.push(action)
+      // Get existing actions or initialize empty array
+      let actions: any[] = []
+      if (block.actions) {
+        try {
+          actions = JSON.parse(block.actions)
+        } catch (e) {
+          console.error('Failed to parse existing actions:', e)
+        }
+      }
 
-    // Update block
-    this.updateChatBlock(blockId, {
-      actions: JSON.stringify(actions)
+      // Add new action
+      actions.push(action)
+
+      // Update block
+      this.updateChatBlock(blockId, {
+        actions: JSON.stringify(actions)
+      })
     })
+
+    transaction()
   }
 
   /**
@@ -822,31 +836,80 @@ class DatabaseService {
     message?: string
     data?: any
   }): void {
-    const block = this.getChatBlock(blockId)
-    if (!block) {
-      throw new Error(`Chat block not found: ${blockId}`)
+    if (!this.db) {
+      throw new Error('Database not initialized')
     }
 
-    if (!block.actions) {
-      return
-    }
+    // Wrap in transaction to prevent race conditions
+    const transaction = this.db.transaction(() => {
+      const block = this.getChatBlock(blockId)
+      if (!block) {
+        throw new Error(`Chat block not found: ${blockId}`)
+      }
 
-    try {
-      const actions = JSON.parse(block.actions)
-      if (actionIndex < 0 || actionIndex >= actions.length) {
+      if (!block.actions) {
         return
       }
 
-      // Update action
-      actions[actionIndex] = { ...actions[actionIndex], ...updates }
+      try {
+        const actions = JSON.parse(block.actions)
+        if (actionIndex < 0 || actionIndex >= actions.length) {
+          return
+        }
 
-      // Save back to database
-      this.updateChatBlock(blockId, {
-        actions: JSON.stringify(actions)
-      })
-    } catch (e) {
-      console.error('Failed to update action:', e)
+        // Update action
+        actions[actionIndex] = { ...actions[actionIndex], ...updates }
+
+        // Save back to database
+        this.updateChatBlock(blockId, {
+          actions: JSON.stringify(actions)
+        })
+      } catch (e) {
+        console.error('Failed to update action:', e)
+      }
+    })
+
+    transaction()
+  }
+
+  /**
+   * Update the last action in a chat block atomically
+   */
+  updateLastActionInBlock(blockId: string, updates: {
+    status?: 'in_progress' | 'success' | 'error'
+    message?: string
+    data?: any
+  }): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
     }
+
+    // Wrap in transaction to prevent race conditions
+    const transaction = this.db.transaction(() => {
+      const block = this.getChatBlock(blockId)
+      if (!block || !block.actions) {
+        return
+      }
+
+      try {
+        const actions = JSON.parse(block.actions)
+        const lastActionIndex = actions.length - 1
+
+        if (lastActionIndex >= 0) {
+          // Update last action
+          actions[lastActionIndex] = { ...actions[lastActionIndex], ...updates }
+
+          // Save back to database
+          this.updateChatBlock(blockId, {
+            actions: JSON.stringify(actions)
+          })
+        }
+      } catch (e) {
+        console.error('Failed to update last action:', e)
+      }
+    })
+
+    transaction()
   }
 
   /**
