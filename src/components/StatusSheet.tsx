@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X, Brain, Clock } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
+import { KeywordHighlight } from './KeywordHighlight'
 
 // Import workflow icons
 import UserIcon from '../assets/images/user.svg'
@@ -82,6 +83,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   const [thinkingTimers, setThinkingTimers] = useState<Map<string, number>>(new Map())
   const [thinkingDots, setThinkingDots] = useState('')
   const [latestToolTimer, setLatestToolTimer] = useState<Map<string, number>>(new Map()) // blockId -> elapsed time
+  const [keywords, setKeywords] = useState<Record<string, string>>({})
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Random loading phrases - use block ID for consistent selection
@@ -389,6 +391,18 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   }
 
   // Load initial chat history from database
+  // Load keywords once on mount for educational tooltips
+  useEffect(() => {
+    if (!window.electronAPI?.keywords) return
+
+    window.electronAPI.keywords.getAll().then((result) => {
+      if (result.success && result.keywords) {
+        setKeywords(result.keywords)
+        console.log(`📚 Loaded ${Object.keys(result.keywords).length} keywords for tooltips`)
+      }
+    })
+  }, [])
+
   useEffect(() => {
     if (!projectId || !window.electronAPI?.chat) return
 
@@ -1134,10 +1148,15 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                           <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
                                           <div className="flex-1">
                                             <span className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap">
-                                              {isLong && !isMessageExpanded
-                                                ? getTruncatedMessage(message.content)
-                                                : message.content
-                                              }
+                                              {isLong && !isMessageExpanded ? (
+                                                getTruncatedMessage(message.content)
+                                              ) : (
+                                                <KeywordHighlight
+                                                  text={message.content}
+                                                  keywords={keywords}
+                                                  blockId={block.id}
+                                                />
+                                              )}
                                             </span>
                                             {isLong && (
                                               <button

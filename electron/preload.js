@@ -278,5 +278,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     addToQueue: (data) => ipcRenderer.invoke('support:addToQueue', data),
     sendOfflineMessage: (data) => ipcRenderer.invoke('support:sendOfflineMessage', data),
     submitBugReport: (report) => ipcRenderer.invoke('support:submitBugReport', report)
+  },
+
+  // Keywords for educational tooltips
+  keywords: {
+    getAll: () => ipcRenderer.invoke('keywords:get-all')
   }
 })

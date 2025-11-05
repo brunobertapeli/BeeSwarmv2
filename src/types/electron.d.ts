@@ -520,6 +520,13 @@ export interface ElectronAPI {
       error?: string
     }>
   }
+
+  keywords: {
+    getAll: () => Promise<{
+      success: boolean
+      keywords: Record<string, string>
+    }>
+  }
 }
 
 declare global {

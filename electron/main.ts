@@ -74,6 +74,7 @@ import { terminalService } from './services/TerminalService.js'
 import { claudeService } from './services/ClaudeService.js'
 import { chatHistoryManager } from './services/ChatHistoryManager.js'
 import { projectLockService } from './services/ProjectLockService.js'
+import { keywordService } from './services/KeywordService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -505,7 +506,21 @@ ipcMain.handle('app:clear-crash-logs', async () => {
   }
 })
 
+// IPC Handler to get keywords for educational tooltips
+ipcMain.handle('keywords:get-all', async () => {
+  try {
+    const keywords = keywordService.getKeywords()
+    return { success: true, keywords }
+  } catch (error) {
+    console.error('Failed to get keywords:', error)
+    return { success: false, keywords: {} }
+  }
+})
+
 app.whenReady().then(async () => {
+  // Load keywords for educational tooltips (loads fresh every time app starts)
+  keywordService.loadKeywords()
+
   await initializeApp()
   createMenu()
   createWindow()
