@@ -1,7 +1,8 @@
 import { EventEmitter } from 'events';
 import { query, type SDKMessage, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { execSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import * as path from 'path';
 import { databaseService } from './DatabaseService';
 
 /**
@@ -74,6 +75,28 @@ interface ClaudeSession {
  */
 class ClaudeService extends EventEmitter {
   private sessions: Map<string, ClaudeSession> = new Map();
+  private systemPrompt: string | null = null;
+
+  /**
+   * Load system prompt from file
+   * This is the general prompt that applies to all projects
+   * Individual projects can extend this with their .claude/CLAUDE.md files
+   */
+  private loadSystemPrompt(): string {
+    if (this.systemPrompt) {
+      return this.systemPrompt;
+    }
+
+    try {
+      const promptPath = path.join(__dirname, '../prompts/system-prompt.txt');
+      this.systemPrompt = readFileSync(promptPath, 'utf-8');
+      console.log('📝 Loaded system prompt from:', promptPath);
+      return this.systemPrompt;
+    } catch (error) {
+      console.warn('⚠️ Failed to load system prompt, using empty prompt:', error);
+      return '';
+    }
+  }
 
   /**
    * Start or resume Claude Code session for a project
@@ -201,6 +224,9 @@ class ClaudeService extends EventEmitter {
     databaseService.saveClaudeContext(projectId, session.context);
     this.emit('claude-context-updated', { projectId, context: session.context });
 
+    // Load system prompt (general instructions for all projects)
+    // const systemPromptText = this.loadSystemPrompt();
+
     // Build SDK options
     const options = {
       cwd: projectPath, // Current working directory
@@ -209,6 +235,9 @@ class ClaudeService extends EventEmitter {
       signal: abortController.signal,
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(), // Path to claude CLI
       model: effectiveModel, // Always set model
+      systemPrompt: { type: 'preset', preset: 'claude_code' }, // Use Claude Code preset
+      // systemPrompt: systemPromptText, // Custom system prompt (commented for now)
+      settingSources: ['project' as const], // Load .claude/CLAUDE.md files from projects
       ...(sessionId && { resume: sessionId }), // Resume if we have session ID
       ...(thinkingEnabled && { maxThinkingTokens: 5000 }), // Enable extended thinking (5k tokens = ~3750 words)
     };
