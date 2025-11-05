@@ -31,6 +31,13 @@ export type ProcessState = 'stopped' | 'starting' | 'running' | 'stopping' | 'cr
 
 export type ClaudeStatus = 'idle' | 'starting' | 'running' | 'completed' | 'error'
 
+export interface ClaudeAttachment {
+  type: 'image' | 'document'
+  data: string // base64 encoded
+  mediaType: string // e.g., 'image/jpeg', 'image/png', 'application/pdf'
+  name?: string
+}
+
 export interface ClaudeContext {
   tokens: {
     input: number
@@ -375,11 +382,11 @@ export interface ElectronAPI {
   }
 
   claude: {
-    startSession: (projectId: string, prompt?: string, model?: string) => Promise<{
+    startSession: (projectId: string, prompt?: string, model?: string, attachments?: ClaudeAttachment[]) => Promise<{
       success: boolean
       error?: string
     }>
-    sendPrompt: (projectId: string, prompt: string, model?: string) => Promise<{
+    sendPrompt: (projectId: string, prompt: string, model?: string, attachments?: ClaudeAttachment[]) => Promise<{
       success: boolean
       error?: string
     }>

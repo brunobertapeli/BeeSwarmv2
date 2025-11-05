@@ -184,8 +184,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Claude Code methods
   claude: {
-    startSession: (projectId, prompt, model) => ipcRenderer.invoke('claude:start-session', projectId, prompt, model),
-    sendPrompt: (projectId, prompt, model) => ipcRenderer.invoke('claude:send-prompt', projectId, prompt, model),
+    startSession: (projectId, prompt, model, attachments) => ipcRenderer.invoke('claude:start-session', projectId, prompt, model, attachments),
+    sendPrompt: (projectId, prompt, model, attachments) => ipcRenderer.invoke('claude:send-prompt', projectId, prompt, model, attachments),
     getStatus: (projectId) => ipcRenderer.invoke('claude:get-status', projectId),
     getContext: (projectId) => ipcRenderer.invoke('claude:get-context', projectId),
     changeModel: (projectId, modelName) => ipcRenderer.invoke('claude:change-model', projectId, modelName),

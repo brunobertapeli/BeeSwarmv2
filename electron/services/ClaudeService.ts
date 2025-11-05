@@ -1,8 +1,18 @@
 import { EventEmitter } from 'events';
-import { query, type SDKMessage, type Query } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKMessage, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { databaseService } from './DatabaseService';
+
+/**
+ * Attachment for multimodal inputs
+ */
+export interface ClaudeAttachment {
+  type: 'image' | 'document';
+  data: string; // base64 encoded
+  mediaType: string; // e.g., 'image/jpeg', 'image/png', 'application/pdf'
+  name?: string;
+}
 
 /**
  * Claude Code session status
@@ -71,8 +81,9 @@ class ClaudeService extends EventEmitter {
    * @param projectPath - Absolute path to project root
    * @param prompt - Prompt to send
    * @param model - Optional model to use (defaults to claude-sonnet-4-5)
+   * @param attachments - Optional file/image attachments
    */
-  async startSession(projectId: string, projectPath: string, prompt: string, model?: string): Promise<void> {
+  async startSession(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[]): Promise<void> {
     const existingSession = this.sessions.get(projectId);
 
     // CRITICAL FIX: Validate that project path matches existing session
@@ -207,8 +218,83 @@ class ClaudeService extends EventEmitter {
       // Update status to running
       this.updateStatus(projectId, 'running');
 
+      // Build prompt - either simple string or rich content with attachments
+      let queryPrompt: string | AsyncIterable<SDKUserMessage>;
+
+      if (attachments && attachments.length > 0) {
+        console.log(`📎 [CLAUDE SERVICE] Processing ${attachments.length} attachment(s)`);
+
+        // Build content array with attachments + text
+        const content: Array<any> = [];
+
+        // Add attachments first
+        for (const attachment of attachments) {
+          if (attachment.type === 'image') {
+            const imageContent = {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: attachment.mediaType,
+                data: attachment.data
+              }
+            };
+            content.push(imageContent);
+            console.log(`🖼️ [CLAUDE SERVICE] Added image to content array:`, {
+              name: attachment.name || 'unnamed',
+              mediaType: attachment.mediaType,
+              dataLength: attachment.data.length,
+              dataPreview: attachment.data.substring(0, 50) + '...'
+            });
+          } else if (attachment.type === 'document') {
+            const docContent = {
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: attachment.mediaType,
+                data: attachment.data
+              }
+            };
+            content.push(docContent);
+            console.log(`📄 [CLAUDE SERVICE] Added document to content array:`, {
+              name: attachment.name || 'unnamed',
+              mediaType: attachment.mediaType,
+              dataLength: attachment.data.length
+            });
+          }
+        }
+
+        // Add text prompt
+        content.push({
+          type: 'text',
+          text: prompt
+        });
+
+        console.log(`📎 [CLAUDE SERVICE] Final content array:`, {
+          totalItems: content.length,
+          types: content.map(c => c.type)
+        });
+
+        // Create async iterator with single message
+        queryPrompt = (async function*() {
+          const userMessage = {
+            type: 'user' as const,
+            message: {
+              role: 'user' as const,
+              content: content
+            },
+            parent_tool_use_id: null
+          } as SDKUserMessage;
+
+          console.log('📎 [CLAUDE SERVICE] Yielding user message with attachments (base64 data suppressed for readability)');
+          yield userMessage;
+        })();
+      } else {
+        // Simple string prompt (backward compatibility)
+        queryPrompt = prompt;
+      }
+
       // Execute query with async generator and store Query object
-      const claudeQuery = query({ prompt, options });
+      const claudeQuery = query({ prompt: queryPrompt, options });
 
       // Store query object in session for control methods
       const currentSession = this.sessions.get(projectId);
@@ -319,12 +405,13 @@ class ClaudeService extends EventEmitter {
    * @param projectPath - Absolute path to project root
    * @param prompt - User prompt/message
    * @param model - Optional model to use for new sessions
+   * @param attachments - Optional file/image attachments
    */
-  async sendPrompt(projectId: string, projectPath: string, prompt: string, model?: string): Promise<void> {
+  async sendPrompt(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[]): Promise<void> {
     console.log(`📝 Sending prompt to Claude [${projectId}]: ${prompt.substring(0, 100)}...`);
 
     // Use startSession which handles resume automatically
-    await this.startSession(projectId, projectPath, prompt, model);
+    await this.startSession(projectId, projectPath, prompt, model, attachments);
   }
 
   /**

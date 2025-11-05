@@ -297,9 +297,68 @@ function ActionBar({
   const handleSend = async () => {
     if (message.trim() && !isInputBlocked && projectId) {
       const prompt = message.trim()
+      const currentAttachments = [...attachments] // Copy attachments before clearing
       setMessage('')
+      setAttachments([]) // Clear attachments from UI
 
       try {
+        // Convert attachments to Claude format
+        const claudeAttachments = currentAttachments.map(att => {
+          // Extract media type and base64 data from data URL
+          // Format: data:image/png;base64,iVBORw0KG...
+          const dataUrlMatch = att.preview?.match(/^data:([^;]+);base64,(.+)$/)
+          let mediaType = dataUrlMatch?.[1] || ''
+          const base64Data = dataUrlMatch?.[2] || ''
+
+          // Convert UI type 'file' to Claude API type 'document'
+          const claudeType = att.type === 'file' ? 'document' : att.type
+
+          // Force correct media type based on file extension for PDFs
+          // FileReader sometimes detects wrong MIME type
+          if (att.type === 'file' && att.name.toLowerCase().endsWith('.pdf')) {
+            mediaType = 'application/pdf'
+          } else if (att.type === 'image') {
+            // For images, trust the data URL media type or infer from extension
+            if (!mediaType || mediaType === 'application/octet-stream') {
+              const ext = att.name.split('.').pop()?.toLowerCase()
+              mediaType = ext === 'png' ? 'image/png' :
+                         ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
+                         ext === 'gif' ? 'image/gif' :
+                         ext === 'webp' ? 'image/webp' : 'image/png'
+            }
+          }
+
+          console.log('📎 [FRONTEND] Converting attachment:', {
+            name: att.name,
+            type: att.type,
+            claudeType,
+            mediaType,
+            detectedMediaType: dataUrlMatch?.[1],
+            base64Length: base64Data.length
+          })
+
+          // Validation: catch type mismatches
+          if (att.type === 'image' && claudeType !== 'image') {
+            console.error('❌ [FRONTEND] BUG: Image typed as document!', { att, claudeType })
+          }
+          if (att.type === 'file' && claudeType !== 'document') {
+            console.error('❌ [FRONTEND] BUG: File not typed as document!', { att, claudeType })
+          }
+
+          return {
+            type: claudeType as 'image' | 'document',
+            data: base64Data,
+            mediaType,
+            name: att.name
+          }
+        })
+
+        if (claudeAttachments.length > 0) {
+          console.log(`📎 [FRONTEND] Sending ${claudeAttachments.length} attachment(s) to Claude:`,
+            claudeAttachments.map(a => ({ name: a.name, type: a.type, mediaType: a.mediaType, dataLength: a.data.length }))
+          )
+        }
+
         // Create chat block first
         const blockResult = await window.electronAPI?.chat.createBlock(projectId, prompt)
 
@@ -317,7 +376,12 @@ function ActionBar({
         if (statusResult?.status === 'idle') {
           // Start session with the prompt and selected model (lazy initialization)
           console.log('🔍 Starting new session with model:', selectedModel)
-          const result = await window.electronAPI?.claude.startSession(projectId, prompt, selectedModel)
+          const result = await window.electronAPI?.claude.startSession(
+            projectId,
+            prompt,
+            selectedModel,
+            claudeAttachments.length > 0 ? claudeAttachments : undefined
+          )
 
           if (!result?.success) {
             toast.error('Failed to start Claude', result?.error || 'Unknown error')
@@ -326,7 +390,12 @@ function ActionBar({
         } else {
           // Send prompt to existing session with current selected model
           console.log('🔍 Sending to existing session with model:', selectedModel)
-          const result = await window.electronAPI?.claude.sendPrompt(projectId, prompt, selectedModel)
+          const result = await window.electronAPI?.claude.sendPrompt(
+            projectId,
+            prompt,
+            selectedModel,
+            claudeAttachments.length > 0 ? claudeAttachments : undefined
+          )
 
           if (!result?.success) {
             toast.error('Failed to send message', result?.error || 'Unknown error')
@@ -466,11 +535,17 @@ function ActionBar({
         }
         reader.readAsDataURL(file)
       } else if (validFileTypes.includes(file.type) || file.name.endsWith('.docx') || file.name.endsWith('.odt') || file.name.endsWith('.rtf') || file.name.endsWith('.epub')) {
-        setAttachments(prev => [...prev, {
-          id: Math.random().toString(36),
-          type: 'file',
-          name: file.name
-        }])
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const preview = event.target?.result as string
+          setAttachments(prev => [...prev, {
+            id: Math.random().toString(36),
+            type: 'file',
+            name: file.name,
+            preview
+          }])
+        }
+        reader.readAsDataURL(file)
       }
     }
   }
@@ -695,11 +770,17 @@ function ActionBar({
                           input.onchange = async (e) => {
                             const file = (e.target as HTMLInputElement).files?.[0]
                             if (file) {
-                              setAttachments([...attachments, {
-                                id: Math.random().toString(36),
-                                type: 'file',
-                                name: file.name
-                              }])
+                              const reader = new FileReader()
+                              reader.onload = (event) => {
+                                const preview = event.target?.result as string
+                                setAttachments([...attachments, {
+                                  id: Math.random().toString(36),
+                                  type: 'file',
+                                  name: file.name,
+                                  preview
+                                }])
+                              }
+                              reader.readAsDataURL(file)
                             }
                           }
                           input.click()

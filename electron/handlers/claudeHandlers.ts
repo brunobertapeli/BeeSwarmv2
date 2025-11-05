@@ -1,5 +1,5 @@
 import { ipcMain, WebContents } from 'electron';
-import { claudeService, ClaudeStatus, ClaudeEvent, ClaudeContext } from '../services/ClaudeService';
+import { claudeService, ClaudeStatus, ClaudeEvent, ClaudeContext, ClaudeAttachment } from '../services/ClaudeService';
 import { terminalAggregator } from '../services/TerminalAggregator';
 import { databaseService } from '../services/DatabaseService';
 import { processManager } from '../services/ProcessManager';
@@ -25,7 +25,7 @@ export function setClaudeHandlersWindow(webContents: WebContents): void {
  */
 export function registerClaudeHandlers(): void {
   // Start Claude Code session
-  ipcMain.handle('claude:start-session', async (_event, projectId: string, prompt?: string, model?: string) => {
+  ipcMain.handle('claude:start-session', async (_event, projectId: string, prompt?: string, model?: string, attachments?: ClaudeAttachment[]) => {
     try {
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId);
@@ -40,6 +40,13 @@ export function registerClaudeHandlers(): void {
         };
       }
 
+      // Log attachments received from frontend
+      if (attachments && attachments.length > 0) {
+        console.log(`📎 [IPC HANDLER] Received ${attachments.length} attachment(s):`,
+          attachments.map(a => ({ name: a.name, type: a.type, mediaType: a.mediaType, dataLength: a.data.length }))
+        );
+      }
+
       // Add user message block to terminal
       console.log('📝 Adding user prompt to terminal:', prompt);
       terminalAggregator.addUserLine(projectId, '\n\n');
@@ -47,10 +54,13 @@ export function registerClaudeHandlers(): void {
       terminalAggregator.addUserLine(projectId, '👤 USER REQUEST\n');
       terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       terminalAggregator.addUserLine(projectId, prompt + '\n');
+      if (attachments && attachments.length > 0) {
+        terminalAggregator.addUserLine(projectId, `📎 ${attachments.length} attachment(s)\n`);
+      }
       terminalAggregator.addUserLine(projectId, '\n');
 
-      // Start Claude session with optional model
-      await claudeService.startSession(projectId, project.path, prompt, model);
+      // Start Claude session with optional model and attachments
+      await claudeService.startSession(projectId, project.path, prompt, model, attachments);
 
       return {
         success: true,
@@ -73,7 +83,7 @@ export function registerClaudeHandlers(): void {
   });
 
   // Send prompt to Claude
-  ipcMain.handle('claude:send-prompt', async (_event, projectId: string, prompt: string, model?: string) => {
+  ipcMain.handle('claude:send-prompt', async (_event, projectId: string, prompt: string, model?: string, attachments?: ClaudeAttachment[]) => {
     // CRITICAL FIX: Use project lock to prevent race conditions
     // Prevents multiple Claude operations from running concurrently on same project
     return await projectLockService.withLock(projectId, async () => {
@@ -82,6 +92,13 @@ export function registerClaudeHandlers(): void {
         const project = validateProjectOwnership(projectId);
 
         console.log(`📤 Sending prompt to Claude for project: ${projectId}`);
+
+        // Log attachments received from frontend
+        if (attachments && attachments.length > 0) {
+          console.log(`📎 [IPC HANDLER] Received ${attachments.length} attachment(s):`,
+            attachments.map(a => ({ name: a.name, type: a.type, mediaType: a.mediaType, dataLength: a.data.length }))
+          );
+        }
 
         // CRITICAL FIX: Validate that any existing session's path matches current project
         // This prevents Claude from editing files in the wrong directory
@@ -105,10 +122,13 @@ export function registerClaudeHandlers(): void {
         terminalAggregator.addUserLine(projectId, '👤 USER REQUEST\n');
         terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
         terminalAggregator.addUserLine(projectId, prompt + '\n');
+        if (attachments && attachments.length > 0) {
+          terminalAggregator.addUserLine(projectId, `📎 ${attachments.length} attachment(s)\n`);
+        }
         terminalAggregator.addUserLine(projectId, '\n');
 
-        // Send prompt using session resume pattern with optional model
-        await claudeService.sendPrompt(projectId, project.path, prompt, model);
+        // Send prompt using session resume pattern with optional model and attachments
+        await claudeService.sendPrompt(projectId, project.path, prompt, model, attachments);
 
         return {
           success: true,
