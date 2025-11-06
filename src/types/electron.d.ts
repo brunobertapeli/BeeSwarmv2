@@ -382,11 +382,11 @@ export interface ElectronAPI {
   }
 
   claude: {
-    startSession: (projectId: string, prompt?: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean) => Promise<{
+    startSession: (projectId: string, prompt?: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean, planMode?: boolean) => Promise<{
       success: boolean
       error?: string
     }>
-    sendPrompt: (projectId: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean) => Promise<{
+    sendPrompt: (projectId: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean, planMode?: boolean) => Promise<{
       success: boolean
       error?: string
     }>
@@ -424,6 +424,7 @@ export interface ElectronAPI {
     onExited: (callback: (projectId: string, exitCode: number) => void) => () => void
     onContextUpdated: (callback: (projectId: string, context: ClaudeContext) => void) => () => void
     onModelChanged: (callback: (projectId: string, model: string) => void) => () => void
+    onQuestions: (callback: (projectId: string, questions: any) => void) => () => void
   }
 
   git: {

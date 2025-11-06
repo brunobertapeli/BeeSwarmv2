@@ -25,7 +25,7 @@ export function setClaudeHandlersWindow(webContents: WebContents): void {
  */
 export function registerClaudeHandlers(): void {
   // Start Claude Code session
-  ipcMain.handle('claude:start-session', async (_event, projectId: string, prompt?: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean) => {
+  ipcMain.handle('claude:start-session', async (_event, projectId: string, prompt?: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean, planMode?: boolean) => {
     try {
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId);
@@ -52,6 +52,11 @@ export function registerClaudeHandlers(): void {
         console.log(`🧠 [IPC HANDLER] Extended thinking enabled`);
       }
 
+      // Log plan mode
+      if (planMode) {
+        console.log(`📋 [IPC HANDLER] Plan mode enabled`);
+      }
+
       // Add user message block to terminal
       console.log('📝 Adding user prompt to terminal:', prompt);
       terminalAggregator.addUserLine(projectId, '\n\n');
@@ -67,8 +72,8 @@ export function registerClaudeHandlers(): void {
       }
       terminalAggregator.addUserLine(projectId, '\n');
 
-      // Start Claude session with optional model, attachments, and thinking
-      await claudeService.startSession(projectId, project.path, prompt, model, attachments, thinkingEnabled);
+      // Start Claude session with optional model, attachments, thinking, and plan mode
+      await claudeService.startSession(projectId, project.path, prompt, model, attachments, thinkingEnabled, planMode);
 
       return {
         success: true,
@@ -91,7 +96,7 @@ export function registerClaudeHandlers(): void {
   });
 
   // Send prompt to Claude
-  ipcMain.handle('claude:send-prompt', async (_event, projectId: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean) => {
+  ipcMain.handle('claude:send-prompt', async (_event, projectId: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean, planMode?: boolean) => {
     // CRITICAL FIX: Use project lock to prevent race conditions
     // Prevents multiple Claude operations from running concurrently on same project
     return await projectLockService.withLock(projectId, async () => {
@@ -111,6 +116,11 @@ export function registerClaudeHandlers(): void {
         // Log thinking mode
         if (thinkingEnabled) {
           console.log(`🧠 [IPC HANDLER] Extended thinking enabled`);
+        }
+
+        // Log plan mode
+        if (planMode) {
+          console.log(`📋 [IPC HANDLER] Plan mode enabled`);
         }
 
         // CRITICAL FIX: Validate that any existing session's path matches current project
@@ -143,8 +153,8 @@ export function registerClaudeHandlers(): void {
         }
         terminalAggregator.addUserLine(projectId, '\n');
 
-        // Send prompt using session resume pattern with optional model, attachments, and thinking
-        await claudeService.sendPrompt(projectId, project.path, prompt, model, attachments, thinkingEnabled);
+        // Send prompt using session resume pattern with optional model, attachments, thinking, and plan mode
+        await claudeService.sendPrompt(projectId, project.path, prompt, model, attachments, thinkingEnabled, planMode);
 
         return {
           success: true,
@@ -686,6 +696,16 @@ function setupClaudeEventForwarding(): void {
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
       console.log(`📡 Forwarding model change to renderer: ${projectId} -> ${model}`);
       mainWindowContents.send('claude:model-changed', projectId, model);
+    }
+  });
+
+  // Handle questions from Claude (plan mode)
+  claudeService.on('claude-questions', ({ projectId, questions }: { projectId: string; questions: any }) => {
+    console.log('📋 [PLAN MODE] Questions received from Claude:', JSON.stringify(questions, null, 2));
+
+    // TODO: Forward to renderer for UI display
+    if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+      mainWindowContents.send('claude:questions', projectId, questions);
     }
   });
 }

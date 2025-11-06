@@ -77,6 +77,10 @@ function ActionBar({
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
   const [planModeActive, setPlanModeActive] = useState(false)
   const [attachments, setAttachments] = useState<Array<{id: string, type: 'image' | 'file', name: string, preview?: string}>>([])
+  const [questions, setQuestions] = useState<any>(null)
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string | string[]>>({})
+  const [customInputs, setCustomInputs] = useState<Record<string, string>>({})
+  const [isProcessingAnswers, setIsProcessingAnswers] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const actionBarRef = useRef<HTMLDivElement>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -151,6 +155,13 @@ function ActionBar({
       }
     })
 
+    const unsubQuestions = window.electronAPI.claude.onQuestions((id, questions) => {
+      if (id === projectId) {
+        console.log('📋 [FRONTEND] Questions received from Claude:', questions)
+        // TODO: Show questions in UI
+      }
+    })
+
     // Fetch initial status and context immediately
     Promise.all([
       window.electronAPI.claude.getStatus(projectId),
@@ -180,6 +191,7 @@ function ActionBar({
       unsubError()
       unsubContextUpdated()
       unsubModelChanged()
+      unsubQuestions()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
@@ -222,6 +234,24 @@ function ActionBar({
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showModelDropdown, showPlusMenu, showTweakMenu])
+
+  // Listen for questions from Claude (plan mode)
+  useEffect(() => {
+    if (!projectId || !window.electronAPI?.claude) return
+
+    const unsubQuestions = window.electronAPI.claude.onQuestions((id, questionsData) => {
+      if (id !== projectId) return
+
+      console.log('📋 [ACTION BAR] Questions received:', questionsData)
+      setQuestions(questionsData)
+      setQuestionAnswers({}) // Reset answers
+      setCustomInputs({}) // Reset custom inputs
+    })
+
+    return () => {
+      unsubQuestions()
+    }
+  }, [projectId])
 
   const startHideTimer = () => {
     if (!isLocked) {
@@ -294,12 +324,58 @@ function ActionBar({
     }
   }, [isClaudeWorking])
 
+  // Helper to check if all questions are answered
+  const areAllQuestionsAnswered = (): boolean => {
+    if (!questions?.questions) return false
+    return questions.questions.every((q: any) => {
+      const answer = questionAnswers[q.id]
+      if (q.type === 'checkbox') {
+        const answerArray = Array.isArray(answer) ? answer : []
+        // If "custom" is selected, check that customInputs has a value
+        if (answerArray.includes('__CUSTOM__')) {
+          return customInputs[q.id] && customInputs[q.id].trim() !== ''
+        }
+        return answerArray.length > 0
+      }
+      if (q.type === 'radio') {
+        // If "custom" is selected, check that customInputs has a value
+        if (answer === '__CUSTOM__') {
+          return customInputs[q.id] && customInputs[q.id].trim() !== ''
+        }
+        return answer && answer !== ''
+      }
+      return answer && answer !== ''
+    })
+  }
+
+  // Helper to toggle checkbox answer
+  const toggleCheckboxAnswer = (questionId: string, option: string) => {
+    const currentAnswer = questionAnswers[questionId]
+    const currentArray = Array.isArray(currentAnswer) ? currentAnswer : []
+
+    if (currentArray.includes(option)) {
+      setQuestionAnswers({
+        ...questionAnswers,
+        [questionId]: currentArray.filter(v => v !== option)
+      })
+    } else {
+      setQuestionAnswers({
+        ...questionAnswers,
+        [questionId]: [...currentArray, option]
+      })
+    }
+  }
+
   const handleSend = async () => {
     if (message.trim() && !isInputBlocked && projectId) {
       const prompt = message.trim()
       const currentAttachments = [...attachments] // Copy attachments before clearing
+      const currentPlanMode = planModeActive // Capture plan mode state before clearing
+
+      // Clear UI state immediately
       setMessage('')
       setAttachments([]) // Clear attachments from UI
+      setPlanModeActive(false) // Turn off plan mode after sending
 
       try {
         // Convert attachments to Claude format
@@ -377,12 +453,14 @@ function ActionBar({
           // Start session with the prompt and selected model (lazy initialization)
           console.log('🔍 Starting new session with model:', selectedModel)
           console.log('🧠 Thinking enabled:', thinkingEnabled)
+          console.log('📋 Plan mode enabled:', currentPlanMode)
           const result = await window.electronAPI?.claude.startSession(
             projectId,
             prompt,
             selectedModel,
             claudeAttachments.length > 0 ? claudeAttachments : undefined,
-            thinkingEnabled
+            thinkingEnabled,
+            currentPlanMode
           )
 
           if (!result?.success) {
@@ -393,12 +471,14 @@ function ActionBar({
           // Send prompt to existing session with current selected model
           console.log('🔍 Sending to existing session with model:', selectedModel)
           console.log('🧠 Thinking enabled:', thinkingEnabled)
+          console.log('📋 Plan mode enabled:', currentPlanMode)
           const result = await window.electronAPI?.claude.sendPrompt(
             projectId,
             prompt,
             selectedModel,
             claudeAttachments.length > 0 ? claudeAttachments : undefined,
-            thinkingEnabled
+            thinkingEnabled,
+            currentPlanMode
           )
 
           if (!result?.success) {
@@ -1124,6 +1204,276 @@ function ActionBar({
           opacity: 1;
         }
       `}</style>
+
+      {/* Questions Modal - Plan Mode - Always rendered at root level */}
+      {questions && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-dark-card border border-primary/30 rounded-2xl shadow-2xl w-[600px] max-h-[80vh] overflow-hidden relative">
+            {/* Background Image */}
+            <div
+              className="absolute inset-0 opacity-10 pointer-events-none"
+              style={{
+                backgroundImage: `url(${bgImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            />
+
+            {/* Header */}
+            <div className="relative z-10 px-6 py-4 border-b border-primary/20">
+              <h3 className="text-lg font-semibold text-white">Claude needs your input</h3>
+              <p className="text-sm text-gray-400 mt-1">Answer these questions to proceed with implementation</p>
+            </div>
+
+            {/* Questions */}
+            <div className="relative z-10 px-6 py-4 max-h-[50vh] overflow-y-auto custom-scrollbar space-y-5">
+              {questions.questions?.map((q: any, index: number) => (
+                <div key={q.id || index} className="space-y-2.5">
+                  <label className="block text-sm font-medium text-gray-200">
+                    {q.question}
+                  </label>
+
+                  {/* Text Input */}
+                  {q.type === 'text' && (
+                    <input
+                      type="text"
+                      value={(questionAnswers[q.id] as string) || ''}
+                      onChange={(e) => setQuestionAnswers({ ...questionAnswers, [q.id]: e.target.value })}
+                      placeholder="Type your answer..."
+                      className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 outline-none focus:border-primary/50 transition-colors"
+                    />
+                  )}
+
+                  {/* Radio Buttons */}
+                  {q.type === 'radio' && (
+                    <div className="space-y-2">
+                      {q.options?.map((option: string, optIndex: number) => (
+                        <label
+                          key={optIndex}
+                          className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-dark-bg/50 cursor-pointer transition-colors group"
+                        >
+                          <input
+                            type="radio"
+                            name={q.id}
+                            value={option}
+                            checked={questionAnswers[q.id] === option}
+                            onChange={(e) => setQuestionAnswers({ ...questionAnswers, [q.id]: e.target.value })}
+                            className="w-4 h-4 text-primary bg-dark-bg border-dark-border focus:ring-primary/50 focus:ring-2 cursor-pointer"
+                          />
+                          <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
+                            {option}
+                          </span>
+                        </label>
+                      ))}
+
+                      {/* Hardcoded options */}
+                      <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-dark-bg/50 cursor-pointer transition-colors group">
+                        <input
+                          type="radio"
+                          name={q.id}
+                          value="__CLAUDE_DECIDE__"
+                          checked={questionAnswers[q.id] === '__CLAUDE_DECIDE__'}
+                          onChange={(e) => setQuestionAnswers({ ...questionAnswers, [q.id]: e.target.value })}
+                          className="w-4 h-4 text-primary bg-dark-bg border-dark-border focus:ring-primary/50 focus:ring-2 cursor-pointer"
+                        />
+                        <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
+                          Choose what you believe is the best option.
+                        </span>
+                      </label>
+
+                      <label className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-dark-bg/50 cursor-pointer transition-colors group">
+                        <input
+                          type="radio"
+                          name={q.id}
+                          value="__CUSTOM__"
+                          checked={questionAnswers[q.id] === '__CUSTOM__'}
+                          onChange={(e) => setQuestionAnswers({ ...questionAnswers, [q.id]: e.target.value })}
+                          className="w-4 h-4 mt-0.5 text-primary bg-dark-bg border-dark-border focus:ring-primary/50 focus:ring-2 cursor-pointer"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
+                            Type something:
+                          </span>
+                          {questionAnswers[q.id] === '__CUSTOM__' && (
+                            <input
+                              type="text"
+                              value={customInputs[q.id] || ''}
+                              onChange={(e) => setCustomInputs({ ...customInputs, [q.id]: e.target.value })}
+                              placeholder="Enter your answer..."
+                              className="mt-2 w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-primary/50 transition-colors"
+                            />
+                          )}
+                        </div>
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Checkboxes */}
+                  {q.type === 'checkbox' && (
+                    <div className="space-y-2">
+                      {q.options?.map((option: string, optIndex: number) => {
+                        const currentArray = Array.isArray(questionAnswers[q.id]) ? questionAnswers[q.id] as string[] : []
+                        const isChecked = currentArray.includes(option)
+
+                        return (
+                          <label
+                            key={optIndex}
+                            className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-dark-bg/50 cursor-pointer transition-colors group"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleCheckboxAnswer(q.id, option)}
+                              className="w-4 h-4 text-primary bg-dark-bg border-dark-border rounded focus:ring-primary/50 focus:ring-2 cursor-pointer"
+                            />
+                            <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
+                              {option}
+                            </span>
+                          </label>
+                        )
+                      })}
+
+                      {/* Hardcoded options */}
+                      <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-dark-bg/50 cursor-pointer transition-colors group">
+                        <input
+                          type="checkbox"
+                          checked={((questionAnswers[q.id] as string[]) || []).includes('__CLAUDE_DECIDE__')}
+                          onChange={() => toggleCheckboxAnswer(q.id, '__CLAUDE_DECIDE__')}
+                          className="w-4 h-4 text-primary bg-dark-bg border-dark-border rounded focus:ring-primary/50 focus:ring-2 cursor-pointer"
+                        />
+                        <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
+                          Choose what you believe is the best option.
+                        </span>
+                      </label>
+
+                      <label className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-dark-bg/50 cursor-pointer transition-colors group">
+                        <input
+                          type="checkbox"
+                          checked={((questionAnswers[q.id] as string[]) || []).includes('__CUSTOM__')}
+                          onChange={() => toggleCheckboxAnswer(q.id, '__CUSTOM__')}
+                          className="w-4 h-4 mt-0.5 text-primary bg-dark-bg border-dark-border rounded focus:ring-primary/50 focus:ring-2 cursor-pointer"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
+                            Type something:
+                          </span>
+                          {((questionAnswers[q.id] as string[]) || []).includes('__CUSTOM__') && (
+                            <input
+                              type="text"
+                              value={customInputs[q.id] || ''}
+                              onChange={(e) => setCustomInputs({ ...customInputs, [q.id]: e.target.value })}
+                              placeholder="Enter your answer..."
+                              className="mt-2 w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-primary/50 transition-colors"
+                            />
+                          )}
+                        </div>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="relative z-10 px-6 py-4 border-t border-primary/20 space-y-4">
+              <div className="text-center">
+                <p className="text-sm font-medium text-gray-300 mb-3">Ready for implementation?</p>
+                <div className="flex gap-3 justify-center">
+                  <button
+                    onClick={() => {
+                      console.log('❌ User cancelled implementation')
+                      setQuestions(null)
+                      setQuestionAnswers({})
+                      setCustomInputs({})
+                    }}
+                    disabled={isProcessingAnswers}
+                    className="px-6 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 rounded-lg text-red-400 font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    No
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (isProcessingAnswers) return
+                      setIsProcessingAnswers(true)
+
+                      console.log('✅ User approved implementation with answers:', questionAnswers)
+
+                      // Close modal immediately
+                      const questionsData = questions
+                      const answersData = { ...questionAnswers }
+                      const customData = { ...customInputs }
+
+                      setQuestions(null)
+                      setQuestionAnswers({})
+                      setCustomInputs({})
+                      setIsProcessingAnswers(false)
+
+                      // Small delay to let React finish state updates before async operations
+                      await new Promise(resolve => setTimeout(resolve, 100))
+
+                      // Send answers to Claude in background
+                      try {
+                        if (projectId && questionsData?.questions) {
+                          const answersText = questionsData.questions.map((q: any) => {
+                            let answer = answersData[q.id]
+                            let answerStr = ''
+
+                            if (answer === '__CLAUDE_DECIDE__') {
+                              answerStr = 'Choose what you believe is the best option.'
+                            } else if (answer === '__CUSTOM__') {
+                              answerStr = customData[q.id] || ''
+                            } else if (Array.isArray(answer)) {
+                              // For checkbox, handle special values and custom input
+                              const processedAnswers = answer.map(val => {
+                                if (val === '__CLAUDE_DECIDE__') return 'Choose what you believe is the best option.'
+                                if (val === '__CUSTOM__') return customData[q.id] || ''
+                                return val
+                              }).filter(v => v)
+                              answerStr = processedAnswers.join(', ')
+                            } else {
+                              answerStr = answer || ''
+                            }
+
+                            return `**${q.question}**\n${answerStr}`
+                          }).join('\n\n')
+
+                          const formattedPrompt = `Here are my answers to your questions:\n\n${answersText}\n\nPlease proceed with the implementation based on these answers.`
+
+                          // Create chat block for the answers
+                          const blockResult = await window.electronAPI?.chat.createBlock(projectId, formattedPrompt)
+
+                          if (!blockResult?.success) {
+                            console.error('Failed to create chat block for answers:', blockResult?.error)
+                            return
+                          }
+
+                          console.log('✅ Chat block created for answers:', blockResult.block.id)
+
+                          await window.electronAPI?.claude.sendPrompt(
+                            projectId,
+                            formattedPrompt,
+                            undefined, // use current model
+                            undefined, // no attachments
+                            undefined, // thinking disabled
+                            false // NOT in plan mode anymore - allow execution
+                          )
+                          console.log('📤 Sent answers to Claude:', formattedPrompt)
+                        }
+                      } catch (error) {
+                        console.error('Failed to send answers to Claude:', error)
+                      }
+                    }}
+                    disabled={!areAllQuestionsAnswered() || isProcessingAnswers}
+                    className="px-6 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 hover:border-primary/70 rounded-lg text-primary font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Yes
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

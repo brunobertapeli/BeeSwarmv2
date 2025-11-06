@@ -313,6 +313,55 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     return content
   }
 
+  // Helper: Check if block has plan mode questions
+  const hasQuestions = (block: ConversationBlock): boolean => {
+    return block.messages?.some(m => m.content.includes('<QUESTIONS>')) || false
+  }
+
+  // Helper: Check if block is user answers to questions
+  const isAnswerBlock = (block: ConversationBlock): boolean => {
+    const isAnswer = block.userPrompt?.startsWith('Here are my answers to your questions') || false
+    return isAnswer
+  }
+
+  // Helper: Strip <QUESTIONS> tags from text
+  const stripQuestions = (text: string): string => {
+    return text.replace(/<QUESTIONS>[\s\S]*?<\/QUESTIONS>/g, '').trim()
+  }
+
+  // Helper: Extract questions data from text
+  const extractQuestions = (text: string): any => {
+    const match = text.match(/<QUESTIONS>([\s\S]*?)<\/QUESTIONS>/)
+    if (!match) return null
+
+    try {
+      return JSON.parse(match[1].trim())
+    } catch {
+      return null
+    }
+  }
+
+  // Helper: Extract answers from user prompt
+  const extractAnswers = (userPrompt: string): string[] => {
+    const lines = userPrompt.split('\n').filter(line => line.trim())
+    const answers: string[] = []
+
+    for (const line of lines) {
+      // Skip the first line "Here are my answers..."
+      if (line.startsWith('Here are my answers')) continue
+      if (line.startsWith('**') && line.includes('**')) {
+        // This is a question line, skip it
+        continue
+      }
+      // This is an answer line
+      if (!line.startsWith('Please proceed')) {
+        answers.push(line.trim())
+      }
+    }
+
+    return answers
+  }
+
   // Load more blocks (for infinite scroll)
   const loadMoreBlocks = async () => {
     if (!projectId || !window.electronAPI?.chat || isLoadingMore || !hasMoreBlocks) return
@@ -756,16 +805,17 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     : (actionBarHeight > 0 ? actionBarHeight - 4 : 80)
 
   return (
-    <div
-      className={`fixed left-1/2 transform -translate-x-1/2 z-[99] pointer-events-none ${
-        isVisible ? 'opacity-100' : 'opacity-0'
-      }`}
-      style={{
-        bottom: `${bottomPosition}px`,
-        transition: 'opacity 300ms ease-out'
-      }}
-    >
-      <div className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[782px] overflow-hidden pb-4 relative pointer-events-auto"
+    <>
+      <div
+        className={`fixed left-1/2 transform -translate-x-1/2 z-[99] pointer-events-none ${
+          isVisible ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={{
+          bottom: `${bottomPosition}px`,
+          transition: 'opacity 300ms ease-out'
+        }}
+      >
+        <div className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[782px] overflow-hidden pb-4 relative pointer-events-auto"
         style={{
           boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
         }}
@@ -845,8 +895,34 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
               )}
 
               {allBlocks.map((block, blockIndex) => {
+                // Check if previous blocks exist and this should be merged
+                const prevBlock = blockIndex > 0 ? allBlocks[blockIndex - 1] : null
+                const prevPrevBlock = blockIndex > 1 ? allBlocks[blockIndex - 2] : null
+
+                // Skip answer blocks (will be merged with question block)
+                if (isAnswerBlock(block)) {
+                  return null
+                }
+
+                // Skip implementation blocks that follow answer blocks (will be merged with question block)
+                // BUT: Don't skip if current block has questions (it's a new plan mode session)
+                if (prevBlock && isAnswerBlock(prevBlock) && prevPrevBlock && hasQuestions(prevPrevBlock) && !hasQuestions(block)) {
+                  return null
+                }
+
+                // For plan mode: Find the next blocks in the ACTUAL array (not relative to render index)
+                // Find the actual index of current block in allBlocks
+                const actualIndex = allBlocks.findIndex(b => b.id === block.id)
+                const answerBlock = actualIndex >= 0 ? allBlocks[actualIndex + 1] : null
+                const implementationBlock = actualIndex >= 0 ? allBlocks[actualIndex + 2] : null
+                const isPlanModeWithAnswers = hasQuestions(block) && answerBlock && isAnswerBlock(answerBlock)
+
+
+                // Check if previous block has questions (for stop button logic)
+                const isPreviousBlockQuestions = prevBlock && hasQuestions(prevBlock) && isAnswerBlock(block)
+
                 const isLastBlock = blockIndex === allBlocks.length - 1
-                const showStopButton = isLastBlock && !block.isComplete
+                const showStopButton = (isLastBlock && !block.isComplete) || (isPlanModeWithAnswers && answerBlock && !answerBlock.isComplete)
 
                 // Render deployment block (keep existing for now)
                 if (block.type === 'deployment') {
@@ -1050,7 +1126,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                         {/* Continuous dotted line from top to bottom - behind icons */}
                         <div className="absolute left-[12px] top-0 bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
 
-                        {/* STEP 0: USER (User Prompt) */}
+                        {/* STEP 0: USER (User Prompt) - Hide for answer blocks */}
+                        {!isAnswerBlock(block) && (
                         <div className="relative pb-4">
                           {/* Step header */}
                           <div className="flex items-center gap-3 mb-3">
@@ -1096,6 +1173,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             </div>
                           </div>
                         </div>
+                        )}
 
                         {/* STEP 1: ANTHROPIC (Code Editing) */}
                         <div className="relative pb-4">
@@ -1149,10 +1227,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                           <div className="flex-1">
                                             <span className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap">
                                               {isLong && !isMessageExpanded ? (
-                                                getTruncatedMessage(message.content)
+                                                getTruncatedMessage(stripQuestions(message.content))
                                               ) : (
                                                 <KeywordHighlight
-                                                  text={message.content}
+                                                  text={stripQuestions(message.content)}
                                                   keywords={keywords}
                                                   blockId={block.id}
                                                 />
@@ -1325,8 +1403,211 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           </div>
                         </div>
 
-                      {/* STEP 2: GIT (GitHub Commit) */}
-                      {hasGitAction && gitAction && (
+                        {/* PLAN MODE: Waiting for user input */}
+                        {isPlanModeWithAnswers && (
+                          <div className="relative pb-4">
+                            {/* Step header */}
+                            <div className="flex items-center gap-3 mb-3">
+                              {/* Anthropic Icon */}
+                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6 opacity-90" />
+                              </div>
+
+                              {/* Title + Status */}
+                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-gray-200">
+                                    Waiting for user input
+                                  </span>
+                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center">
+                                    <Check size={10} className="text-blue-400" />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Questions content */}
+                            <div className="ml-10">
+                              <span className="text-[11px] text-gray-400">
+                                Claude asked questions to better understand your requirements
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* PLAN MODE: User provided answers */}
+                        {isPlanModeWithAnswers && answerBlock && (
+                          <div className="relative pb-4">
+                            {/* Step header */}
+                            <div className="flex items-center gap-3 mb-3">
+                              {/* User Icon */}
+                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                <img src={UserIcon} alt="User" className="w-6 h-6 opacity-90" />
+                              </div>
+
+                              {/* Title + Status */}
+                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-gray-200">
+                                    User provided answers
+                                  </span>
+                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                    <Check size={10} className="text-green-400" />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Answers content */}
+                            <div className="ml-10 space-y-1">
+                              {extractAnswers(answerBlock.userPrompt || '').map((answer, idx) => (
+                                <div key={idx} className="flex items-start gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-500/50 flex-shrink-0 mt-1.5" />
+                                  <span className="text-[11px] text-gray-300">{answer}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* PLAN MODE: Implementation step (from answer block - Claude's response) */}
+                        {isPlanModeWithAnswers && answerBlock && answerBlock.messages && answerBlock.messages.length > 0 && (
+                          <div className="relative pb-4">
+                            {/* Step header */}
+                            <div className="flex items-center gap-3 mb-3">
+                              {/* Anthropic Icon */}
+                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6 opacity-90" />
+                              </div>
+
+                              {/* Title + Status */}
+                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-gray-200">
+                                    Implementing changes
+                                  </span>
+                                  {answerBlock.isComplete && (
+                                    <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                      <Check size={10} className="text-green-400" />
+                                    </div>
+                                  )}
+                                  {answerBlock.isComplete && answerBlock.completionStats && (
+                                    <span className="text-[10px] text-gray-500">
+                                      {answerBlock.completionStats.timeSeconds}s
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Implementation messages */}
+                            <div className="ml-10 space-y-3">
+                              <div className="space-y-1.5">
+                                {answerBlock.messages?.filter(m => !m.content.includes('⚠️ Stopped by user')).map((message, idx) => {
+                                  const messageId = `${answerBlock.id}-msg-${idx}`
+                                  const isLong = isLongMessage(message.content)
+                                  const isMessageExpanded = expandedMessages.has(messageId)
+                                  const toolMessages = answerBlock.messages?.filter(m => m.type === 'tool') || []
+                                  const isLatestTool = message.type === 'tool' && message === toolMessages[toolMessages.length - 1]
+
+                                  return (
+                                    <div key={idx}>
+                                      <div className="flex items-start gap-2">
+                                        {message.type === 'assistant' && (
+                                          <>
+                                            <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
+                                            <div className="flex-1">
+                                              <span className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap">
+                                                {isLong && !isMessageExpanded ? (
+                                                  getTruncatedMessage(stripQuestions(message.content))
+                                                ) : (
+                                                  <KeywordHighlight
+                                                    text={stripQuestions(message.content)}
+                                                    keywords={keywords}
+                                                    blockId={answerBlock.id}
+                                                  />
+                                                )}
+                                              </span>
+                                              {isLong && (
+                                                <button
+                                                  onClick={() => {
+                                                    const newSet = new Set(expandedMessages)
+                                                    if (newSet.has(messageId)) {
+                                                      newSet.delete(messageId)
+                                                    } else {
+                                                      newSet.add(messageId)
+                                                    }
+                                                    setExpandedMessages(newSet)
+                                                  }}
+                                                  className="ml-1 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                                >
+                                                  {isMessageExpanded ? 'Show less' : 'Show more'}
+                                                </button>
+                                              )}
+                                            </div>
+                                          </>
+                                        )}
+                                        {message.type === 'tool' && (
+                                          <>
+                                            <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
+                                            <span className="text-[11px] text-gray-400 leading-relaxed flex items-center gap-2">
+                                              {message.toolName ? (
+                                                <>
+                                                  <span>
+                                                    Claude using tool{' '}
+                                                    <span className="text-primary font-medium">{message.toolName}</span>
+                                                    {message.content.includes('@') && (
+                                                      <> @ {message.content.split('@')[1].trim()}</>
+                                                    )}
+                                                  </span>
+                                                  {isLatestTool && message.toolDuration === undefined && (
+                                                    <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                      <Clock size={10} />
+                                                      <>{latestToolTimer.get(answerBlock.id)?.toFixed(1) || '0.0'}s</>
+                                                    </span>
+                                                  )}
+                                                </>
+                                              ) : (
+                                                <span className="font-mono">Total tools used: {message.content}</span>
+                                              )}
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+
+                              {/* Stats for implementation block */}
+                              {answerBlock.isComplete && answerBlock.completionStats && (
+                                <div className="flex items-center gap-2 text-[10px] pt-2 border-t border-white/5">
+                                  <span className="text-gray-400 flex items-center gap-1">
+                                    <span>Tokens:</span>
+                                    <ArrowUpCircle size={10} className="text-blue-400" />
+                                    <span>{answerBlock.completionStats.inputTokens}</span>
+                                    <span className="text-gray-600">→</span>
+                                    <ArrowDownCircle size={10} className="text-green-400" />
+                                    <span>{answerBlock.completionStats.outputTokens}</span>
+                                  </span>
+                                  <span className="text-gray-600">|</span>
+                                  <span className="text-gray-400 flex items-center gap-1">
+                                    <DollarSign size={10} />
+                                    {answerBlock.completionStats.cost.toFixed(4)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                      {/* STEP 2: GIT (GitHub Commit) - Use answerBlock actions in plan mode */}
+                      {(() => {
+                        const gitBlockToUse = isPlanModeWithAnswers && answerBlock ? answerBlock : block
+                        const git = gitBlockToUse?.actions?.find(a => a.type === 'git_commit')
+                        // Only show if git action exists AND has started (not pending)
+                        const shouldShowGit = git && git.status && git.status !== 'pending'
+                        return shouldShowGit && (
                         <div className="relative pb-4">
                           {/* Step header */}
                           <div className="flex items-center gap-3 mb-3">
@@ -1339,24 +1620,24 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-gray-200">
-                                  {gitAction.status === 'in_progress'
+                                  {git.status === 'in_progress'
                                     ? 'Committing and pushing to GitHub...'
-                                    : gitAction.status === 'success'
+                                    : git.status === 'success'
                                     ? 'Committed successfully'
                                     : 'Commit failed'
                                   }
                                 </span>
-                                {gitAction.status === 'success' && (
+                                {git.status === 'success' && (
                                   <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
                                     <Check size={10} className="text-green-400" />
                                   </div>
                                 )}
-                                {gitAction.status === 'success' && (
+                                {git.status === 'success' && (
                                   <span className="text-[10px] text-gray-500">
                                     0.1s
                                   </span>
                                 )}
-                                {gitAction.status === 'in_progress' && (
+                                {git.status === 'in_progress' && (
                                   <Loader2 size={12} className="text-primary animate-spin" />
                                 )}
                               </div>
@@ -1364,31 +1645,37 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           </div>
 
                           {/* Git step content (always visible) */}
-                          {gitAction.status === 'success' && gitAction.data && (
+                          {git.status === 'success' && git.data && (
                             <div className="ml-10 space-y-2">
-                              {gitAction.data.commitHash && (
+                              {git.data.commitHash && (
                                 <div className="flex items-center gap-2 text-[11px]">
                                   <span className="text-gray-400">Commit:</span>
                                   <span className="font-mono bg-white/5 px-2 py-0.5 rounded text-gray-300">
-                                    {gitAction.data.commitHash}
+                                    {git.data.commitHash}
                                   </span>
                                 </div>
                               )}
-                              {gitAction.data.filesChanged !== undefined && (
+                              {git.data.filesChanged !== undefined && (
                                 <div className="flex items-center gap-2 text-[11px]">
                                   <span className="text-gray-400">Files changed:</span>
                                   <span className="text-gray-300">
-                                    {gitAction.data.filesChanged} file{gitAction.data.filesChanged !== 1 ? 's' : ''}
+                                    {git.data.filesChanged} file{git.data.filesChanged !== 1 ? 's' : ''}
                                   </span>
                                 </div>
                               )}
                             </div>
                           )}
                         </div>
-                      )}
+                        )
+                      })()}
 
-                      {/* STEP 3: DEPLOY (Dev Server) */}
-                      {hasDeployAction && deployAction && (
+                      {/* STEP 3: DEPLOY (Dev Server) - Use answerBlock actions in plan mode */}
+                      {(() => {
+                        const deployBlockToUse = isPlanModeWithAnswers && answerBlock ? answerBlock : block
+                        const deploy = deployBlockToUse?.actions?.find(a => a.type === 'dev_server')
+                        // Only show if deploy action exists AND has started (not pending)
+                        const shouldShowDeploy = deploy && deploy.status && deploy.status !== 'pending'
+                        return shouldShowDeploy && (
                         <div className="relative">
                           {/* Step header */}
                           <div className="flex items-center gap-3 mb-3">
@@ -1401,24 +1688,24 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-gray-200">
-                                  {deployAction.status === 'in_progress'
+                                  {deploy.status === 'in_progress'
                                     ? 'Starting dev server...'
-                                    : deployAction.status === 'success'
+                                    : deploy.status === 'success'
                                     ? 'Dev server running'
                                     : 'Failed to start dev server'
                                   }
                                 </span>
-                                {deployAction.status === 'success' && (
+                                {deploy.status === 'success' && (
                                   <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
                                     <Check size={10} className="text-green-400" />
                                   </div>
                                 )}
-                                {deployAction.status === 'success' && deployAction.data?.restartTime && (
+                                {deploy.status === 'success' && deploy.data?.restartTime && (
                                   <span className="text-[10px] text-gray-500">
-                                    {deployAction.data.restartTime}s
+                                    {deploy.data.restartTime}s
                                   </span>
                                 )}
-                                {deployAction.status === 'in_progress' && (
+                                {deploy.status === 'in_progress' && (
                                   <Loader2 size={12} className="text-primary animate-spin" />
                                 )}
                               </div>
@@ -1426,24 +1713,25 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           </div>
 
                           {/* Deploy step content (always visible) */}
-                          {deployAction.status === 'success' && deployAction.data?.url && (
+                          {deploy.status === 'success' && deploy.data?.url && (
                             <div className="ml-10">
                               <div className="flex items-center gap-2 text-[11px]">
                                 <span className="text-gray-400">Server:</span>
                                 <a
-                                  href={deployAction.data.url}
+                                  href={deploy.data.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group"
                                 >
-                                  <span>{deployAction.data.url}</span>
+                                  <span>{deploy.data.url}</span>
                                   <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
                                 </a>
                               </div>
                             </div>
                           )}
                         </div>
-                      )}
+                        )
+                      })()}
 
                       {/* STEP: INTERRUPTED (Stopped by user) */}
                       {wasInterrupted && (
@@ -1480,29 +1768,30 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             </div>
           </div>
         )}
-      </div>
 
-      {/* Custom styles */}
-      <style>{`
-        .custom-scrollbar {
-          scrollbar-width: thin;
-          scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 5px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255, 255, 255, 0.15);
-          border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 255, 255, 0.25);
-        }
-      `}</style>
+        {/* Custom styles */}
+        <style>{`
+          .custom-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+          }
+          .custom-scrollbar::-webkit-scrollbar {
+            width: 5px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 3px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.25);
+          }
+        `}</style>
+      </div>
     </div>
+    </>
   )
 }
 

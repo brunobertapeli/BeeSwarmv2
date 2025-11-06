@@ -106,8 +106,9 @@ class ClaudeService extends EventEmitter {
    * @param model - Optional model to use (defaults to claude-sonnet-4-5)
    * @param attachments - Optional file/image attachments
    * @param thinkingEnabled - Optional flag to enable extended thinking
+   * @param planMode - Optional flag to enable plan mode (Claude explores and asks questions before executing)
    */
-  async startSession(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean): Promise<void> {
+  async startSession(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean, planMode?: boolean): Promise<void> {
     const existingSession = this.sessions.get(projectId);
 
     // CRITICAL FIX: Validate that project path matches existing session
@@ -147,6 +148,9 @@ class ClaudeService extends EventEmitter {
     console.log(`📁 Working directory: ${projectPath}`);
     console.log(`🎯 Model: ${effectiveModel}${!model && existingSession?.context?.model ? ' (from preference)' : model ? '' : ' (default)'}`);
     console.log(`📝 Prompt: ${prompt.substring(0, 100)}...`);
+    if (planMode) {
+      console.log(`📋 Plan mode enabled - Claude will explore and ask questions first`);
+    }
 
     // Get session ID from database OR existing session for resume
     // CRITICAL: Only resume if the working directory matches!
@@ -230,7 +234,7 @@ class ClaudeService extends EventEmitter {
     // Build SDK options
     const options = {
       cwd: projectPath, // Current working directory
-      permissionMode: 'bypassPermissions' as const, // Bypass all permission prompts
+      permissionMode: planMode ? ('plan' as const) : ('bypassPermissions' as const), // Plan mode for exploration, bypass for execution
       maxTurns: 30, // Increased from 10 to allow more tool usage with thinking
       signal: abortController.signal,
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(), // Path to claude CLI
@@ -255,6 +259,37 @@ class ClaudeService extends EventEmitter {
 
       // Build prompt - either simple string or rich content with attachments
       let queryPrompt: string | AsyncIterable<SDKUserMessage>;
+
+      // Add plan mode instructions to prompt if enabled
+      let finalPrompt = prompt;
+      if (planMode) {
+        finalPrompt = `${prompt}
+
+IMPORTANT: You are in PLAN MODE. Follow these steps:
+1. Use tools (Read, Grep, Glob, etc.) to explore the codebase and understand the structure
+2. Analyze what needs to be done
+3. If you have questions for the user, output them in this EXACT format (STRICT JSON - no trailing commas, no comments):
+
+<QUESTIONS>
+{"questions":[{"id":"q1","type":"radio","question":"Your question?","options":["A","B","C"]}]}
+</QUESTIONS>
+
+Question types:
+- "text": Free text input (no options needed)
+- "radio": Single choice radio buttons (requires options array)
+- "checkbox": Multiple choice checkboxes (requires options array)
+
+Note: For radio and checkbox types, two additional options will be automatically added:
+- "Choose what you believe is the best option." (lets you decide)
+- "Type something:" (lets user provide custom answer)
+
+Examples:
+<QUESTIONS>
+{"questions":[{"id":"q1","type":"text","question":"What should we name this feature?"},{"id":"q2","type":"radio","question":"Which framework?","options":["React","Vue","Angular"]},{"id":"q3","type":"radio","question":"Auth method?","options":["JWT","OAuth","Session"]},{"id":"q4","type":"checkbox","question":"Which features?","options":["Login","Signup","Reset Password","2FA"]}]}
+</QUESTIONS>
+
+4. Do NOT execute any code changes yet - only explore and ask questions`;
+      }
 
       if (attachments && attachments.length > 0) {
         console.log(`📎 [CLAUDE SERVICE] Processing ${attachments.length} attachment(s)`);
@@ -301,7 +336,7 @@ class ClaudeService extends EventEmitter {
         // Add text prompt
         content.push({
           type: 'text',
-          text: prompt
+          text: finalPrompt
         });
 
         console.log(`📎 [CLAUDE SERVICE] Final content array:`, {
@@ -325,7 +360,7 @@ class ClaudeService extends EventEmitter {
         })();
       } else {
         // Simple string prompt (backward compatibility)
-        queryPrompt = prompt;
+        queryPrompt = finalPrompt;
       }
 
       // Execute query with async generator and store Query object
@@ -365,8 +400,6 @@ class ClaudeService extends EventEmitter {
 
         // Update context from system init message
         if (msg.type === 'system' && msg.subtype === 'init') {
-          console.log('🔍 DEBUG - System init message received:', JSON.stringify(msg, null, 2));
-          console.log('🔍 DEBUG - Model from init message:', msg.model);
           const session = this.sessions.get(projectId);
           if (session) {
             session.context.model = msg.model || session.context.model;
@@ -442,12 +475,13 @@ class ClaudeService extends EventEmitter {
    * @param model - Optional model to use for new sessions
    * @param attachments - Optional file/image attachments
    * @param thinkingEnabled - Optional flag to enable extended thinking
+   * @param planMode - Optional flag to enable plan mode
    */
-  async sendPrompt(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean): Promise<void> {
+  async sendPrompt(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean, planMode?: boolean): Promise<void> {
     console.log(`📝 Sending prompt to Claude [${projectId}]: ${prompt.substring(0, 100)}...`);
 
     // Use startSession which handles resume automatically
-    await this.startSession(projectId, projectPath, prompt, model, attachments, thinkingEnabled);
+    await this.startSession(projectId, projectPath, prompt, model, attachments, thinkingEnabled, planMode);
   }
 
   /**
@@ -738,6 +772,48 @@ class ClaudeService extends EventEmitter {
       isError: false,
       message: msg,
     };
+
+    // Check for questions in assistant messages (plan mode)
+    if (msg.type === 'assistant' && (msg as any).message?.content) {
+      const content = (msg as any).message.content;
+
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === 'text' && block.text) {
+            const text = block.text;
+
+            // Look for questions wrapped in <QUESTIONS>...</QUESTIONS>
+            const questionsMatch = text.match(/<QUESTIONS>([\s\S]*?)<\/QUESTIONS>/);
+            if (questionsMatch) {
+              try {
+                let questionsJson = questionsMatch[1].trim();
+
+                // Clean up common JSON issues
+                // Remove trailing commas before ] or }
+                questionsJson = questionsJson.replace(/,(\s*[}\]])/g, '$1');
+                // Remove comments (// or /* */)
+                questionsJson = questionsJson.replace(/\/\*[\s\S]*?\*\//g, '');
+                questionsJson = questionsJson.replace(/\/\/.*/g, '');
+                // Remove extra whitespace
+                questionsJson = questionsJson.replace(/\s+/g, ' ').trim();
+
+                console.log('🔍 [PLAN MODE] Cleaned JSON:', questionsJson);
+
+                const questionsData = JSON.parse(questionsJson);
+
+                console.log('🔍 [PLAN MODE] Detected questions from Claude:', questionsData);
+
+                // Emit questions event
+                this.emit('claude-questions', { projectId, questions: questionsData });
+              } catch (error) {
+                console.error('❌ Failed to parse questions JSON:', error);
+                console.error('Raw JSON:', questionsMatch[1]);
+              }
+            }
+          }
+        }
+      }
+    }
 
     // Emit the event for handlers to process
     this.emit('claude-event', { projectId, event });
