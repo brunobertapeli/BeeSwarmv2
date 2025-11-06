@@ -424,19 +424,27 @@ function writeCrashLog(logContent: string) {
 
   try {
     fs.appendFileSync(crashLogPath, logContent)
-    console.log(`📝 Crash log written to: ${crashLogPath}`)
+    // Don't use console here - it can cause infinite loops if stdout/stderr is broken
   } catch (e) {
-    console.error('Failed to write crash log:', e)
+    // Silently fail - we're already in an error state, don't cause more errors
   }
 }
 
 // === GLOBAL ERROR HANDLERS ===
 
+// Prevent infinite error loops
+let isHandlingError = false
+
 // Catch uncaught exceptions in main process
 process.on('uncaughtException', (error) => {
-  console.error('💥 UNCAUGHT EXCEPTION IN MAIN PROCESS:', error)
+  // Prevent recursive error handling
+  if (isHandlingError) {
+    return
+  }
+  isHandlingError = true
 
-  const crashLog = `
+  try {
+    const crashLog = `
 ================================================================================
 UNCAUGHT EXCEPTION - ${new Date().toISOString()}
 ================================================================================
@@ -445,19 +453,37 @@ Stack: ${error.stack}
 User: ${currentUserId || 'not logged in'}
 ================================================================================
 `
-  writeCrashLog(crashLog)
+    writeCrashLog(crashLog)
 
-  // Don't exit in development
-  if (!isDev) {
-    app.quit()
+    // Don't exit in development
+    if (!isDev) {
+      app.quit()
+    }
+  } catch (e) {
+    // Last resort - try to quit gracefully
+    try {
+      if (!isDev) {
+        app.quit()
+      }
+    } catch {}
+  } finally {
+    // Reset flag after a delay to allow legitimate subsequent errors
+    setTimeout(() => {
+      isHandlingError = false
+    }, 1000)
   }
 })
 
 // Catch unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('💥 UNHANDLED PROMISE REJECTION:', reason)
+  // Prevent recursive error handling
+  if (isHandlingError) {
+    return
+  }
+  isHandlingError = true
 
-  const crashLog = `
+  try {
+    const crashLog = `
 ================================================================================
 UNHANDLED REJECTION - ${new Date().toISOString()}
 ================================================================================
@@ -465,7 +491,15 @@ Reason: ${reason}
 User: ${currentUserId || 'not logged in'}
 ================================================================================
 `
-  writeCrashLog(crashLog)
+    writeCrashLog(crashLog)
+  } catch (e) {
+    // Silently fail
+  } finally {
+    // Reset flag after a delay
+    setTimeout(() => {
+      isHandlingError = false
+    }, 1000)
+  }
 })
 
 // Log when app is ready
