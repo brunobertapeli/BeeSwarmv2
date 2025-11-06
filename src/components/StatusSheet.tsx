@@ -54,6 +54,7 @@ interface ConversationBlock {
   summary?: string
   actions?: Action[]
   completionMessage?: string // Final message to show after everything
+  interactionType?: string | null // Type of interaction (user_message, claude_response, plan_ready, etc.)
   // Deployment-specific fields
   deploymentStages?: DeploymentStage[]
   deploymentUrl?: string
@@ -66,13 +67,38 @@ interface StatusSheetProps {
   onMouseLeave?: () => void
   onStopClick?: () => void
   questions?: any // Questions from Claude
-  isInPlanModeSession?: boolean // Is current session in plan mode
   onApprovePlan?: () => void // Callback when user approves plan
   onRejectPlan?: () => void // Callback when user rejects plan (keep planning)
   onAnswerQuestions?: (answers: Record<string, string | string[]>, customInputs: Record<string, string>) => void
 }
 
-function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, questions, isInPlanModeSession, onApprovePlan, onRejectPlan, onAnswerQuestions }: StatusSheetProps) {
+// Helper: Check if block has a plan waiting for approval
+function hasPlanWaitingApproval(block: ConversationBlock): boolean {
+  // Must be complete
+  if (!block.isComplete) {
+    return false
+  }
+
+  // NEW: Check interactionType first (most reliable)
+  if (block.interactionType === 'plan_ready') {
+    return true
+  }
+
+  // FALLBACK: Check if tool summary contains ExitPlanMode
+  // For completed blocks, tools are grouped like "1x Grep, 1x ExitPlanMode"
+  if (block.messages) {
+    const toolMessages = block.messages.filter(m => m.type === 'tool')
+    for (const toolMsg of toolMessages) {
+      if (toolMsg.content.includes('ExitPlanMode')) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, questions, onApprovePlan, onRejectPlan, onAnswerQuestions }: StatusSheetProps) {
   const { deploymentStatus } = useAppStore()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
@@ -355,17 +381,17 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   // Helper to check if a message is long (should be collapsible)
   const isLongMessage = (content: string): boolean => {
     const lines = content.split('\n')
-    return lines.length > 2 || content.length > 150
+    return lines.length > 1 || content.length > 80
   }
 
   // Helper to get truncated message
   const getTruncatedMessage = (content: string): string => {
     const lines = content.split('\n')
-    if (lines.length > 2) {
-      return lines.slice(0, 2).join('\n') + '...'
+    if (lines.length > 1) {
+      return lines[0].slice(0, 80) + '...'
     }
-    if (content.length > 150) {
-      return content.slice(0, 150) + '...'
+    if (content.length > 80) {
+      return content.slice(0, 80) + '...'
     }
     return content
   }
@@ -819,8 +845,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       return 'Claude has questions for you - click to answer'
     }
 
-    // Check if plan is ready and needs approval (completed block in plan mode session, no questions pending)
-    if (isInPlanModeSession && currentBlock.isComplete && currentBlock.type === 'conversation') {
+    // Check if plan is ready and needs approval (use helper function)
+    if (currentBlock.type === 'conversation' && hasPlanWaitingApproval(currentBlock)) {
       return 'Plan ready - click to review and approve'
     }
 
@@ -962,39 +988,53 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
               )}
 
               {allBlocks.map((block, blockIndex) => {
-                // Check if previous blocks exist and this should be merged
-                const prevBlock = blockIndex > 0 ? allBlocks[blockIndex - 1] : null
-                const prevPrevBlock = blockIndex > 1 ? allBlocks[blockIndex - 2] : null
+                // ============================================================
+                // NEW SIMPLIFIED LOGIC: Use interactionType to determine rendering
+                // Fall back to old detection methods if interactionType is not set
+                // ============================================================
 
-                // Skip answer blocks (will be merged with question block)
-                if (isAnswerBlock(block)) {
-                  return null
+                const blockType = block.interactionType || 'unknown';
+
+                // Skip answer blocks - they're shown inline with questions
+                const isAnswers = blockType === 'answers' || isAnswerBlock(block);
+                if (isAnswers) {
+                  return null;
                 }
 
-                // Skip implementation blocks that follow answer blocks (will be merged with question block)
-                // BUT: Don't skip if current block has questions (it's a new plan mode session)
-                // IMPORTANT: Only skip the IMMEDIATE next block after answer, not all future blocks
-                if (prevBlock && isAnswerBlock(prevBlock) && prevPrevBlock && hasQuestions(prevPrevBlock) && !hasQuestions(block)) {
-                  // Check if this is the immediate next block after the answer (same session)
-                  if (blockIndex === allBlocks.findIndex(b => b.id === prevBlock.id) + 1) {
-                    return null // This is the implementation block, merge it
-                  }
-                  // Otherwise, this is a new unrelated block after plan mode ended, don't skip
+                // Get the actual index and check what comes next
+                const actualIndex = allBlocks.findIndex(b => b.id === block.id);
+                const nextBlock = actualIndex >= 0 && actualIndex < allBlocks.length - 1 ? allBlocks[actualIndex + 1] : null;
+
+                // Determine if this is a questions block
+                const isQuestions = blockType === 'questions' || hasQuestions(block);
+
+                // For questions blocks - find the answer block that follows
+                const answerBlock = (isQuestions && nextBlock && (nextBlock.interactionType === 'answers' || isAnswerBlock(nextBlock))) ? nextBlock : null;
+                const isPlanModeWithAnswers = isQuestions && answerBlock !== null;
+
+                // Determine if this is a plan ready block
+                const isPlanReady = blockType === 'plan_ready' || hasPlanWaitingApproval(block);
+
+                // For plan blocks - check if user already approved (next block is plan_approval)
+                const isApprovalNext = nextBlock && (nextBlock.interactionType === 'plan_approval' || nextBlock.userPrompt === "I approve this plan. Please proceed with the implementation.");
+                const implementationBlock = isApprovalNext ? nextBlock : null;
+
+                // Skip plan_approval blocks - they're shown inline with the plan
+                const isPlanApproval = blockType === 'plan_approval' || block.userPrompt === "I approve this plan. Please proceed with the implementation.";
+                if (isPlanApproval) {
+                  return null;
                 }
 
-                // For plan mode: Find the next blocks in the ACTUAL array (not relative to render index)
-                // Find the actual index of current block in allBlocks
-                const actualIndex = allBlocks.findIndex(b => b.id === block.id)
-                const answerBlock = actualIndex >= 0 ? allBlocks[actualIndex + 1] : null
-                const implementationBlock = actualIndex >= 0 ? allBlocks[actualIndex + 2] : null
-                const isPlanModeWithAnswers = hasQuestions(block) && answerBlock && isAnswerBlock(answerBlock)
+                // Check if implementation already happened inline (Claude continued without waiting)
+                const hasGitCommitInline = block.actions?.some(a => a.type === 'git_commit');
 
+                // Check if we need approval buttons
+                // Only show if: plan is ready, complete, no approval block next, and no implementation happened inline
+                const needsApproval = isPlanReady && block.isComplete && !isApprovalNext && !hasGitCommitInline;
 
-                // Check if previous block has questions (for stop button logic)
-                const isPreviousBlockQuestions = prevBlock && hasQuestions(prevBlock) && isAnswerBlock(block)
-
-                const isLastBlock = blockIndex === allBlocks.length - 1
-                const showStopButton = (isLastBlock && !block.isComplete) || (isPlanModeWithAnswers && answerBlock && !answerBlock.isComplete)
+                // Stop button logic - show on last incomplete block
+                const isLastBlock = blockIndex === allBlocks.length - 1;
+                const showStopButton = isLastBlock && !block.isComplete
 
                 // Render deployment block (keep existing for now)
                 if (block.type === 'deployment') {
@@ -1260,7 +1300,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-gray-200">
-                                  Code editing
+                                  {isPlanModeWithAnswers ? 'Exploring & planning' : 'Claude:'}
                                 </span>
                                 {block.isComplete && (
                                   <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -1327,31 +1367,23 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                           </div>
                                         </>
                                       )}
-                                      {message.type === 'tool' && (
+                                      {message.type === 'tool' && message.toolName && (
                                         <>
                                           <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
                                           <span className="text-[11px] text-gray-400 leading-relaxed flex items-center gap-2">
-                                            {message.toolName ? (
-                                              // Individual tool with timing (only show timer for latest active tool)
-                                              <>
-                                                <span>
-                                                  Claude using tool{' '}
-                                                  <span className="text-primary font-medium">{message.toolName}</span>
-                                                  {message.content.includes('@') && (
-                                                    <> @ {message.content.split('@')[1].trim()}</>
-                                                  )}
-                                                </span>
-                                                {isLatestTool && message.toolDuration === undefined && (
-                                                  // Only show timer for the latest active tool
-                                                  <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                                                    <Clock size={10} />
-                                                    <>{latestToolTimer.get(block.id)?.toFixed(1) || '0.0'}s</>
-                                                  </span>
-                                                )}
-                                              </>
-                                            ) : (
-                                              // Grouped tools (completed) - add "Total tools used:" prefix
-                                              <span className="font-mono">Total tools used: {message.content}</span>
+                                            <span>
+                                              Claude using tool{' '}
+                                              <span className="text-primary font-medium">{message.toolName}</span>
+                                              {message.content.includes('@') && (
+                                                <> @ {message.content.split('@')[1].trim()}</>
+                                              )}
+                                            </span>
+                                            {isLatestTool && message.toolDuration === undefined && (
+                                              // Only show timer for the latest active tool
+                                              <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                <Clock size={10} />
+                                                <>{latestToolTimer.get(block.id)?.toFixed(1) || '0.0'}s</>
+                                              </span>
                                             )}
                                           </span>
                                         </>
@@ -1410,15 +1442,25 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             </div>
 
                             {/* Completion Stats */}
-                            {block.completionStats && (
-                              <div className="mt-2 pt-2 border-t border-white/10">
-                                <div className="flex items-center gap-2 flex-wrap text-[10px]">
-                                  <span className="text-gray-400">
-                                    {block.completionStats.timeSeconds}s
-                                  </span>
-                                  <span className="text-gray-600">|</span>
+                            {block.completionStats && (() => {
+                              // Extract tool usage from messages
+                              const toolUsageMessage = block.messages?.find(m => m.type === 'tool' && !m.toolName)
+                              const toolUsage = toolUsageMessage?.content || ''
+
+                              return (
+                              <div className="mt-3">
+                                <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
+                                  {toolUsage && (
+                                    <>
+                                      <span className="text-gray-400 flex items-center gap-1">
+                                        <span className="text-gray-500">Used tools:</span>
+                                        <span className="font-mono text-gray-300">{toolUsage}</span>
+                                      </span>
+                                      <span className="text-gray-600">|</span>
+                                    </>
+                                  )}
                                   <span className="text-gray-400 flex items-center gap-1">
-                                    <span>Tokens:</span>
+                                    <span className="text-gray-500">Tokens:</span>
                                     <ArrowUpCircle size={10} className="text-blue-400" />
                                     <span>{block.completionStats.inputTokens}</span>
                                     <span className="text-gray-600">→</span>
@@ -1438,40 +1480,40 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     </div>
                                   </span>
                                 </div>
+                              </div>
+                              )
+                            })()}
 
-                                {/* Collapsible Summary */}
-                                {block.summary && (
-                                  <div className="mt-2">
-                                    <button
-                                      onClick={() => {
-                                        const newSet = new Set(expandedSummaries)
-                                        if (newSet.has(block.id)) {
-                                          newSet.delete(block.id)
-                                        } else {
-                                          newSet.add(block.id)
-                                        }
-                                        setExpandedSummaries(newSet)
-                                      }}
-                                      className="flex items-center gap-1.5 text-[10px] text-primary hover:text-primary-light transition-colors"
-                                    >
-                                      {expandedSummaries.has(block.id) ? (
-                                        <ChevronUp size={10} />
-                                      ) : (
-                                        <ChevronDown size={10} />
-                                      )}
-                                      <span className="font-medium">Summary</span>
-                                    </button>
+                            {/* Collapsible Summary */}
+                            {block.summary && (
+                              <div className="mt-2">
+                                <button
+                                  onClick={() => {
+                                    const newSet = new Set(expandedSummaries)
+                                    if (newSet.has(block.id)) {
+                                      newSet.delete(block.id)
+                                    } else {
+                                      newSet.add(block.id)
+                                    }
+                                    setExpandedSummaries(newSet)
+                                  }}
+                                  className="flex items-center gap-1.5 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                >
+                                  {expandedSummaries.has(block.id) ? (
+                                    <ChevronUp size={10} />
+                                  ) : (
+                                    <ChevronDown size={10} />
+                                  )}
+                                  <span className="font-medium">Summary</span>
+                                </button>
 
-                                    {expandedSummaries.has(block.id) && (
-                                      <div className="mt-2 pl-4 text-[10px] text-gray-300 leading-relaxed whitespace-pre-wrap">
-                                        {block.summary}
-                                      </div>
-                                    )}
+                                {expandedSummaries.has(block.id) && (
+                                  <div className="mt-2 pl-4 text-[10px] text-gray-300 leading-relaxed whitespace-pre-wrap">
+                                    {block.summary}
                                   </div>
                                 )}
                               </div>
                             )}
-
                           </div>
                         </div>
 
@@ -1742,7 +1784,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                               <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm font-medium text-gray-200">
-                                    Implementing changes
+                                    Creating plan
                                   </span>
                                   {answerBlock.isComplete && (
                                     <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -1805,28 +1847,22 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                             </div>
                                           </>
                                         )}
-                                        {message.type === 'tool' && (
+                                        {message.type === 'tool' && message.toolName && (
                                           <>
                                             <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
                                             <span className="text-[11px] text-gray-400 leading-relaxed flex items-center gap-2">
-                                              {message.toolName ? (
-                                                <>
-                                                  <span>
-                                                    Claude using tool{' '}
-                                                    <span className="text-primary font-medium">{message.toolName}</span>
-                                                    {message.content.includes('@') && (
-                                                      <> @ {message.content.split('@')[1].trim()}</>
-                                                    )}
-                                                  </span>
-                                                  {isLatestTool && message.toolDuration === undefined && (
-                                                    <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                                                      <Clock size={10} />
-                                                      <>{latestToolTimer.get(answerBlock.id)?.toFixed(1) || '0.0'}s</>
-                                                    </span>
-                                                  )}
-                                                </>
-                                              ) : (
-                                                <span className="font-mono">Total tools used: {message.content}</span>
+                                              <span>
+                                                Claude using tool{' '}
+                                                <span className="text-primary font-medium">{message.toolName}</span>
+                                                {message.content.includes('@') && (
+                                                  <> @ {message.content.split('@')[1].trim()}</>
+                                                )}
+                                              </span>
+                                              {isLatestTool && message.toolDuration === undefined && (
+                                                <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                  <Clock size={10} />
+                                                  <>{latestToolTimer.get(answerBlock.id)?.toFixed(1) || '0.0'}s</>
+                                                </span>
                                               )}
                                             </span>
                                           </>
@@ -1838,23 +1874,40 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                               </div>
 
                               {/* Stats for implementation block */}
-                              {answerBlock.isComplete && answerBlock.completionStats && (
-                                <div className="flex items-center gap-2 text-[10px] pt-2 border-t border-white/5">
-                                  <span className="text-gray-400 flex items-center gap-1">
-                                    <span>Tokens:</span>
-                                    <ArrowUpCircle size={10} className="text-blue-400" />
-                                    <span>{answerBlock.completionStats.inputTokens}</span>
-                                    <span className="text-gray-600">→</span>
-                                    <ArrowDownCircle size={10} className="text-green-400" />
-                                    <span>{answerBlock.completionStats.outputTokens}</span>
-                                  </span>
-                                  <span className="text-gray-600">|</span>
-                                  <span className="text-gray-400 flex items-center gap-1">
-                                    <DollarSign size={10} />
-                                    {answerBlock.completionStats.cost.toFixed(4)}
-                                  </span>
+                              {answerBlock.isComplete && answerBlock.completionStats && (() => {
+                                // Extract tool usage from messages
+                                const toolUsageMessage = answerBlock.messages?.find(m => m.type === 'tool' && !m.toolName)
+                                const toolUsage = toolUsageMessage?.content || ''
+
+                                return (
+                                <div className="mt-3">
+                                  <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
+                                    {toolUsage && (
+                                      <>
+                                        <span className="text-gray-400 flex items-center gap-1">
+                                          <span className="text-gray-500">Used tools:</span>
+                                          <span className="font-mono text-gray-300">{toolUsage}</span>
+                                        </span>
+                                        <span className="text-gray-600">|</span>
+                                      </>
+                                    )}
+                                    <span className="text-gray-400 flex items-center gap-1">
+                                      <span className="text-gray-500">Tokens:</span>
+                                      <ArrowUpCircle size={10} className="text-blue-400" />
+                                      <span>{answerBlock.completionStats.inputTokens}</span>
+                                      <span className="text-gray-600">→</span>
+                                      <ArrowDownCircle size={10} className="text-green-400" />
+                                      <span>{answerBlock.completionStats.outputTokens}</span>
+                                    </span>
+                                    <span className="text-gray-600">|</span>
+                                    <span className="text-gray-400 flex items-center gap-1">
+                                      <DollarSign size={10} />
+                                      {answerBlock.completionStats.cost.toFixed(4)}
+                                    </span>
+                                  </div>
                                 </div>
-                              )}
+                                )
+                              })()}
                             </div>
                           </div>
                         )}
@@ -1971,28 +2024,22 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                   </div>
                                                 </>
                                               )}
-                                              {message.type === 'tool' && (
+                                              {message.type === 'tool' && message.toolName && (
                                                 <>
                                                   <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
                                                   <span className="text-[11px] text-gray-400 leading-relaxed flex items-center gap-2">
-                                                    {message.toolName ? (
-                                                      <>
-                                                        <span>
-                                                          Claude using tool{' '}
-                                                          <span className="text-primary font-medium">{message.toolName}</span>
-                                                          {message.content.includes('@') && (
-                                                            <> @ {message.content.split('@')[1].trim()}</>
-                                                          )}
-                                                        </span>
-                                                        {isLatestTool && message.toolDuration === undefined && (
-                                                          <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                                                            <Clock size={10} />
-                                                            <>{latestToolTimer.get(afterBlock.id)?.toFixed(1) || '0.0'}s</>
-                                                          </span>
-                                                        )}
-                                                      </>
-                                                    ) : (
-                                                      <span className="font-mono">Total tools used: {message.content}</span>
+                                                    <span>
+                                                      Claude using tool{' '}
+                                                      <span className="text-primary font-medium">{message.toolName}</span>
+                                                      {message.content.includes('@') && (
+                                                        <> @ {message.content.split('@')[1].trim()}</>
+                                                      )}
+                                                    </span>
+                                                    {isLatestTool && message.toolDuration === undefined && (
+                                                      <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                        <Clock size={10} />
+                                                        <>{latestToolTimer.get(afterBlock.id)?.toFixed(1) || '0.0'}s</>
+                                                      </span>
                                                     )}
                                                   </span>
                                                 </>
@@ -2003,23 +2050,40 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                       })}
                                     </div>
 
-                                    {afterBlock.isComplete && afterBlock.completionStats && (
-                                      <div className="flex items-center gap-2 text-[10px] pt-2 border-t border-white/5">
-                                        <span className="text-gray-400 flex items-center gap-1">
-                                          <span>Tokens:</span>
-                                          <ArrowUpCircle size={10} className="text-blue-400" />
-                                          <span>{afterBlock.completionStats.inputTokens}</span>
-                                          <span className="text-gray-600">→</span>
-                                          <ArrowDownCircle size={10} className="text-green-400" />
-                                          <span>{afterBlock.completionStats.outputTokens}</span>
-                                        </span>
-                                        <span className="text-gray-600">|</span>
-                                        <span className="text-gray-400 flex items-center gap-1">
-                                          <DollarSign size={10} />
-                                          {afterBlock.completionStats.cost.toFixed(4)}
-                                        </span>
+                                    {afterBlock.isComplete && afterBlock.completionStats && (() => {
+                                      // Extract tool usage from messages
+                                      const toolUsageMessage = afterBlock.messages?.find(m => m.type === 'tool' && !m.toolName)
+                                      const toolUsage = toolUsageMessage?.content || ''
+
+                                      return (
+                                      <div className="mt-3">
+                                        <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
+                                          {toolUsage && (
+                                            <>
+                                              <span className="text-gray-400 flex items-center gap-1">
+                                                <span className="text-gray-500">Used tools:</span>
+                                                <span className="font-mono text-gray-300">{toolUsage}</span>
+                                              </span>
+                                              <span className="text-gray-600">|</span>
+                                            </>
+                                          )}
+                                          <span className="text-gray-400 flex items-center gap-1">
+                                            <span className="text-gray-500">Tokens:</span>
+                                            <ArrowUpCircle size={10} className="text-blue-400" />
+                                            <span>{afterBlock.completionStats.inputTokens}</span>
+                                            <span className="text-gray-600">→</span>
+                                            <ArrowDownCircle size={10} className="text-green-400" />
+                                            <span>{afterBlock.completionStats.outputTokens}</span>
+                                          </span>
+                                          <span className="text-gray-600">|</span>
+                                          <span className="text-gray-400 flex items-center gap-1">
+                                            <DollarSign size={10} />
+                                            {afterBlock.completionStats.cost.toFixed(4)}
+                                          </span>
+                                        </div>
                                       </div>
-                                    )}
+                                      )
+                                    })()}
                                   </div>
                                 </div>
                               )}
@@ -2090,8 +2154,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           ))
                         })()}
 
-                        {/* PLAN MODE: Plan approval (show after implementation is complete) */}
-                        {isPlanModeWithAnswers && answerBlock && answerBlock.isComplete && isInPlanModeSession && (
+                        {/* PLAN MODE: Plan approval (show when plan is ready) */}
+                        {needsApproval && (
                           <div className="relative pb-4">
                             {/* Step header */}
                             <div className="flex items-center gap-3 mb-3">
@@ -2141,9 +2205,113 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           </div>
                         )}
 
-                      {/* STEP 2: GIT (GitHub Commit) - Use answerBlock actions in plan mode */}
+                        {/* PLAN MODE: User approval indicator */}
+                        {isPlanReady && implementationBlock && (
+                          <div className="relative pb-4">
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10">
+                                <img src={UserIcon} alt="User" className="w-6 h-6 opacity-90" />
+                              </div>
+                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                <span className="text-sm font-medium text-green-400">
+                                  ✓ Plan approved
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* PLAN MODE: Show implementation (Claude executing the plan) */}
+                        {isPlanReady && implementationBlock && (
+                          <div className="relative pb-4">
+                            {/* Claude header */}
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10">
+                                <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6" />
+                              </div>
+                              <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap" style={{ marginTop: '3px' }}>
+                                <span className="text-sm font-medium text-gray-200">
+                                  Claude:
+                                </span>
+                                {implementationBlock.isComplete && implementationBlock.completionStats && (
+                                  <span className="text-[10px] text-gray-500">
+                                    {implementationBlock.completionStats.timeSeconds}s
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Implementation content */}
+                            <div className="ml-10">
+                              {/* Implementation messages */}
+                              {implementationBlock.messages && implementationBlock.messages
+                                .filter(m => m.type === 'assistant' || m.type === 'thinking' || m.type === 'tool')
+                                .map((msg, msgIdx) => {
+                                  if (msg.type === 'thinking') {
+                                    return (
+                                      <div key={`impl-thinking-${msgIdx}`} className="mb-2 text-[11px] text-gray-500 italic">
+                                        Thought for {msg.thinkingDuration || '...'}s
+                                      </div>
+                                    )
+                                  }
+
+                                  if (msg.type === 'tool') {
+                                    return null // Tools shown separately in stats
+                                  }
+
+                                  return (
+                                    <div key={`impl-msg-${msgIdx}`} className="mb-3">
+                                      <div className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
+                                        {msg.content}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+
+                              {/* Implementation stats */}
+                              {implementationBlock.completionStats && (() => {
+                                const toolUsageMessage = implementationBlock.messages?.find(m => m.type === 'tool' && !m.toolName)
+                                const toolUsage = toolUsageMessage?.content || ''
+
+                                return (
+                                  <div className="mt-3">
+                                    <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
+                                      {toolUsage && (
+                                        <>
+                                          <span className="text-gray-400 flex items-center gap-1">
+                                            <span className="text-gray-500">Used tools:</span>
+                                            <span className="font-mono text-gray-300">{toolUsage}</span>
+                                          </span>
+                                          <span className="text-gray-600">|</span>
+                                        </>
+                                      )}
+                                      <span className="text-gray-400 flex items-center gap-1">
+                                        <span className="text-gray-500">Tokens:</span>
+                                        <ArrowUpCircle size={10} className="text-blue-400" />
+                                        <span>{implementationBlock.completionStats.inputTokens}</span>
+                                        <span className="text-gray-600">→</span>
+                                        <ArrowDownCircle size={10} className="text-green-400" />
+                                        <span>{implementationBlock.completionStats.outputTokens}</span>
+                                      </span>
+                                      <span className="text-gray-600">|</span>
+                                      <span className="text-gray-400 flex items-center gap-1">
+                                        <DollarSign size={10} />
+                                        {implementationBlock.completionStats.cost.toFixed(4)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          </div>
+                        )}
+
+                      {/* STEP 2: GIT (GitHub Commit) - Use answer/implementation block in plan mode */}
                       {(() => {
-                        const gitBlockToUse = isPlanModeWithAnswers && answerBlock ? answerBlock : block
+                        const gitBlockToUse =
+                          (isPlanModeWithAnswers && answerBlock) ? answerBlock :
+                          (isPlanReady && implementationBlock) ? implementationBlock :
+                          block
                         const git = gitBlockToUse?.actions?.find(a => a.type === 'git_commit')
                         // Only show if git action exists AND has started
                         const shouldShowGit = git && git.status
@@ -2158,7 +2326,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                             {/* Title + Status */}
                             <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm font-medium text-gray-200">
                                   {git.status === 'in_progress'
                                     ? 'Committing and pushing to GitHub...'
@@ -2167,6 +2335,11 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     : 'Commit failed'
                                   }
                                 </span>
+                                {git.status === 'success' && git.data?.commitHash && (
+                                  <span className="font-mono text-[11px] bg-white/[0.03] border border-white/10 px-2 py-0.5 rounded text-gray-400">
+                                    {git.data.commitHash}
+                                  </span>
+                                )}
                                 {git.status === 'success' && (
                                   <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
                                     <Check size={10} className="text-green-400" />
@@ -2184,34 +2357,27 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             </div>
                           </div>
 
-                          {/* Git step content (always visible) */}
-                          {git.status === 'success' && git.data && (
-                            <div className="ml-10 space-y-2">
-                              {git.data.commitHash && (
-                                <div className="flex items-center gap-2 text-[11px]">
-                                  <span className="text-gray-400">Commit:</span>
-                                  <span className="font-mono bg-white/5 px-2 py-0.5 rounded text-gray-300">
-                                    {git.data.commitHash}
-                                  </span>
-                                </div>
-                              )}
-                              {git.data.filesChanged !== undefined && (
-                                <div className="flex items-center gap-2 text-[11px]">
-                                  <span className="text-gray-400">Files changed:</span>
-                                  <span className="text-gray-300">
-                                    {git.data.filesChanged} file{git.data.filesChanged !== 1 ? 's' : ''}
-                                  </span>
-                                </div>
-                              )}
+                          {/* Git step content - only show files changed */}
+                          {git.status === 'success' && git.data?.filesChanged !== undefined && (
+                            <div className="ml-10">
+                              <div className="flex items-center gap-2 text-[11px]">
+                                <span className="text-gray-400">Files changed:</span>
+                                <span className="text-gray-300">
+                                  {git.data.filesChanged} file{git.data.filesChanged !== 1 ? 's' : ''}
+                                </span>
+                              </div>
                             </div>
                           )}
                         </div>
                         )
                       })()}
 
-                      {/* STEP 3: DEPLOY (Dev Server) - Use answerBlock actions in plan mode */}
+                      {/* STEP 3: DEPLOY (Dev Server) - Use answer/implementation block in plan mode */}
                       {(() => {
-                        const deployBlockToUse = isPlanModeWithAnswers && answerBlock ? answerBlock : block
+                        const deployBlockToUse =
+                          (isPlanModeWithAnswers && answerBlock) ? answerBlock :
+                          (isPlanReady && implementationBlock) ? implementationBlock :
+                          block
                         const deploy = deployBlockToUse?.actions?.find(a => a.type === 'dev_server')
                         // Only show if deploy action exists AND has started
                         const shouldShowDeploy = deploy && deploy.status
@@ -2229,10 +2395,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-gray-200">
                                   {deploy.status === 'in_progress'
-                                    ? 'Starting dev server...'
+                                    ? 'Restarting dev server...'
                                     : deploy.status === 'success'
-                                    ? 'Dev server running'
-                                    : 'Failed to start dev server'
+                                    ? 'Dev restarted successfully'
+                                    : 'Failed to restart dev server'
                                   }
                                 </span>
                                 {deploy.status === 'success' && (

@@ -75,8 +75,7 @@ function ActionBar({
   const [showPlusMenu, setShowPlusMenu] = useState(false)
   const [showTweakMenu, setShowTweakMenu] = useState(false)
   const [thinkingEnabled, setThinkingEnabled] = useState(false)
-  const [planModeActive, setPlanModeActive] = useState(false)
-  const [isInPlanModeSession, setIsInPlanModeSession] = useState(false) // Track if current session is in plan mode
+  const [planModeToggle, setPlanModeToggle] = useState(false) // Only for next message, resets after send
   const [attachments, setAttachments] = useState<Array<{id: string, type: 'image' | 'file', name: string, preview?: string}>>([])
   const [questions, setQuestions] = useState<any>(null)
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string | string[]>>({})
@@ -128,7 +127,7 @@ function ActionBar({
       }
     })
 
-    const unsubCompleted = window.electronAPI.claude.onCompleted((id) => {
+    const unsubCompleted = window.electronAPI.claude.onCompleted(async (id) => {
       if (id === projectId) {
         toast.success('Done!', 'Claude finished successfully')
         setClaudeStatus('completed')
@@ -247,6 +246,9 @@ function ActionBar({
       setQuestions(questionsData)
       setQuestionAnswers({}) // Reset answers
       setCustomInputs({}) // Reset custom inputs
+      // DON'T set isInPlanModeSession=true here - that's premature!
+      // Questions arriving doesn't mean the plan is ready for approval yet
+      // Wait for Claude to complete after answering questions
     })
 
     return () => {
@@ -329,17 +331,12 @@ function ActionBar({
     if (message.trim() && !isInputBlocked && projectId) {
       const prompt = message.trim()
       const currentAttachments = [...attachments] // Copy attachments before clearing
-      const currentPlanMode = planModeActive // Capture plan mode state before clearing
+      const usePlanMode = planModeToggle // Capture plan mode state before clearing
 
       // Clear UI state immediately
       setMessage('')
       setAttachments([]) // Clear attachments from UI
-
-      // Track plan mode session state
-      if (currentPlanMode) {
-        setIsInPlanModeSession(true) // Start plan mode session
-      }
-      setPlanModeActive(false) // Turn off toggle for next message
+      setPlanModeToggle(false) // Reset toggle for next message
 
       try {
         // Convert attachments to Claude format
@@ -417,14 +414,14 @@ function ActionBar({
           // Start session with the prompt and selected model (lazy initialization)
           console.log('🔍 Starting new session with model:', selectedModel)
           console.log('🧠 Thinking enabled:', thinkingEnabled)
-          console.log('📋 Plan mode enabled:', currentPlanMode)
+          console.log('📋 Plan mode enabled:', usePlanMode)
           const result = await window.electronAPI?.claude.startSession(
             projectId,
             prompt,
             selectedModel,
             claudeAttachments.length > 0 ? claudeAttachments : undefined,
             thinkingEnabled,
-            currentPlanMode
+            usePlanMode
           )
 
           if (!result?.success) {
@@ -435,14 +432,14 @@ function ActionBar({
           // Send prompt to existing session with current selected model
           console.log('🔍 Sending to existing session with model:', selectedModel)
           console.log('🧠 Thinking enabled:', thinkingEnabled)
-          console.log('📋 Plan mode enabled:', currentPlanMode)
+          console.log('📋 Plan mode enabled:', usePlanMode)
           const result = await window.electronAPI?.claude.sendPrompt(
             projectId,
             prompt,
             selectedModel,
             claudeAttachments.length > 0 ? claudeAttachments : undefined,
             thinkingEnabled,
-            currentPlanMode
+            usePlanMode
           )
 
           if (!result?.success) {
@@ -630,12 +627,13 @@ function ActionBar({
           }}
           onStopClick={handleStop}
           questions={questions}
-          isInPlanModeSession={isInPlanModeSession}
           onRejectPlan={() => {
-            // End the plan mode session and re-enable plan mode toggle for next message
-            setIsInPlanModeSession(false)
-            setPlanModeActive(true)
-            // Focus the textarea
+            // User wants to refine the plan - keep conversation going with plan mode
+            setQuestions(null) // Clear questions UI
+            setQuestionAnswers({}) // Clear answers
+            setCustomInputs({}) // Clear custom inputs
+            setPlanModeToggle(true) // Enable plan mode for next message
+            // Focus the textarea so user can type immediately
             if (textareaRef.current) {
               textareaRef.current.focus()
             }
@@ -645,10 +643,12 @@ function ActionBar({
 
             console.log('✅ User approved plan, proceeding with implementation')
 
-            // End plan mode session
-            setIsInPlanModeSession(false)
+            // Clear questions state
+            setQuestions(null)
+            setQuestionAnswers({})
+            setCustomInputs({})
 
-            // Send approval message to Claude with planMode=false to allow execution
+            // Send approval message to proceed with implementation (planMode=false)
             const approvalPrompt = "I approve this plan. Please proceed with the implementation."
 
             try {
@@ -662,16 +662,16 @@ function ActionBar({
 
               console.log('✅ Chat block created for plan approval:', blockResult.block.id)
 
-              // Send approval to Claude (planMode=false to allow execution)
+              // Send approval to Claude with planMode=false to enable execution
               await window.electronAPI?.claude.sendPrompt(
                 projectId,
                 approvalPrompt,
                 undefined, // use current model
                 undefined, // no attachments
                 undefined, // thinking disabled
-                false // planMode=false to allow execution
+                false // planMode=false - tells Claude to execute the plan
               )
-              console.log('📤 Sent plan approval to Claude')
+              console.log('📤 Sent plan approval to Claude - execution enabled')
             } catch (error) {
               console.error('Failed to send plan approval to Claude:', error)
             }
@@ -720,14 +720,14 @@ function ActionBar({
 
               console.log('✅ Chat block created for answers:', blockResult.block.id)
 
-              // Send answers to Claude (KEEP in plan mode if session started in plan mode - wait for plan approval)
+              // Send answers to Claude (keep plan mode if toggle is active)
               await window.electronAPI?.claude.sendPrompt(
                 projectId,
                 formattedPrompt,
                 undefined, // use current model
                 undefined, // no attachments
                 undefined, // thinking disabled
-                isInPlanModeSession // Keep plan mode active to wait for plan approval if in plan mode session
+                planModeToggle // Keep plan mode if still active
               )
               console.log('📤 Sent answers to Claude')
 
@@ -759,7 +759,7 @@ function ActionBar({
           <div className="px-3 pt-3 pb-2">
             <div className="relative flex items-start">
               {/* Custom Plan Mode Placeholder */}
-              {planModeActive && !message && attachments.length === 0 && (
+              {planModeToggle && !message && attachments.length === 0 && (
                 <div className="absolute left-[14px] top-[10px] pointer-events-none text-sm text-gray-500 z-[5]">
                   Describe the task you need Claude to plan ahead.
                 </div>
@@ -811,7 +811,7 @@ function ActionBar({
                     ? "Deploying your app..."
                     : isClaudeWorking
                     ? `Claude is working${loadingDots}`
-                    : planModeActive
+                    : planModeToggle
                     ? ""
                     : "Ask Claude to build..."
                 }
@@ -819,7 +819,7 @@ function ActionBar({
                 className={`flex-1 border rounded-xl px-3.5 pr-11 text-sm outline-none transition-all resize-none overflow-y-auto ${
                   isInputBlocked
                     ? 'bg-dark-bg/30 text-gray-500 placeholder-gray-600 cursor-not-allowed border-dark-border/50'
-                    : planModeActive
+                    : planModeToggle
                     ? 'bg-dark-bg/50 text-white placeholder-gray-500 border-blue-400/50 focus:border-blue-400/70'
                     : 'bg-dark-bg/50 text-white placeholder-gray-500 border-dark-border/50 focus:border-primary/30'
                 } ${attachments.length > 0 ? 'pt-[38px] pb-2.5' : 'py-2.5'}`}
@@ -996,12 +996,12 @@ function ActionBar({
                     <div className="relative z-10 space-y-1">
                       <button
                         onClick={() => {
-                          setPlanModeActive(!planModeActive)
+                          setPlanModeToggle(!planModeToggle)
                           setShowTweakMenu(false)
                         }}
                         className="w-full px-3 py-2 rounded-lg text-left text-[11px] text-gray-300 hover:text-blue-400 hover:bg-dark-bg/50 transition-colors"
                       >
-                        {planModeActive ? 'Cancel plan mode' : 'Plan mode'}
+                        {planModeToggle ? 'Cancel plan mode' : 'Plan mode'}
                       </button>
                       <button
                         onClick={() => {

@@ -27,14 +27,28 @@ export function emitChatEvent(event: string, ...args: any[]): void {
  */
 export function registerChatHandlers(): void {
   // Create new chat block
-  ipcMain.handle('chat:create-block', async (_event, projectId: string, userPrompt: string) => {
+  ipcMain.handle('chat:create-block', async (_event, projectId: string, userPrompt: string, interactionType?: string | null) => {
     try {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId);
 
       console.log(`💬 Creating chat block for project: ${projectId}`);
 
-      const block = databaseService.createChatBlock(projectId, userPrompt);
+      // Infer interaction type from prompt if not provided
+      let type = interactionType;
+      if (!type) {
+        if (userPrompt.startsWith('Here are my answers to your questions')) {
+          type = 'answers';
+        } else if (userPrompt === 'I approve this plan. Please proceed with the implementation.') {
+          type = 'plan_approval';
+        } else if (userPrompt.startsWith('Restore to checkpoint')) {
+          type = 'checkpoint_restore';
+        } else {
+          type = 'user_message';
+        }
+      }
+
+      const block = databaseService.createChatBlock(projectId, userPrompt, type);
 
       // Start tracking this block in ChatHistoryManager
       chatHistoryManager.startBlock(projectId, block.id);

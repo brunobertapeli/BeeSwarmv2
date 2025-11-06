@@ -232,9 +232,18 @@ class ClaudeService extends EventEmitter {
     // const systemPromptText = this.loadSystemPrompt();
 
     // Build SDK options
+    const permissionMode = planMode ? ('plan' as const) : ('bypassPermissions' as const);
+
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🔍 [PERMISSION MODE CHECK]');
+    console.log(`📋 planMode parameter: ${planMode}`);
+    console.log(`🔐 Computed permissionMode: ${permissionMode}`);
+    console.log(`🔄 Resuming session: ${sessionId ? 'YES' : 'NO'}`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
     const options = {
       cwd: projectPath, // Current working directory
-      permissionMode: planMode ? ('plan' as const) : ('bypassPermissions' as const), // Plan mode for exploration, bypass for execution
+      permissionMode, // Plan mode for exploration, bypass for execution
       maxTurns: 30, // Increased from 10 to allow more tool usage with thinking
       signal: abortController.signal,
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(), // Path to claude CLI
@@ -246,12 +255,18 @@ class ClaudeService extends EventEmitter {
       ...(thinkingEnabled && { maxThinkingTokens: 5000 }), // Enable extended thinking (5k tokens = ~3750 words)
     };
 
-    console.log('🔍 DEBUG - SDK Options:', JSON.stringify(options, null, 2));
-    console.log('🔍 DEBUG - Model being sent to SDK:', effectiveModel);
-    console.log('🔍 DEBUG - Max turns:', options.maxTurns);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('⚙️  [SDK OPTIONS] Configuring Claude Agent SDK');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`🔐 Permission Mode: ${permissionMode} ${planMode ? '(PLAN MODE - read-only tools only)' : '(BYPASS - full execution)'}`);
+    console.log(`📁 Working Directory: ${projectPath}`);
+    console.log(`🎯 Model: ${effectiveModel}`);
+    console.log(`🔄 Resume Session: ${sessionId ? `YES (${sessionId.substring(0, 12)}...)` : 'NO (new session)'}`);
+    console.log(`🔧 Max Turns: ${options.maxTurns}`);
     if (thinkingEnabled) {
-      console.log('🧠 DEBUG - Extended thinking enabled with maxThinkingTokens:', 5000);
+      console.log(`🧠 Extended Thinking: ENABLED (5000 tokens max)`);
     }
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     try {
       // Update status to running
@@ -263,6 +278,7 @@ class ClaudeService extends EventEmitter {
       // Add plan mode instructions to prompt if enabled
       let finalPrompt = prompt;
       if (planMode) {
+        console.log('📋 [PLAN MODE] Adding plan mode instructions to prompt');
         finalPrompt = `${prompt}
 
 IMPORTANT: You are in PLAN MODE. Follow these steps:
@@ -288,7 +304,8 @@ Examples:
 {"questions":[{"id":"q1","type":"text","question":"What should we name this feature?"},{"id":"q2","type":"radio","question":"Which framework?","options":["React","Vue","Angular"]},{"id":"q3","type":"radio","question":"Auth method?","options":["JWT","OAuth","Session"]},{"id":"q4","type":"checkbox","question":"Which features?","options":["Login","Signup","Reset Password","2FA"]}]}
 </QUESTIONS>
 
-4. Do NOT execute any code changes yet - only explore and ask questions`;
+4. When you're done exploring and ready to present your plan, call the ExitPlanMode tool with your complete plan
+5. Do NOT execute any code changes - only explore, ask questions, and present the plan`;
       }
 
       if (attachments && attachments.length > 0) {

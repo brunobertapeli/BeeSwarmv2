@@ -35,6 +35,7 @@ export interface ChatBlock {
   actions: string | null // JSON array of post-completion actions like git commits, builds, etc.
   completedAt: number | null
   isComplete: boolean
+  interactionType: string | null // Type of interaction: user_message, claude_response, plan_ready, questions, answers, plan_approval, implementation, checkpoint_restore
   createdAt: number
 }
 
@@ -238,6 +239,13 @@ class DatabaseService {
           console.log('📦 Running migration: Adding actions column to chat_history...')
           this.db.exec('ALTER TABLE chat_history ADD COLUMN actions TEXT')
           console.log('✅ Migration complete: actions column added')
+        }
+
+        const hasInteractionType = chatTableInfo.some(col => col.name === 'interactionType')
+        if (!hasInteractionType) {
+          console.log('📦 Running migration: Adding interactionType column to chat_history...')
+          this.db.exec('ALTER TABLE chat_history ADD COLUMN interactionType TEXT')
+          console.log('✅ Migration complete: interactionType column added')
         }
       } catch (e) {
         // chat_history table might not exist yet - that's ok
@@ -647,7 +655,7 @@ class DatabaseService {
   /**
    * Create a new chat block
    */
-  createChatBlock(projectId: string, userPrompt: string): ChatBlock {
+  createChatBlock(projectId: string, userPrompt: string, interactionType: string | null = null): ChatBlock {
     if (!this.db) {
       throw new Error('Database not initialized')
     }
@@ -671,12 +679,13 @@ class DatabaseService {
       actions: null,
       completedAt: null,
       isComplete: false,
+      interactionType,
       createdAt: Date.now()
     }
 
     const sql = `
-      INSERT INTO chat_history (id, projectId, blockIndex, userPrompt, claudeMessages, toolExecutions, commitHash, filesChanged, completionStats, summary, actions, completedAt, isComplete, createdAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO chat_history (id, projectId, blockIndex, userPrompt, claudeMessages, toolExecutions, commitHash, filesChanged, completionStats, summary, actions, completedAt, isComplete, interactionType, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
 
     try {
@@ -694,10 +703,11 @@ class DatabaseService {
         newBlock.actions,
         newBlock.completedAt,
         newBlock.isComplete ? 1 : 0,
+        newBlock.interactionType,
         newBlock.createdAt
       )
 
-      console.log(`✅ Chat block created: ${newBlock.id} for project ${projectId}`)
+      console.log(`✅ Chat block created: ${newBlock.id} for project ${projectId}${interactionType ? ` (type: ${interactionType})` : ''}`)
       return newBlock
     } catch (error) {
       console.error('❌ Failed to create chat block:', error)
@@ -757,6 +767,10 @@ class DatabaseService {
     if (updates.isComplete !== undefined) {
       fields.push('isComplete = ?')
       values.push(updates.isComplete ? 1 : 0)
+    }
+    if (updates.interactionType !== undefined) {
+      fields.push('interactionType = ?')
+      values.push(updates.interactionType)
     }
 
     if (fields.length === 0) {

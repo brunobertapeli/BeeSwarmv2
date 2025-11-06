@@ -30,7 +30,14 @@ export function registerClaudeHandlers(): void {
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId);
 
-      console.log(`🤖 Starting Claude session for project: ${projectId}`);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('🚀 [CLAUDE START] Starting Claude session');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log(`📂 Project: ${projectId}`);
+      console.log(`📝 Prompt: ${prompt?.substring(0, 100)}...`);
+      console.log(`🎯 Model: ${model || 'default'}`);
+      console.log(`🧠 Thinking: ${thinkingEnabled ? 'ENABLED' : 'DISABLED'}`);
+      console.log(`📋 Plan Mode: ${planMode ? '✅ ENABLED (read-only exploration)' : '❌ DISABLED (full execution)'}`);
 
       // Only start if we have a prompt - prevents auto-start on project load
       if (!prompt) {
@@ -104,7 +111,15 @@ export function registerClaudeHandlers(): void {
         // SECURITY: Validate user owns this project
         const project = validateProjectOwnership(projectId);
 
-        console.log(`📤 Sending prompt to Claude for project: ${projectId}`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('📤 [CLAUDE SEND] Sending prompt to existing session');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log(`📂 Project: ${projectId}`);
+        console.log(`📝 Prompt: ${prompt?.substring(0, 100)}...`);
+        console.log(`🎯 Model: ${model || 'default'}`);
+        console.log(`🧠 Thinking: ${thinkingEnabled ? 'ENABLED' : 'DISABLED'}`);
+        console.log(`📋 Plan Mode: ${planMode ? '✅ ENABLED (read-only exploration)' : '❌ DISABLED (full execution)'}`);
+        console.log(`🔄 Session: RESUME (continuing conversation)`);
 
         // Log attachments received from frontend
         if (attachments && attachments.length > 0) {
@@ -735,8 +750,10 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
       }
 
       // Check if any file-modifying tools were used
+      // NOTE: Only Edit and Write actually modify files
+      // Bash is excluded because it's often used for read-only operations (cat, ls, grep, etc.)
       const hasFileModifications = toolExecutions.some(
-        (tool: any) => tool.toolName === 'Edit' || tool.toolName === 'Write' || tool.toolName === 'Bash'
+        (tool: any) => tool.toolName === 'Edit' || tool.toolName === 'Write'
       );
 
       if (!hasFileModifications) {

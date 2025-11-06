@@ -160,19 +160,39 @@ class ChatHistoryManager extends EventEmitter {
 
         // Track tool executions with details
         if (block.type === 'tool_use') {
+          const toolName = block.name;
+
+          // LOGGING: Track tool usage and flag execution tools
+          const isExecutionTool = ['Edit', 'Write', 'Bash', 'NotebookEdit'].includes(toolName);
+          const isExitPlanMode = toolName === 'ExitPlanMode';
+
+          if (isExitPlanMode) {
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('📋 [EXIT PLAN MODE] Claude called ExitPlanMode tool');
+            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+            console.log('✅ Plan is ready for user approval');
+            console.log('⏸️  Claude should STOP here and wait for user approval');
+            console.log('❌ NO execution tools (Edit/Write/Bash) should follow');
+          } else if (isExecutionTool) {
+            console.log('⚠️  [TOOL EXECUTION] Claude using EXECUTION tool: ' + toolName);
+            console.log('   ⚠️  This should ONLY happen when NOT in plan mode!');
+          } else {
+            console.log(`🔧 [TOOL USE] Claude using ${toolName}`);
+          }
+
           const toolExecution: ToolExecution = {
-            toolName: block.name,
+            toolName,
             toolId: block.id,
             startTime: Date.now(),
           };
 
           // Extract file path for Read, Write, Edit tools
-          if (block.input && (block.name === 'Read' || block.name === 'Write' || block.name === 'Edit')) {
+          if (block.input && (toolName === 'Read' || toolName === 'Write' || toolName === 'Edit')) {
             toolExecution.filePath = block.input.file_path || block.input.path;
           }
 
           // Extract command for Bash tool
-          if (block.input && block.name === 'Bash') {
+          if (block.input && toolName === 'Bash') {
             toolExecution.command = block.input.command;
           }
 
@@ -242,10 +262,35 @@ class ChatHistoryManager extends EventEmitter {
         summary = lastTextMessage.content;
       }
 
+      // Detect interaction type based on Claude's response
+      let interactionType: string | null = null;
+
+      // Check if this was a plan mode session (has ExitPlanMode tool)
+      const hasExitPlanMode = activeBlock.toolExecutions.some(t => t.toolName === 'ExitPlanMode');
+      if (hasExitPlanMode) {
+        interactionType = 'plan_ready';
+        console.log('📋 Detected interaction type: plan_ready (ExitPlanMode tool used)');
+      }
+
+      // Check for questions in Claude's messages
+      const hasQuestions = activeBlock.claudeMessages.some(m =>
+        m.type === 'text' && m.content.includes('<QUESTIONS>')
+      );
+      if (hasQuestions) {
+        interactionType = 'questions';
+        console.log('❓ Detected interaction type: questions (<QUESTIONS> tag found)');
+      }
+
+      // If no special type detected, it's a regular Claude response
+      if (!interactionType) {
+        interactionType = 'claude_response';
+      }
+
       // Update block with final data and mark complete
       databaseService.updateChatBlock(activeBlock.blockId, {
         completionStats: JSON.stringify(completionStats),
         summary: summary,
+        interactionType: interactionType,
       });
 
       databaseService.completeChatBlock(activeBlock.blockId);

@@ -31,6 +31,17 @@ export type ProcessState = 'stopped' | 'starting' | 'running' | 'stopping' | 'cr
 
 export type ClaudeStatus = 'idle' | 'starting' | 'running' | 'completed' | 'error'
 
+export enum InteractionType {
+  USER_MESSAGE = 'user_message',           // Regular user message
+  CLAUDE_RESPONSE = 'claude_response',     // Claude's response
+  PLAN_READY = 'plan_ready',               // Claude's plan (with ExitPlanMode)
+  QUESTIONS = 'questions',                 // Claude asks questions
+  ANSWERS = 'answers',                     // User answers questions
+  PLAN_APPROVAL = 'plan_approval',         // User approves plan
+  IMPLEMENTATION = 'implementation',       // Claude implements after approval
+  CHECKPOINT_RESTORE = 'checkpoint_restore' // Restore checkpoint action
+}
+
 export interface ClaudeAttachment {
   type: 'image' | 'document'
   data: string // base64 encoded
