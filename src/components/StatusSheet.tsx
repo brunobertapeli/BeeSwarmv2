@@ -1,13 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X, Brain, Clock } from 'lucide-react'
+import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X, Brain, Clock, Server, MessageCircle, ClipboardCheck } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { KeywordHighlight } from './KeywordHighlight'
 
 // Import workflow icons
-import UserIcon from '../assets/images/user.svg'
 import AnthropicIcon from '../assets/images/anthropic.svg'
 import GitIcon from '../assets/images/git.svg'
-import DeployIcon from '../assets/images/deploy.svg'
 import bgImage from '../assets/images/bg.jpg'
 import successSound from '../assets/sounds/success.wav'
 
@@ -381,17 +379,17 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   // Helper to check if a message is long (should be collapsible)
   const isLongMessage = (content: string): boolean => {
     const lines = content.split('\n')
-    return lines.length > 1 || content.length > 80
+    return lines.length > 1 || content.length > 105
   }
 
   // Helper to get truncated message
   const getTruncatedMessage = (content: string): string => {
     const lines = content.split('\n')
     if (lines.length > 1) {
-      return lines[0].slice(0, 80) + '...'
+      return lines[0].slice(0, 105) + '...'
     }
-    if (content.length > 80) {
-      return content.slice(0, 80) + '...'
+    if (content.length > 105) {
+      return content.slice(0, 105) + '...'
     }
     return content
   }
@@ -838,24 +836,24 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     : null
   const isWorking = !currentBlock.isComplete
 
-  // Get display text for collapsed state
-  const getCollapsedText = () => {
+  // Get display text and icon for collapsed state
+  const getCollapsedState = () => {
     // Check if Claude has questions that need answers (only show after block is complete)
     if (questions && questions.questions && questions.questions.length > 0 && currentBlock.isComplete) {
-      return 'Claude has questions for you - click to answer'
+      return { text: 'Claude has questions for you - click to answer', icon: MessageCircle, needsAttention: true }
     }
 
     // Check if plan is ready and needs approval (use helper function)
     if (currentBlock.type === 'conversation' && hasPlanWaitingApproval(currentBlock)) {
-      return 'Plan ready - click to review and approve'
+      return { text: 'Plan ready - click to review and approve', icon: ClipboardCheck, needsAttention: true }
     }
 
     if (currentBlock.type === 'deployment') {
       if (currentBlock.isComplete) {
-        return 'Deployment complete!'
+        return { text: 'Deployment complete!', icon: Globe, needsAttention: true }
       }
       const currentStage = currentBlock.deploymentStages?.find((s) => !s.isComplete)
-      return currentStage ? currentStage.label : 'Deploying...'
+      return { text: currentStage ? currentStage.label : 'Deploying...', icon: null, needsAttention: false }
     }
 
     // Check for in-progress actions
@@ -863,13 +861,13 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       const inProgressAction = currentBlock.actions.find(a => a.status === 'in_progress')
       if (inProgressAction) {
         if (inProgressAction.type === 'git_commit') {
-          return 'Committing and pushing changes to GitHub...'
+          return { text: 'Committing and pushing changes to GitHub...', icon: null, needsAttention: false }
         }
         if (inProgressAction.type === 'build') {
-          return 'Building...'
+          return { text: 'Building...', icon: null, needsAttention: false }
         }
         if (inProgressAction.type === 'dev_server') {
-          return 'Starting dev server...'
+          return { text: 'Starting dev server...', icon: null, needsAttention: false }
         }
       }
 
@@ -877,18 +875,18 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       const lastAction = currentBlock.actions[currentBlock.actions.length - 1]
       if (lastAction.status === 'success') {
         if (lastAction.type === 'git_commit') {
-          return 'Committed successfully'
+          return { text: 'Committed successfully', icon: null, needsAttention: false }
         }
         if (lastAction.type === 'build') {
-          return 'Build succeed'
+          return { text: 'Build succeed', icon: null, needsAttention: false }
         }
         if (lastAction.type === 'dev_server') {
-          return '🚀 Dev Server running. You can test your project!'
+          return { text: 'Dev Server running. You can test your project!', icon: Server, needsAttention: true }
         }
       }
     }
 
-    return latestMessage?.content || ''
+    return { text: latestMessage?.content || '', icon: null, needsAttention: false }
   }
 
   // Calculate bottom position based on action bar height
@@ -926,49 +924,59 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
         />
 
         {/* Collapsed State - Single Clickable Row */}
-        {!isExpanded && (
-          <div
-            className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10"
-            onClick={() => setIsExpanded(true)}
-          >
-            {currentBlock.type === 'deployment' ? (
-              <>
-                {isWorking ? (
-                  <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />
-                ) : (
-                  <Globe size={14} className="text-primary flex-shrink-0" />
-                )}
-                <span className="text-xs text-gray-200 flex-1 line-clamp-1">{getCollapsedText()}</span>
-              </>
-            ) : (
-              <>
-                {isWorking && <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />}
-                <span className="text-xs text-gray-200 flex-1 line-clamp-1">{getCollapsedText()}</span>
+        {!isExpanded && (() => {
+          const collapsedState = getCollapsedState()
+          const IconComponent = collapsedState.icon
 
-                {/* Stop button - only show when working on conversation */}
-                {isWorking && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation() // Prevent expanding when clicking stop
-                      onStopClick?.()
-                    }}
-                    className="p-1.5 hover:bg-red-500/10 rounded transition-colors group"
-                    title="Stop generation"
-                  >
-                    <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
+          return (
+            <div
+              className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10"
+              onClick={() => setIsExpanded(true)}
+            >
+              {currentBlock.type === 'deployment' ? (
+                <>
+                  {isWorking ? (
+                    <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />
+                  ) : (
+                    <Globe size={14} className="text-primary flex-shrink-0" />
+                  )}
+                  <span className="text-xs text-gray-200 flex-1 line-clamp-1">{collapsedState.text}</span>
+                </>
+              ) : (
+                <div className="flex items-center gap-2 flex-1">
+                  {isWorking ? (
+                    <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />
+                  ) : IconComponent ? (
+                    <IconComponent size={14} className={`flex-shrink-0 text-primary ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
+                  ) : null}
+                  <span className="text-xs text-gray-200 flex-1 line-clamp-1">
+                    {collapsedState.text}
+                  </span>
+                  {/* Stop button - only show when working on conversation */}
+                  {isWorking && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation() // Prevent expanding when clicking stop
+                        onStopClick?.()
+                      }}
+                      className="p-1.5 hover:bg-red-500/10 rounded transition-colors group"
+                      title="Stop generation"
+                    >
+                      <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Expanded State - Conversation Blocks */}
         {isExpanded && (
-          <div className="px-4 pb-3 relative z-10">
+          <div className="pb-3 relative z-10">
             {/* Collapsible header */}
             <div
-              className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 -mx-4 px-4 transition-colors"
+              className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 px-3 transition-colors"
               onClick={() => setIsExpanded(false)}
             >
               <span className="text-xs font-medium text-gray-300">Workflow Activity</span>
@@ -978,7 +986,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             </div>
 
             {/* Workflow Timeline */}
-            <div ref={scrollContainerRef} className="max-h-[500px] overflow-y-scroll pr-4 custom-scrollbar">
+            <div ref={scrollContainerRef} className="max-h-[500px] overflow-y-scroll pl-3 pr-3 custom-scrollbar">
               {/* Loading spinner at top for infinite scroll */}
               {isLoadingMore && (
                 <div className="flex items-center justify-center py-4">
@@ -1108,11 +1116,23 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                     {/* Workflow Block Container */}
                     <div className="bg-white/[0.02] rounded-lg border border-white/10 p-4 relative">
                       {/* Checkpoint or Stop button (top right) - only for non-restore blocks */}
-                      {!isRestoreBlock && (
+                      {!isRestoreBlock && (() => {
+                        // In plan mode with merged blocks, check both the main block and answer block for commitHash
+                        const commitHashToCheck = (isPlanModeWithAnswers && answerBlock?.commitHash)
+                          ? answerBlock.commitHash
+                          : block.commitHash;
+
+                        const blockToRestore = (isPlanModeWithAnswers && answerBlock?.commitHash)
+                          ? answerBlock
+                          : block;
+
+                        const shouldShowRestore = block.isComplete && commitHashToCheck && commitHashToCheck !== 'unknown' && commitHashToCheck.length >= 7;
+
+                        return (
                         <>
-                          {block.isComplete && block.commitHash && block.commitHash !== 'unknown' ? (
+                          {shouldShowRestore ? (
                             <button
-                              onClick={() => handleRestoreCheckpoint(block)}
+                              onClick={() => handleRestoreCheckpoint(blockToRestore)}
                               className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors group z-10"
                               title="Restore to this checkpoint"
                             >
@@ -1128,13 +1148,14 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             </button>
                           ) : null}
                         </>
-                      )}
+                        )
+                      })()}
 
                       {/* RESTORE BLOCK - Timeline design matching other blocks */}
                       {isRestoreBlock ? (
                         <div className="relative pr-8">
                           {/* Continuous dotted line */}
-                          <div className="absolute left-[12px] top-0 bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
+                          <div className="absolute left-[12px] top-[12px] bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
 
                           {/* Git Restore Step */}
                           <div className="relative pb-4">
@@ -1179,31 +1200,47 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             <div className="relative">
                               {/* Step header */}
                               <div className="flex items-center gap-3 mb-3">
-                                {/* Deploy Icon */}
+                                {/* Server Icon */}
                                 <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                  <img src={DeployIcon} alt="Deploy" className="w-6 h-6 opacity-90" />
+                                  <Server size={24} className="text-white opacity-90" />
                                 </div>
 
                                 {/* Title + Status */}
                                 <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-sm font-medium text-gray-200">
                                       {deployAction.status === 'in_progress'
                                         ? 'Starting dev server...'
                                         : deployAction.status === 'success'
-                                        ? 'Dev server running'
+                                        ? 'Dev Server started successfully'
                                         : 'Failed to start dev server'
                                       }
                                     </span>
-                                    {deployAction.status === 'success' && (
-                                      <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                        <Check size={10} className="text-green-400" />
-                                      </div>
+                                    {deployAction.status === 'success' && deployAction.data?.url && (
+                                      <>
+                                        <span className="text-gray-400 text-[11px]">•</span>
+                                        <a
+                                          href={deployAction.data.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[11px]"
+                                        >
+                                          <span>{deployAction.data.url}</span>
+                                          <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
+                                        </a>
+                                      </>
                                     )}
-                                    {deployAction.status === 'success' && deployAction.data?.restartTime && (
-                                      <span className="text-[10px] text-gray-500">
-                                        {deployAction.data.restartTime}s
-                                      </span>
+                                    {deployAction.status === 'success' && (
+                                      <>
+                                        <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                          <Check size={10} className="text-green-400" />
+                                        </div>
+                                        {deployAction.data?.restartTime && (
+                                          <span className="text-[10px] text-gray-500">
+                                            {deployAction.data.restartTime}s
+                                          </span>
+                                        )}
+                                      </>
                                     )}
                                     {deployAction.status === 'in_progress' && (
                                       <Loader2 size={12} className="text-primary animate-spin" />
@@ -1211,24 +1248,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                   </div>
                                 </div>
                               </div>
-
-                              {/* Deploy step content (always visible) */}
-                              {deployAction.status === 'success' && deployAction.data?.url && (
-                                <div className="ml-10">
-                                  <div className="flex items-center gap-2 text-[11px]">
-                                    <span className="text-gray-400">Server:</span>
-                                    <a
-                                      href={deployAction.data.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group"
-                                    >
-                                      <span>{deployAction.data.url}</span>
-                                      <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
-                                    </a>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           )}
                         </div>
@@ -1236,16 +1255,16 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                         /* Timeline Workflow */
                         <div className="relative pr-8">
                         {/* Continuous dotted line from top to bottom - behind icons */}
-                        <div className="absolute left-[12px] top-0 bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
+                        <div className="absolute left-[12px] top-[12px] bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
 
                         {/* STEP 0: USER (User Prompt) - Hide for answer blocks */}
                         {!isAnswerBlock(block) && (
                         <div className="relative pb-4">
                           {/* Step header */}
                           <div className="flex items-center gap-3 mb-3">
-                            {/* Icon - Adjust left/right positioning here */}
+                            {/* User Avatar */}
                             <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                              <img src={UserIcon} alt="User" className="w-6 h-6 opacity-90" />
+                              <User size={24} className="text-white opacity-90" />
                             </div>
 
                             {/* Title */}
@@ -1719,8 +1738,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                   <span className="text-sm font-medium text-gray-200">
                                     Waiting for user input
                                   </span>
-                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center">
-                                    <Check size={10} className="text-blue-400" />
+                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                    <Check size={10} className="text-green-400" />
                                   </div>
                                 </div>
                               </div>
@@ -1740,9 +1759,9 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           <div className="relative pb-4">
                             {/* Step header */}
                             <div className="flex items-center gap-3 mb-3">
-                              {/* User Icon */}
+                              {/* User Avatar */}
                               <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                <img src={UserIcon} alt="User" className="w-6 h-6 opacity-90" />
+                                <User size={24} className="text-white opacity-90" />
                               </div>
 
                               {/* Title + Status */}
@@ -1936,7 +1955,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                 <div className="relative pb-4">
                                   <div className="flex items-center gap-3 mb-3">
                                     <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                      <img src={UserIcon} alt="User" className="w-6 h-6 opacity-90" />
+                                      <User size={24} className="text-white opacity-90" />
                                     </div>
                                     <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                                       <div className="flex items-center gap-2">
@@ -2098,30 +2117,36 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                           <img src={GitIcon} alt="Git" className="w-6 h-6 opacity-90" />
                                         </div>
                                         <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                          <div className="flex items-center gap-2">
+                                          <div className="flex items-center gap-2 flex-wrap">
                                             <span className="text-sm font-medium text-gray-200">
                                               {action.status === 'success' ? 'Committed successfully' : 'Committing...'}
                                             </span>
+                                            {action.status === 'success' && action.data?.commitHash && (
+                                              <span className="font-mono text-[11px] bg-white/[0.03] border border-white/10 px-2 py-0.5 rounded text-gray-400">
+                                                {action.data.commitHash}
+                                              </span>
+                                            )}
+                                            {action.status === 'success' && action.data?.filesChanged !== undefined && (
+                                              <>
+                                                <span className="text-gray-400 text-[11px]">•</span>
+                                                <span className="text-[11px] text-gray-400">
+                                                  {action.data.filesChanged} file{action.data.filesChanged !== 1 ? 's' : ''} changed
+                                                </span>
+                                              </>
+                                            )}
                                             {action.status === 'success' && (
-                                              <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                                <Check size={10} className="text-green-400" />
-                                              </div>
+                                              <>
+                                                <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                                  <Check size={10} className="text-green-400" />
+                                                </div>
+                                                <span className="text-[10px] text-gray-500">
+                                                  0.1s
+                                                </span>
+                                              </>
                                             )}
                                           </div>
                                         </div>
                                       </div>
-                                      {action.status === 'success' && action.data && (
-                                        <div className="ml-10 space-y-2">
-                                          {action.data.commitHash && (
-                                            <div className="flex items-center gap-2 text-[11px]">
-                                              <span className="text-gray-400">Commit:</span>
-                                              <span className="font-mono bg-white/5 px-2 py-0.5 rounded text-gray-300">
-                                                {action.data.commitHash}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
                                     </div>
                                   )
                                 }
@@ -2130,17 +2155,38 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     <div key={`dev-${actionIdx}`} className="relative pb-4">
                                       <div className="flex items-center gap-3 mb-3">
                                         <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                          <img src={DeployIcon} alt="Deploy" className="w-6 h-6 opacity-90" />
+                                          <Server size={24} className="text-white opacity-90" />
                                         </div>
                                         <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                          <div className="flex items-center gap-2">
+                                          <div className="flex items-center gap-2 flex-wrap">
                                             <span className="text-sm font-medium text-gray-200">
-                                              {action.status === 'success' ? 'Dev server running' : 'Starting dev server...'}
+                                              {action.status === 'success' ? 'Dev Server started successfully' : 'Starting dev server...'}
                                             </span>
+                                            {action.status === 'success' && action.data?.url && (
+                                              <>
+                                                <span className="text-gray-400 text-[11px]">•</span>
+                                                <a
+                                                  href={action.data.url}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[11px]"
+                                                >
+                                                  <span>{action.data.url}</span>
+                                                  <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
+                                                </a>
+                                              </>
+                                            )}
                                             {action.status === 'success' && (
-                                              <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                                <Check size={10} className="text-green-400" />
-                                              </div>
+                                              <>
+                                                <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                                  <Check size={10} className="text-green-400" />
+                                                </div>
+                                                {action.data?.restartTime && (
+                                                  <span className="text-[10px] text-gray-500">
+                                                    {action.data.restartTime}s
+                                                  </span>
+                                                )}
+                                              </>
                                             )}
                                           </div>
                                         </div>
@@ -2159,9 +2205,9 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           <div className="relative pb-4">
                             {/* Step header */}
                             <div className="flex items-center gap-3 mb-3">
-                              {/* User Icon */}
+                              {/* User Avatar */}
                               <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                <img src={UserIcon} alt="User" className="w-6 h-6 opacity-90" />
+                                <User size={24} className="text-white opacity-90" />
                               </div>
 
                               {/* Title */}
@@ -2210,12 +2256,17 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           <div className="relative pb-4">
                             <div className="flex items-center gap-3 mb-3">
                               <div className="flex-shrink-0 bg-white/[0.02] relative z-10">
-                                <img src={UserIcon} alt="User" className="w-6 h-6 opacity-90" />
+                                <User size={24} className="text-white opacity-90" />
                               </div>
                               <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                <span className="text-sm font-medium text-green-400">
-                                  ✓ Plan approved
-                                </span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-gray-200">
+                                    User approved plan
+                                  </span>
+                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                    <Check size={10} className="text-green-400" />
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -2340,15 +2391,23 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     {git.data.commitHash}
                                   </span>
                                 )}
-                                {git.status === 'success' && (
-                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                    <Check size={10} className="text-green-400" />
-                                  </div>
+                                {git.status === 'success' && git.data?.filesChanged !== undefined && (
+                                  <>
+                                    <span className="text-gray-400 text-[11px]">•</span>
+                                    <span className="text-[11px] text-gray-400">
+                                      {git.data.filesChanged} file{git.data.filesChanged !== 1 ? 's' : ''} changed
+                                    </span>
+                                  </>
                                 )}
                                 {git.status === 'success' && (
-                                  <span className="text-[10px] text-gray-500">
-                                    0.1s
-                                  </span>
+                                  <>
+                                    <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                      <Check size={10} className="text-green-400" />
+                                    </div>
+                                    <span className="text-[10px] text-gray-500">
+                                      0.1s
+                                    </span>
+                                  </>
                                 )}
                                 {git.status === 'in_progress' && (
                                   <Loader2 size={12} className="text-primary animate-spin" />
@@ -2356,18 +2415,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                               </div>
                             </div>
                           </div>
-
-                          {/* Git step content - only show files changed */}
-                          {git.status === 'success' && git.data?.filesChanged !== undefined && (
-                            <div className="ml-10">
-                              <div className="flex items-center gap-2 text-[11px]">
-                                <span className="text-gray-400">Files changed:</span>
-                                <span className="text-gray-300">
-                                  {git.data.filesChanged} file{git.data.filesChanged !== 1 ? 's' : ''}
-                                </span>
-                              </div>
-                            </div>
-                          )}
                         </div>
                         )
                       })()}
@@ -2385,31 +2432,47 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                         <div className="relative">
                           {/* Step header */}
                           <div className="flex items-center gap-3 mb-3">
-                            {/* Icon - Adjust left/right positioning here */}
+                            {/* Server Icon */}
                             <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                              <img src={DeployIcon} alt="Deploy" className="w-6 h-6 opacity-90" />
+                              <Server size={24} className="text-white opacity-90" />
                             </div>
 
                             {/* Title + Status */}
                             <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm font-medium text-gray-200">
                                   {deploy.status === 'in_progress'
-                                    ? 'Restarting dev server...'
+                                    ? 'Starting dev server...'
                                     : deploy.status === 'success'
-                                    ? 'Dev restarted successfully'
-                                    : 'Failed to restart dev server'
+                                    ? 'Dev Server started successfully'
+                                    : 'Failed to start dev server'
                                   }
                                 </span>
-                                {deploy.status === 'success' && (
-                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                    <Check size={10} className="text-green-400" />
-                                  </div>
+                                {deploy.status === 'success' && deploy.data?.url && (
+                                  <>
+                                    <span className="text-gray-400 text-[11px]">•</span>
+                                    <a
+                                      href={deploy.data.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[11px]"
+                                    >
+                                      <span>{deploy.data.url}</span>
+                                      <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
+                                    </a>
+                                  </>
                                 )}
-                                {deploy.status === 'success' && deploy.data?.restartTime && (
-                                  <span className="text-[10px] text-gray-500">
-                                    {deploy.data.restartTime}s
-                                  </span>
+                                {deploy.status === 'success' && (
+                                  <>
+                                    <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                      <Check size={10} className="text-green-400" />
+                                    </div>
+                                    {deploy.data?.restartTime && (
+                                      <span className="text-[10px] text-gray-500">
+                                        {deploy.data.restartTime}s
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                                 {deploy.status === 'in_progress' && (
                                   <Loader2 size={12} className="text-primary animate-spin" />
@@ -2417,24 +2480,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                               </div>
                             </div>
                           </div>
-
-                          {/* Deploy step content (always visible) */}
-                          {deploy.status === 'success' && deploy.data?.url && (
-                            <div className="ml-10">
-                              <div className="flex items-center gap-2 text-[11px]">
-                                <span className="text-gray-400">Server:</span>
-                                <a
-                                  href={deploy.data.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group"
-                                >
-                                  <span>{deploy.data.url}</span>
-                                  <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
-                                </a>
-                              </div>
-                            </div>
-                          )}
                         </div>
                         )
                       })()}
@@ -2493,6 +2538,30 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
           }
           .custom-scrollbar::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.25);
+          }
+          .icon-bounce {
+            animation: bounce-icon 2s ease-out infinite;
+          }
+          @keyframes bounce-icon {
+            0%, 100% {
+              transform: translateY(0);
+              animation-timing-function: ease-out;
+            }
+            20% {
+              transform: translateY(-11px);
+              animation-timing-function: ease-in;
+            }
+            40% {
+              transform: translateY(0);
+              animation-timing-function: ease-out;
+            }
+            45% {
+              transform: translateY(-2px);
+              animation-timing-function: ease-in;
+            }
+            50% {
+              transform: translateY(0);
+            }
           }
         `}</style>
       </div>

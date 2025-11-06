@@ -74,7 +74,7 @@ function ActionBar({
   const [loadingDots, setLoadingDots] = useState('')
   const [showPlusMenu, setShowPlusMenu] = useState(false)
   const [showTweakMenu, setShowTweakMenu] = useState(false)
-  const [thinkingEnabled, setThinkingEnabled] = useState(false)
+  const [thinkingEnabled, setThinkingEnabled] = useState(true)
   const [planModeToggle, setPlanModeToggle] = useState(false) // Only for next message, resets after send
   const [attachments, setAttachments] = useState<Array<{id: string, type: 'image' | 'file', name: string, preview?: string}>>([])
   const [questions, setQuestions] = useState<any>(null)
@@ -759,7 +759,7 @@ function ActionBar({
           <div className="px-3 pt-3 pb-2">
             <div className="relative flex items-start">
               {/* Custom Plan Mode Placeholder */}
-              {planModeToggle && !message && attachments.length === 0 && (
+              {planModeToggle && !message && attachments.length === 0 && !isTextareaFocused && (
                 <div className="absolute left-[14px] top-[10px] pointer-events-none text-sm text-gray-500 z-[5]">
                   Describe the task you need Claude to plan ahead.
                 </div>
@@ -816,7 +816,7 @@ function ActionBar({
                     : "Ask Claude to build..."
                 }
                 disabled={isInputBlocked}
-                className={`flex-1 border rounded-xl px-3.5 pr-11 text-sm outline-none transition-all resize-none overflow-y-auto ${
+                className={`flex-1 border rounded-xl px-3.5 pr-11 text-sm outline-none transition-all resize-none overflow-y-auto caret-white ${
                   isInputBlocked
                     ? 'bg-dark-bg/30 text-gray-500 placeholder-gray-600 cursor-not-allowed border-dark-border/50'
                     : planModeToggle
@@ -854,7 +854,9 @@ function ActionBar({
                       : 'top-[12px]'
                   } ${
                     message.trim() && !isInputBlocked
-                      ? 'text-primary hover:text-primary-dark cursor-pointer'
+                      ? planModeToggle
+                        ? 'text-blue-400 hover:text-blue-500 cursor-pointer'
+                        : 'text-primary hover:text-primary-dark cursor-pointer'
                       : 'text-gray-600 cursor-not-allowed'
                   }`}
                 >
@@ -1213,25 +1215,8 @@ function ActionBar({
 
                 {/* Icon and text */}
                 <div className="relative flex items-center gap-1.5">
-                  <div className="relative">
-                    <Rocket size={13} className="text-primary animate-pulse" />
-                    {/* Spinning ring around rocket */}
-                    <svg className="absolute inset-0 -m-1 w-[21px] h-[21px] animate-spin" viewBox="0 0 21 21">
-                      <circle
-                        cx="10.5"
-                        cy="10.5"
-                        r="8"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        fill="none"
-                        strokeDasharray="8 42"
-                        className="text-primary opacity-60"
-                      />
-                    </svg>
-                  </div>
-                  <span className="text-[11px] text-primary font-medium">
-                    {Math.round(deployProgress)}%
-                  </span>
+                  <Rocket size={13} className="text-primary" />
+                  <span className="text-[11px] text-primary font-medium">Deploy</span>
                 </div>
               </button>
             ) : (

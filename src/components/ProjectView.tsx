@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '../store/appStore'
 import { useToast } from '../hooks/useToast'
 import ActionBar from './ActionBar'
@@ -83,71 +83,74 @@ function ProjectView() {
 
   const currentProject = projects.find((p) => p.id === currentProjectId)
 
-  // Start dev server and setup preview when project loads
-  useEffect(() => {
+  // Define startDevServer at component level so it's accessible throughout
+  const startDevServer = useCallback(async () => {
     if (!currentProject) return
 
-    const startDevServer = async () => {
-      try {
-        // Reset state when switching projects
-        setServerPort(null)
-        setServerStatus('starting')
-        setPreviewReady(false)
-        setTerminalOutput([])
+    try {
+      // Reset state when switching projects
+      setServerPort(null)
+      setServerStatus('starting')
+      setPreviewReady(false)
+      setTerminalOutput([])
 
-        // Create terminal session for this project
-        await window.electronAPI?.terminal.createSession(currentProject.id)
+      // Create terminal session for this project
+      await window.electronAPI?.terminal.createSession(currentProject.id)
 
-        // NOTE: Claude session will be started on first message (lazy initialization)
-        // This prevents blocking the input field on project load
+      // NOTE: Claude session will be started on first message (lazy initialization)
+      // This prevents blocking the input field on project load
 
-        // Check if server is already running for this project
-        const statusResult = await window.electronAPI?.process.getStatus(currentProject.id)
-        if (statusResult?.success && statusResult.status === 'running' && statusResult.port) {
-          setServerPort(statusResult.port)
-          setServerStatus('running')
+      // Check if server is already running for this project
+      const statusResult = await window.electronAPI?.process.getStatus(currentProject.id)
+      if (statusResult?.success && statusResult.status === 'running' && statusResult.port) {
+        setServerPort(statusResult.port)
+        setServerStatus('running')
+        return
+      }
+
+      // Check if dependencies are installed
+      if (!currentProject.dependenciesInstalled) {
+        toast.info('Installing dependencies...', 'This may take a few minutes')
+        const installResult = await window.electronAPI?.projects.installDependencies(currentProject.id)
+        if (!installResult?.success) {
+          console.error('Failed to install dependencies:', installResult?.error)
+          setServerStatus('error')
+          toast.error('Installation failed', installResult?.error || 'Could not install dependencies')
           return
         }
 
-        // Check if dependencies are installed
-        if (!currentProject.dependenciesInstalled) {
-          toast.info('Installing dependencies...', 'This may take a few minutes')
-          const installResult = await window.electronAPI?.projects.installDependencies(currentProject.id)
-          if (!installResult?.success) {
-            console.error('Failed to install dependencies:', installResult?.error)
-            setServerStatus('error')
-            toast.error('Installation failed', installResult?.error || 'Could not install dependencies')
-            return
-          }
-
-          // Refresh project data to get updated dependenciesInstalled flag
-          const updatedProject = await window.electronAPI?.projects.getById(currentProject.id)
-          if (updatedProject?.success && updatedProject.project) {
-            // Update local projects list with new data
-            setProjects(prev => prev.map(p =>
-              p.id === currentProject.id ? updatedProject.project! : p
-            ))
-          }
-
-          toast.success('Dependencies installed!', 'Starting dev server...')
+        // Refresh project data to get updated dependenciesInstalled flag
+        const updatedProject = await window.electronAPI?.projects.getById(currentProject.id)
+        if (updatedProject?.success && updatedProject.project) {
+          // Update local projects list with new data
+          setProjects(prev => prev.map(p =>
+            p.id === currentProject.id ? updatedProject.project! : p
+          ))
         }
 
-        // Start the dev server
-        const result = await window.electronAPI?.process.startDevServer(currentProject.id)
-        if (result?.success && result.port) {
-          setServerPort(result.port)
-          // Don't show toast - server ready will show one
-        } else {
-          console.error('Failed to start dev server:', result?.error)
-          setServerStatus('error')
-          toast.error('Server failed to start', result?.error || 'Could not start dev server')
-        }
-      } catch (error) {
-        console.error('Error starting dev server:', error)
-        setServerStatus('error')
-        toast.error('Error', 'Failed to start project')
+        toast.success('Dependencies installed!', 'Starting dev server...')
       }
+
+      // Start the dev server
+      const result = await window.electronAPI?.process.startDevServer(currentProject.id)
+      if (result?.success && result.port) {
+        setServerPort(result.port)
+        // Don't show toast - server ready will show one
+      } else {
+        console.error('Failed to start dev server:', result?.error)
+        setServerStatus('error')
+        toast.error('Server failed to start', result?.error || 'Could not start dev server')
+      }
+    } catch (error) {
+      console.error('Error starting dev server:', error)
+      setServerStatus('error')
+      toast.error('Error', 'Failed to start project')
     }
+  }, [currentProject, toast])
+
+  // Start dev server and setup preview when project loads
+  useEffect(() => {
+    if (!currentProject) return
 
     startDevServer()
 
