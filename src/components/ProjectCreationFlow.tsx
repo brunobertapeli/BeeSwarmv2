@@ -27,7 +27,7 @@ import TechIcon from './TechIcon'
 import { useAppStore } from '../store/appStore'
 import { useToast } from '../hooks/useToast'
 
-type WizardStep = 'category' | 'templates' | 'details' | 'configure' | 'creating' | 'installing' | 'initializing' | 'complete' | 'error'
+type WizardStep = 'category' | 'templates' | 'details' | 'configure' | 'creating' | 'installing' | 'initializing' | 'complete' | 'error' | 'import-url' | 'import-design'
 
 interface ProjectCreationFlowProps {
   isOpen: boolean
@@ -226,6 +226,9 @@ const getPlanLabel = (plan: 'free' | 'plus' | 'premium') => {
   }
 }
 
+// Forbidden categories for import flow
+const FORBIDDEN_IMPORT_CATEGORIES = ['Ecommerce']
+
 export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCreationFlowProps) {
   const { user } = useAppStore()
   const toast = useToast()
@@ -245,6 +248,17 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null)
   const [keyValidation, setKeyValidation] = useState<Record<string, boolean>>({})
+  const [importUrl, setImportUrl] = useState('')
+  const [importDesignOption, setImportDesignOption] = useState<'template' | 'screenshot' | 'ai' | null>(null)
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null)
+  const [isImportFlow, setIsImportFlow] = useState(false)
+  const [isFetchingWebsite, setIsFetchingWebsite] = useState(false)
+  const [fetchComplete, setFetchComplete] = useState(false)
+  const [fetchProgress, setFetchProgress] = useState<{
+    stage: 'fetching' | 'extracting' | 'downloading' | 'complete'
+    message: string
+    progress: number
+  }>({ stage: 'fetching', message: 'Starting...', progress: 0 })
 
   const categories: ProjectCategory[] = [
     {
@@ -318,21 +332,33 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
       setProjectId(null)
       setError(null)
       setLoading(false)
+      setIsImportFlow(false)
+      setImportUrl('')
+      setImportDesignOption(null)
+      setScreenshotFile(null)
+      setIsFetchingWebsite(false)
+      setFetchComplete(false)
+      setFetchProgress({ stage: 'fetching', message: 'Starting...', progress: 0 })
       hasStartedRef.current = false
     }
   }, [isOpen])
 
-  // Fetch templates when templates category is selected
+  // Fetch templates when templates step is shown
   useEffect(() => {
     const fetchTemplates = async () => {
-      if (selectedCategory?.id !== 'templates') return
+      if (currentStep !== 'templates') return
 
       try {
         setLoading(true)
         const result = await window.electronAPI?.templates.fetch()
 
         if (result?.success && result.templates) {
-          setTemplates(result.templates)
+          // Filter out forbidden categories if in import flow
+          const filteredTemplates = isImportFlow
+            ? result.templates.filter(t => !FORBIDDEN_IMPORT_CATEGORIES.includes(t.category))
+            : result.templates
+
+          setTemplates(filteredTemplates)
         } else {
           setError(result?.error || 'Failed to fetch templates')
         }
@@ -345,7 +371,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     }
 
     fetchTemplates()
-  }, [selectedCategory])
+  }, [currentStep, isImportFlow])
 
   // Start project creation when in creating step
   useEffect(() => {
@@ -414,7 +440,14 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
   const handleCategorySelect = (category: ProjectCategory) => {
     if (!category.available) return
     setSelectedCategory(category)
-    setCurrentStep('templates')
+
+    if (category.id === 'import') {
+      setIsImportFlow(true)
+      setCurrentStep('import-url')
+    } else {
+      setIsImportFlow(false)
+      setCurrentStep('templates')
+    }
   }
 
   const handleTemplateSelect = (template: Template) => {
@@ -461,6 +494,111 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
       return
     }
     setCurrentStep('creating')
+  }
+
+  const normalizeUrl = (url: string): string => {
+    let normalized = url.trim()
+    // Add https:// if no protocol
+    if (!normalized.match(/^https?:\/\//i)) {
+      normalized = 'https://' + normalized
+    }
+    return normalized
+  }
+
+  const isValidWebsiteUrl = (url: string): boolean => {
+    if (!url.trim()) return false
+
+    const normalized = normalizeUrl(url)
+
+    try {
+      const urlObj = new URL(normalized)
+
+      // Must have a valid hostname
+      if (!urlObj.hostname) return false
+
+      // Must have at least one dot (e.g., example.com)
+      if (!urlObj.hostname.includes('.')) return false
+
+      // Hostname must be at least 4 characters (e.g., a.co)
+      if (urlObj.hostname.length < 4) return false
+
+      // Must not be just a TLD (e.g., not just ".com")
+      const parts = urlObj.hostname.split('.')
+      if (parts.length < 2) return false
+      if (parts.some(part => part.length === 0)) return false
+
+      // The last part (TLD) should be at least 2 characters
+      const tld = parts[parts.length - 1]
+      if (tld.length < 2) return false
+
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const handleStartFetch = async () => {
+    if (!isValidWebsiteUrl(importUrl)) {
+      toast.error('Please enter a valid website URL')
+      return
+    }
+
+    // Normalize URL
+    const normalizedUrl = normalizeUrl(importUrl)
+    setImportUrl(normalizedUrl) // Update with normalized URL
+
+    setIsFetchingWebsite(true)
+    setFetchComplete(false)
+
+    // Simulate fetching process with realistic stages
+    // Stage 1: Fetching website (0-30%)
+    setFetchProgress({ stage: 'fetching', message: 'Connecting to website...', progress: 0 })
+    await new Promise(resolve => setTimeout(resolve, 800))
+
+    setFetchProgress({ stage: 'fetching', message: 'Loading page content...', progress: 15 })
+    await new Promise(resolve => setTimeout(resolve, 1200))
+
+    setFetchProgress({ stage: 'fetching', message: 'Analyzing structure...', progress: 30 })
+    await new Promise(resolve => setTimeout(resolve, 1000))
+
+    // Stage 2: Extracting content (30-60%)
+    setFetchProgress({ stage: 'extracting', message: 'Extracting text content...', progress: 35 })
+    await new Promise(resolve => setTimeout(resolve, 1000))
+
+    setFetchProgress({ stage: 'extracting', message: 'Identifying sections...', progress: 45 })
+    await new Promise(resolve => setTimeout(resolve, 1200))
+
+    setFetchProgress({ stage: 'extracting', message: 'Processing navigation...', progress: 60 })
+    await new Promise(resolve => setTimeout(resolve, 800))
+
+    // Stage 3: Downloading images (60-95%)
+    setFetchProgress({ stage: 'downloading', message: 'Finding images...', progress: 65 })
+    await new Promise(resolve => setTimeout(resolve, 1000))
+
+    setFetchProgress({ stage: 'downloading', message: 'Downloading images (1/8)...', progress: 70 })
+    await new Promise(resolve => setTimeout(resolve, 1500))
+
+    setFetchProgress({ stage: 'downloading', message: 'Downloading images (4/8)...', progress: 80 })
+    await new Promise(resolve => setTimeout(resolve, 1500))
+
+    setFetchProgress({ stage: 'downloading', message: 'Downloading images (7/8)...', progress: 90 })
+    await new Promise(resolve => setTimeout(resolve, 1200))
+
+    setFetchProgress({ stage: 'downloading', message: 'Optimizing assets...', progress: 95 })
+    await new Promise(resolve => setTimeout(resolve, 800))
+
+    // Stage 4: Complete (100%)
+    setFetchProgress({ stage: 'complete', message: 'Website analysis complete!', progress: 100 })
+    setFetchComplete(true)
+    setIsFetchingWebsite(false)
+  }
+
+  const handleContinueToDesignSelection = () => {
+    if (!fetchComplete) {
+      toast.error('Please wait for website analysis to complete')
+      return
+    }
+    setCurrentStep('import-design')
   }
 
   const handleUpgrade = () => {
@@ -584,6 +722,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
               {currentStep === 'templates' && 'Choose a Template'}
               {currentStep === 'details' && selectedTemplate?.name}
               {currentStep === 'configure' && 'Configure Your Project'}
+              {currentStep === 'import-url' && 'Import Website'}
+              {currentStep === 'import-design' && 'Choose Design Style'}
               {(currentStep === 'creating' || currentStep === 'installing' || currentStep === 'initializing') && `Creating ${projectName}`}
               {currentStep === 'complete' && 'Project Ready!'}
               {currentStep === 'error' && 'Setup Failed'}
@@ -593,6 +733,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
               {currentStep === 'templates' && `${templates.length} templates available`}
               {currentStep === 'details' && 'Review template details'}
               {currentStep === 'configure' && 'Set up your project settings'}
+              {currentStep === 'import-url' && 'Enter your website URL to begin'}
+              {currentStep === 'import-design' && 'Select how to style your imported content'}
               {(currentStep === 'creating' || currentStep === 'installing' || currentStep === 'initializing') && 'Setting up your project...'}
               {currentStep === 'complete' && 'Your project is ready to use'}
               {currentStep === 'error' && 'Something went wrong'}
@@ -670,6 +812,366 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       </motion.p>
                     )}
                   </AnimatePresence>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Import Step 1: URL Input */}
+            {currentStep === 'import-url' && (
+              <motion.div
+                key="import-url"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="max-w-2xl mx-auto"
+              >
+                <div className="text-center mb-6">
+                  <div className="inline-flex items-center justify-center w-14 h-14 bg-primary/10 rounded-full mb-3">
+                    <Globe className="w-7 h-7 text-primary" />
+                  </div>
+                  <h3 className="text-base font-semibold text-white mb-1.5">
+                    Import Your Website
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Enter the URL of your existing website to migrate it into a modern design
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-300 mb-1.5">
+                      Website URL
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={importUrl}
+                        onChange={(e) => {
+                          setImportUrl(e.target.value)
+                          setFetchComplete(false)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && isValidWebsiteUrl(importUrl) && !isFetchingWebsite) {
+                            handleStartFetch()
+                          }
+                        }}
+                        placeholder="example.com or www.example.com"
+                        className="flex-1 bg-dark-bg/50 border border-dark-border rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 outline-none focus:border-primary/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        autoFocus
+                        disabled={isFetchingWebsite}
+                      />
+                      <button
+                        onClick={handleStartFetch}
+                        disabled={!isValidWebsiteUrl(importUrl) || isFetchingWebsite}
+                        className={`px-4 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center gap-2 flex-shrink-0 ${
+                          fetchComplete
+                            ? 'bg-green-500 text-white cursor-default'
+                            : isFetchingWebsite
+                            ? 'bg-primary/20 text-primary cursor-not-allowed'
+                            : isValidWebsiteUrl(importUrl)
+                            ? 'bg-primary hover:bg-primary-dark text-white'
+                            : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        {fetchComplete ? (
+                          <>
+                            <CheckCircle size={16} />
+                            Ready
+                          </>
+                        ) : isFetchingWebsite ? (
+                          <>
+                            <RefreshCw size={16} className="animate-spin" />
+                            Analyzing
+                          </>
+                        ) : (
+                          <>
+                            <Download size={16} />
+                            Analyze
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Progress Animation */}
+                  <AnimatePresence mode="wait">
+                    {isFetchingWebsite && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="bg-dark-border/20 border border-dark-border/50 rounded-lg p-4">
+                          <div className="space-y-3">
+                            {/* Progress Bar */}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-white">{fetchProgress.message}</span>
+                                <span className="text-xs text-gray-400">{fetchProgress.progress}%</span>
+                              </div>
+                              <div className="h-1.5 bg-dark-bg/50 rounded-full overflow-hidden">
+                                <motion.div
+                                  className="h-full bg-gradient-to-r from-primary to-primary/60"
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${fetchProgress.progress}%` }}
+                                  transition={{ duration: 0.5, ease: "easeOut" }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Stage Indicators */}
+                            <div className="grid grid-cols-3 gap-2 pt-1">
+                              <div className={`flex items-center gap-1.5 text-[10px] transition-all ${
+                                ['fetching', 'extracting', 'downloading', 'complete'].includes(fetchProgress.stage)
+                                  ? 'text-primary'
+                                  : 'text-gray-500'
+                              }`}>
+                                {['extracting', 'downloading', 'complete'].includes(fetchProgress.stage) ? (
+                                  <CheckCircle size={12} className="text-green-500" />
+                                ) : fetchProgress.stage === 'fetching' ? (
+                                  <RefreshCw size={12} className="animate-spin" />
+                                ) : (
+                                  <div className="w-3 h-3 rounded-full border-2 border-gray-600" />
+                                )}
+                                <span>Fetching</span>
+                              </div>
+                              <div className={`flex items-center gap-1.5 text-[10px] transition-all ${
+                                ['extracting', 'downloading', 'complete'].includes(fetchProgress.stage)
+                                  ? 'text-primary'
+                                  : 'text-gray-500'
+                              }`}>
+                                {['downloading', 'complete'].includes(fetchProgress.stage) ? (
+                                  <CheckCircle size={12} className="text-green-500" />
+                                ) : fetchProgress.stage === 'extracting' ? (
+                                  <RefreshCw size={12} className="animate-spin" />
+                                ) : (
+                                  <div className="w-3 h-3 rounded-full border-2 border-gray-600" />
+                                )}
+                                <span>Extracting</span>
+                              </div>
+                              <div className={`flex items-center gap-1.5 text-[10px] transition-all ${
+                                ['downloading', 'complete'].includes(fetchProgress.stage)
+                                  ? 'text-primary'
+                                  : 'text-gray-500'
+                              }`}>
+                                {fetchProgress.stage === 'complete' ? (
+                                  <CheckCircle size={12} className="text-green-500" />
+                                ) : fetchProgress.stage === 'downloading' ? (
+                                  <RefreshCw size={12} className="animate-spin" />
+                                ) : (
+                                  <div className="w-3 h-3 rounded-full border-2 border-gray-600" />
+                                )}
+                                <span>Images</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {fetchComplete && !isFetchingWebsite && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="bg-green-500/10 border border-green-500/30 rounded-lg p-3"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs font-medium text-green-400">Analysis Complete!</p>
+                            <p className="text-[10px] text-green-500/70 mt-0.5">Found content, images, and structure. Ready to proceed.</p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {!isFetchingWebsite && !fetchComplete && (
+                    <div className="bg-dark-border/20 border border-dark-border/50 rounded-lg p-3">
+                      <div className="flex items-start gap-2.5">
+                        <Info size={14} className="text-primary flex-shrink-0 mt-0.5" />
+                        <div className="text-[11px] text-gray-400 leading-relaxed">
+                          <p className="mb-1.5">We'll analyze your website and extract:</p>
+                          <ul className="space-y-0.5 ml-3 list-disc">
+                            <li>All text content and structure</li>
+                            <li>Images and media files</li>
+                            <li>Navigation and sections</li>
+                          </ul>
+                          <p className="mt-2 text-gray-500 italic">This can take up to 2 minutes depending on the website size</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Import Step 2: Design Selection */}
+            {currentStep === 'import-design' && (
+              <motion.div
+                key="import-design"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="max-w-3xl mx-auto"
+              >
+                <div className="mb-4">
+                  <h3 className="text-base font-semibold text-white mb-1">
+                    Choose Your Design Approach
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Select how you'd like to style your imported website
+                  </p>
+                </div>
+
+                <div className="space-y-2.5">
+                  {/* Option 1: Select Template */}
+                  <button
+                    onClick={() => {
+                      setImportDesignOption('template')
+                      // Fetch templates and navigate to template selection
+                      setCurrentStep('templates')
+                    }}
+                    className={`w-full p-3.5 rounded-lg border-2 transition-all text-left group ${
+                      importDesignOption === 'template'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-dark-border hover:border-primary/50 hover:bg-primary/5'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                        importDesignOption === 'template' ? 'bg-primary/20' : 'bg-dark-border/30 group-hover:bg-primary/10'
+                      }`}>
+                        <Sparkles className={`w-5 h-5 ${importDesignOption === 'template' ? 'text-primary' : 'text-gray-400 group-hover:text-primary'}`} />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-white mb-0.5">
+                          Select a Template
+                        </h4>
+                        <p className="text-xs text-gray-400 leading-relaxed">
+                          Choose from our professionally designed templates and we'll adapt your content to match
+                        </p>
+                      </div>
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 mt-0.5 ${
+                        importDesignOption === 'template'
+                          ? 'border-primary bg-primary'
+                          : 'border-gray-600'
+                      }`}>
+                        {importDesignOption === 'template' && (
+                          <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                        )}
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Option 2: Upload Screenshot */}
+                  <button
+                    onClick={() => setImportDesignOption('screenshot')}
+                    className={`w-full p-3.5 rounded-lg border-2 transition-all text-left group ${
+                      importDesignOption === 'screenshot'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-dark-border hover:border-primary/50 hover:bg-primary/5'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                        importDesignOption === 'screenshot' ? 'bg-primary/20' : 'bg-dark-border/30 group-hover:bg-primary/10'
+                      }`}>
+                        <Palette className={`w-5 h-5 ${importDesignOption === 'screenshot' ? 'text-primary' : 'text-gray-400 group-hover:text-primary'}`} />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-white mb-0.5">
+                          Provide a Screenshot
+                        </h4>
+                        <p className="text-xs text-gray-400 leading-relaxed">
+                          Upload a design reference and AI will recreate your content using that style
+                        </p>
+                      </div>
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 mt-0.5 ${
+                        importDesignOption === 'screenshot'
+                          ? 'border-primary bg-primary'
+                          : 'border-gray-600'
+                      }`}>
+                        {importDesignOption === 'screenshot' && (
+                          <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                        )}
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Screenshot upload area (shown when screenshot option is selected) */}
+                  {importDesignOption === 'screenshot' && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="ml-12 mr-7"
+                    >
+                      <label className="block w-full p-4 border-2 border-dashed border-dark-border rounded-lg hover:border-primary/50 transition-all cursor-pointer group">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)}
+                          className="hidden"
+                        />
+                        <div className="text-center">
+                          {screenshotFile ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                              <span className="text-xs text-white">{screenshotFile.name}</span>
+                            </div>
+                          ) : (
+                            <>
+                              <Download className="w-6 h-6 text-gray-400 mx-auto mb-1.5 group-hover:text-primary transition-colors" />
+                              <p className="text-xs text-gray-400 group-hover:text-gray-300 transition-colors">
+                                Click to upload or drag and drop
+                              </p>
+                              <p className="text-[10px] text-gray-500 mt-0.5">
+                                PNG, JPG up to 10MB
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </label>
+                    </motion.div>
+                  )}
+
+                  {/* Option 3: AI Free Hand */}
+                  <button
+                    onClick={() => setImportDesignOption('ai')}
+                    className={`w-full p-3.5 rounded-lg border-2 transition-all text-left group ${
+                      importDesignOption === 'ai'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-dark-border hover:border-primary/50 hover:bg-primary/5'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                        importDesignOption === 'ai' ? 'bg-primary/20' : 'bg-dark-border/30 group-hover:bg-primary/10'
+                      }`}>
+                        <Sparkles className={`w-5 h-5 ${importDesignOption === 'ai' ? 'text-primary' : 'text-gray-400 group-hover:text-primary'}`} />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-white mb-0.5">
+                          Let AI Design It
+                        </h4>
+                        <p className="text-xs text-gray-400 leading-relaxed">
+                          AI will analyze your content and create a modern, custom design automatically
+                        </p>
+                      </div>
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 mt-0.5 ${
+                        importDesignOption === 'ai'
+                          ? 'border-primary bg-primary'
+                          : 'border-gray-600'
+                      }`}>
+                        {importDesignOption === 'ai' && (
+                          <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                        )}
+                      </div>
+                    </div>
+                  </button>
                 </div>
               </motion.div>
             )}
@@ -1103,7 +1605,25 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
               <div className="w-24">
                 {currentStep === 'templates' && (
                   <button
+                    onClick={() => setCurrentStep(isImportFlow ? 'import-design' : 'category')}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    <ArrowLeft size={14} />
+                    Back
+                  </button>
+                )}
+                {currentStep === 'import-url' && (
+                  <button
                     onClick={() => setCurrentStep('category')}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    <ArrowLeft size={14} />
+                    Back
+                  </button>
+                )}
+                {currentStep === 'import-design' && (
+                  <button
+                    onClick={() => setCurrentStep('import-url')}
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                   >
                     <ArrowLeft size={14} />
@@ -1112,7 +1632,14 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 )}
                 {currentStep === 'details' && (
                   <button
-                    onClick={() => setCurrentStep('templates')}
+                    onClick={() => {
+                      if (isImportFlow) {
+                        // In import flow, go back to templates (which shows filtered list)
+                        setCurrentStep('templates')
+                      } else {
+                        setCurrentStep('templates')
+                      }
+                    }}
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                   >
                     <ArrowLeft size={14} />
@@ -1132,6 +1659,37 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
               {/* Next/Create Button */}
               <div className="min-w-[180px] flex justify-end">
+                {currentStep === 'import-url' && (
+                  <button
+                    onClick={handleContinueToDesignSelection}
+                    disabled={!fetchComplete}
+                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
+                      fetchComplete
+                        ? 'bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20'
+                        : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    Continue
+                    <ArrowRight size={13} />
+                  </button>
+                )}
+                {currentStep === 'import-design' && (
+                  <button
+                    onClick={() => {
+                      // TODO: Phase 2 - Start extraction process
+                      toast.success('Starting website import...')
+                    }}
+                    disabled={!importDesignOption || (importDesignOption === 'screenshot' && !screenshotFile)}
+                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
+                      importDesignOption && (importDesignOption !== 'screenshot' || screenshotFile)
+                        ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
+                        : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    <Download size={13} />
+                    Start Import
+                  </button>
+                )}
                 {currentStep === 'details' && (
                   <>
                     {!canAccess ? (
@@ -1151,8 +1709,17 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                         onClick={handleContinueToConfig}
                         className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-medium shadow-lg shadow-primary/20"
                       >
-                        Continue
-                        <ArrowRight size={13} />
+                        {isImportFlow ? (
+                          <>
+                            <CheckCircle size={13} />
+                            Select this Design
+                          </>
+                        ) : (
+                          <>
+                            Continue
+                            <ArrowRight size={13} />
+                          </>
+                        )}
                       </button>
                     )}
                   </>
@@ -1190,19 +1757,45 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
         {currentStep !== 'complete' && currentStep !== 'error' && (
           <div className="border-t border-dark-border/50 px-8 py-4 bg-dark-bg/20 relative z-10">
             <div className="flex items-center justify-center gap-2">
-              <ProgressDot active={currentStep === 'category'} completed={['templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-              <ProgressLine completed={['templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-              <ProgressDot active={currentStep === 'templates'} completed={['details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-              <ProgressLine completed={['details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-              <ProgressDot active={currentStep === 'details'} completed={['configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-              <ProgressLine completed={['configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-              <ProgressDot active={currentStep === 'configure'} completed={['creating', 'installing', 'initializing'].includes(currentStep)} />
-              <ProgressLine completed={['creating', 'installing', 'initializing'].includes(currentStep)} />
-              <ProgressDot active={currentStep === 'creating'} completed={['installing', 'initializing'].includes(currentStep)} />
-              <ProgressLine completed={['installing', 'initializing'].includes(currentStep)} />
-              <ProgressDot active={currentStep === 'installing'} completed={['initializing'].includes(currentStep)} />
-              <ProgressLine completed={currentStep === 'initializing'} />
-              <ProgressDot active={currentStep === 'initializing'} completed={false} />
+              {/* Import Flow Progress */}
+              {isImportFlow ? (
+                <>
+                  <ProgressDot active={currentStep === 'category'} completed={['import-url', 'import-design', 'templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['import-url', 'import-design', 'templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'import-url'} completed={['import-design', 'templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['import-design', 'templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'import-design'} completed={['templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'templates'} completed={['details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'details'} completed={['configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'configure'} completed={['creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'creating'} completed={['installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'installing'} completed={['initializing'].includes(currentStep)} />
+                  <ProgressLine completed={currentStep === 'initializing'} />
+                  <ProgressDot active={currentStep === 'initializing'} completed={false} />
+                </>
+              ) : (
+                <>
+                  {/* Template Flow Progress */}
+                  <ProgressDot active={currentStep === 'category'} completed={['templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'templates'} completed={['details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'details'} completed={['configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'configure'} completed={['creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'creating'} completed={['installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'installing'} completed={['initializing'].includes(currentStep)} />
+                  <ProgressLine completed={currentStep === 'initializing'} />
+                  <ProgressDot active={currentStep === 'initializing'} completed={false} />
+                </>
+              )}
             </div>
           </div>
         )}
