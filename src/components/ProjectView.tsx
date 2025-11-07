@@ -204,7 +204,7 @@ function ProjectView() {
     if (currentProject) {
       return currentProject.name
     }
-    return 'Untitled Project'
+    return ''
   }
 
   const handleChatClick = () => {

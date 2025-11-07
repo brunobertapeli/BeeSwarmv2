@@ -36,16 +36,20 @@ export function requireAuth(): string {
 /**
  * Validate that a project belongs to the current user
  * @param projectId - The project ID to validate
+ * @param silent - If true, suppress error logging (useful for cleanup operations)
  * @throws {UnauthorizedError} if project doesn't exist or doesn't belong to current user
  * @returns The validated project
  */
-export function validateProjectOwnership(projectId: string) {
+export function validateProjectOwnership(projectId: string, silent: boolean = false) {
   const userId = requireAuth()
 
   const project = databaseService.getProjectById(projectId)
 
   if (!project) {
-    console.error(`🚫 Unauthorized: Project not found: ${projectId}`)
+    // Don't log when silent mode (expected in cleanup scenarios)
+    if (!silent) {
+      console.error(`🚫 Unauthorized: Project not found: ${projectId}`)
+    }
     throw new UnauthorizedError('Project not found')
   }
 

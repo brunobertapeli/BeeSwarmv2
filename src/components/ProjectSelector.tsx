@@ -54,6 +54,7 @@ function ProjectSelector({
   const [deletingProject, setDeletingProject] = useState<ProjectWithMeta | null>(null)
   const [deleteConfirmName, setDeleteConfirmName] = useState('')
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const handleMenuOpen = (projectId: string, buttonRect: DOMRect) => {
     setMenuPosition({
@@ -160,19 +161,39 @@ function ProjectSelector({
   const handleDeleteConfirm = async () => {
     if (!deletingProject) return
 
+    setIsDeleting(true)
+
+    // Optimistically remove from UI
+    const projectToDelete = deletingProject
+    const previousProjects = projects
+
+    setProjects(projects.filter(p => p.id !== deletingProject.id))
+    setDeletingProject(null)
+    setDeleteConfirmName('')
+
     try {
-      const result = await window.electronAPI?.projects.delete(deletingProject.id)
+      const result = await window.electronAPI?.projects.delete(projectToDelete.id)
+
       if (result?.success) {
-        // Remove from local state
-        setProjects(projects.filter(p => p.id !== deletingProject.id))
-        setDeletingProject(null)
-        setDeleteConfirmName('')
+        toast.success('Project deleted', `"${projectToDelete.name}" has been deleted successfully`)
 
         // Notify parent to refresh
         onProjectUpdated?.()
+
+        // Close modal after successful deletion
+        onClose()
+      } else {
+        // Revert optimistic update on error
+        setProjects(previousProjects)
+        toast.error('Delete failed', result?.error || 'Failed to delete project')
       }
     } catch (error) {
       console.error('Error deleting project:', error)
+      // Revert optimistic update on error
+      setProjects(previousProjects)
+      toast.error('Error', error instanceof Error ? error.message : 'Failed to delete project')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -429,16 +450,20 @@ function ProjectSelector({
                   setDeletingProject(null)
                   setDeleteConfirmName('')
                 }}
-                className="flex-1 px-4 py-2 bg-dark-bg hover:bg-dark-bg/70 text-gray-300 text-sm font-medium rounded-lg transition-all"
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 bg-dark-bg hover:bg-dark-bg/70 text-gray-300 text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                disabled={deleteConfirmName !== deletingProject.name}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={deleteConfirmName !== deletingProject.name || isDeleting}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Delete Project
+                {isDeleting && (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                )}
+                {isDeleting ? 'Deleting...' : 'Delete Project'}
               </button>
             </div>
           </div>

@@ -133,10 +133,10 @@ export function registerTerminalHandlers(): void {
         success: true,
       };
     } catch (error) {
-      console.error('❌ Error destroying terminal session:', error);
+      // Terminal destroy should always succeed - sessions may not exist
+      console.log(`ℹ️ Terminal destroy for ${projectId}:`, error instanceof Error ? error.message : 'Unknown error');
       return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to destroy terminal session',
+        success: true,
       };
     }
   });

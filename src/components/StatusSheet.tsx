@@ -938,7 +938,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                   {isWorking ? (
                     <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />
                   ) : (
-                    <Globe size={14} className="text-primary flex-shrink-0" />
+                    <Globe size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
                   )}
                   <span className="text-xs text-gray-200 flex-1 line-clamp-1">{collapsedState.text}</span>
                 </>

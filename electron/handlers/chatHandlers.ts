@@ -172,8 +172,21 @@ export function registerChatHandlers(): void {
   // Get chat history
   ipcMain.handle('chat:get-history', async (_event, projectId: string, limit?: number, offset?: number) => {
     try {
-      // SECURITY: Validate user owns this project
-      validateProjectOwnership(projectId);
+      // Try to validate project ownership
+      try {
+        // Use silent mode since we expect this to fail for deleted projects
+        validateProjectOwnership(projectId, true);
+      } catch (error) {
+        if (error instanceof UnauthorizedError) {
+          // Project not found or unauthorized - return empty history (graceful degradation)
+          console.log(`ℹ️ Project ${projectId} not found, returning empty chat history`);
+          return {
+            success: true,
+            blocks: [],
+          };
+        }
+        throw error;
+      }
 
       const blocks = databaseService.getChatHistory(projectId, limit, offset);
 
@@ -183,13 +196,6 @@ export function registerChatHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error getting chat history:', error);
-
-      if (error instanceof UnauthorizedError) {
-        return {
-          success: false,
-          error: 'Unauthorized'
-        };
-      }
 
       return {
         success: false,

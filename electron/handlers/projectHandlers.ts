@@ -117,6 +117,35 @@ export function registerProjectHandlers() {
       validateProjectOwnership(projectId)
 
       console.log(`🗑️  Deleting project: ${projectId}`)
+
+      // IMPORTANT: Clean up sessions BEFORE deleting project
+      // This prevents errors when cleanup operations try to validate project ownership
+      try {
+        // Stop any running processes
+        const processManager = (await import('../services/ProcessManager')).processManager
+        const status = processManager.getProcessStatus(projectId)
+        if (status === 'running') {
+          console.log('🛑 Stopping dev server before deletion...')
+          await processManager.stopDevServer(projectId)
+        }
+
+        // Destroy Claude session (if any)
+        const claudeService = (await import('../services/ClaudeService')).claudeService
+        console.log('🛑 Destroying Claude session...')
+        claudeService.destroySession(projectId)
+
+        // Destroy terminal session (if any)
+        const terminalService = (await import('../services/TerminalService')).terminalService
+        const terminalAggregator = (await import('../services/TerminalAggregator')).terminalAggregator
+        console.log('🛑 Destroying terminal session...')
+        terminalService.destroySession(projectId)
+        terminalAggregator.deleteBuffer(projectId)
+      } catch (cleanupError) {
+        // Log but don't fail deletion if cleanup fails
+        console.warn('⚠️ Error during cleanup (continuing with deletion):', cleanupError)
+      }
+
+      // Now delete the project
       projectService.deleteProject(projectId)
 
       return {

@@ -266,10 +266,21 @@ export function registerClaudeHandlers(): void {
   // Destroy Claude session
   ipcMain.handle('claude:destroy-session', async (_event, projectId: string) => {
     try {
-      // SECURITY: Validate user owns this project
-      const project = validateProjectOwnership(projectId);
-
       console.log(`🛑 Stopping Claude session for project: ${projectId}`);
+
+      // Try to get project - if it doesn't exist, session cleanup is a no-op
+      let project;
+      try {
+        // Use silent mode since we expect this to fail for deleted projects
+        project = validateProjectOwnership(projectId, true);
+      } catch (error) {
+        if (error instanceof UnauthorizedError) {
+          // Project not found or unauthorized - session already cleaned up or doesn't exist
+          console.log(`ℹ️ Project ${projectId} not found, skipping session cleanup`);
+          return { success: true };
+        }
+        throw error;
+      }
 
       // 1. Interrupt the Claude session (not destroy - keeps conversation history)
       claudeService.interrupt(projectId);
@@ -324,14 +335,6 @@ export function registerClaudeHandlers(): void {
       };
     } catch (error) {
       console.error('❌ Error destroying Claude session:', error);
-
-      if (error instanceof UnauthorizedError) {
-        return {
-          success: false,
-          error: 'Unauthorized'
-        };
-      }
-
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to destroy session',

@@ -144,26 +144,46 @@ class ProjectService {
 
   /**
    * Delete project from database and filesystem
+   * NOTE: This is a synchronous operation but may be called from async context
    */
   deleteProject(id: string): void {
     const project = databaseService.getProjectById(id)
 
-    if (project) {
-      // SECURITY: Validate path to prevent deletion of files outside project directory
-      const validatedPath = pathValidator.validateProjectPath(project.path, project.userId)
+    if (!project) {
+      console.warn(`⚠️ Project ${id} not found in database, skipping deletion`)
+      return
+    }
 
-      // Delete from filesystem
-      if (fs.existsSync(validatedPath)) {
-        fs.rmSync(validatedPath, { recursive: true, force: true })
+    console.log(`🗑️  Deleting project ${id}: "${project.name}"`)
+
+    // SECURITY: Validate path to prevent deletion of files outside project directory
+    const validatedPath = pathValidator.validateProjectPath(project.path, project.userId)
+    console.log(`📁 Validated path: ${validatedPath}`)
+
+    // Delete from filesystem
+    if (fs.existsSync(validatedPath)) {
+      console.log(`🗑️  Deleting filesystem path: ${validatedPath}`)
+      try {
+        fs.rmSync(validatedPath, {
+          recursive: true,
+          force: true,
+          maxRetries: 3,
+          retryDelay: 100
+        })
         console.log('✅ Project deleted from filesystem:', validatedPath)
+      } catch (error) {
+        console.error('❌ Error deleting filesystem path:', error)
+        throw error
       }
+    } else {
+      console.log(`ℹ️ Filesystem path doesn't exist (already deleted?): ${validatedPath}`)
     }
 
     // Release allocated port
     portService.releasePort(id)
     console.log('✅ Port released for project:', id)
 
-    // Delete from database
+    // Delete from database (do this last so other services can still access project data)
     databaseService.deleteProject(id)
     console.log('✅ Project deleted from database:', id)
   }
