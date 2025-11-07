@@ -1,8 +1,14 @@
+export interface TemplateLibrary {
+  name: string
+  description: string
+}
+
 export interface Template {
   _id: string
   id: string
   name: string
   description: string
+  longDescription?: string
   type: 'frontend' | 'fullstack' | 'backend'
   category: string
   githubUrl: string
@@ -10,6 +16,7 @@ export interface Template {
   requiredServices: string[]
   demoUrl?: string
   techStack: string[]
+  libraries?: TemplateLibrary[]
 }
 
 export interface Project {
@@ -164,6 +171,24 @@ export interface BugReport {
   updatedAt: Date
 }
 
+export interface ChatBlock {
+  id: string
+  projectId: string
+  blockIndex: number
+  userPrompt: string
+  claudeMessages: string | null // JSON array of Claude text messages
+  toolExecutions: string | null // JSON array of individual tool executions (while working) or grouped (when complete)
+  commitHash: string | null
+  filesChanged: number | null
+  completionStats: string | null // JSON with { timeSeconds, inputTokens, outputTokens, cost }
+  summary: string | null // Claude's summary at the end
+  actions: string | null // JSON array of post-completion actions like git commits, builds, etc.
+  completedAt: number | null
+  isComplete: boolean
+  interactionType: string | null // Type of interaction: user_message, claude_response, plan_ready, questions, answers, plan_approval, implementation, checkpoint_restore
+  createdAt: number
+}
+
 export interface ElectronAPI {
   send: (channel: string, data: any) => void
   receive: (channel: string, func: (...args: any[]) => void) => void
@@ -200,6 +225,17 @@ export interface ElectronAPI {
     }>
     signOut: () => Promise<{ success: boolean; error?: string }>
     restoreSession: (userId: string) => Promise<{ success: boolean; error?: string }>
+    validateUser: (email: string, userId: string) => Promise<{
+      success: boolean
+      user?: {
+        id: string
+        email: string
+        name: string
+        photoUrl?: string
+        plan: 'free' | 'plus' | 'premium'
+      }
+      error?: string
+    }>
     onCallback: (callback: (url: string) => void) => () => void
     onAuthSuccess: (callback: (result: any) => void) => () => void
     onAuthError: (callback: (result: any) => void) => () => void
@@ -444,6 +480,42 @@ export interface ElectronAPI {
       commitHash?: string
       error?: string
     }>
+  }
+
+  chat: {
+    createBlock: (projectId: string, userPrompt: string) => Promise<{
+      success: boolean
+      block?: ChatBlock
+      error?: string
+    }>
+    updateBlock: (blockId: string, updates: Partial<ChatBlock>) => Promise<{
+      success: boolean
+      block?: ChatBlock
+      error?: string
+    }>
+    completeBlock: (blockId: string) => Promise<{
+      success: boolean
+      block?: ChatBlock
+      error?: string
+    }>
+    getHistory: (projectId: string, limit?: number, offset?: number) => Promise<{
+      success: boolean
+      blocks?: ChatBlock[]
+      error?: string
+    }>
+    getBlock: (blockId: string) => Promise<{
+      success: boolean
+      block?: ChatBlock
+      error?: string
+    }>
+    deleteHistory: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    onBlockCreated: (callback: (projectId: string, block: ChatBlock) => void) => () => void
+    onBlockUpdated: (callback: (projectId: string, block: ChatBlock) => void) => () => void
+    onBlockCompleted: (callback: (projectId: string, block: ChatBlock) => void) => () => void
+    onHistoryDeleted: (callback: (projectId: string) => void) => () => void
   }
 
   app: {

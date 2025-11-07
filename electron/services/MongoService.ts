@@ -16,6 +16,7 @@ export interface Template {
   id: string
   name: string
   description: string
+  longDescription?: string
   type: 'frontend' | 'fullstack' | 'backend'
   category: string
   githubUrl: string
@@ -23,6 +24,10 @@ export interface Template {
   requiredServices: string[]
   demoUrl?: string
   techStack: string[]
+  libraries?: Array<{
+    name: string
+    description: string
+  }>
 }
 
 class MongoService {
@@ -167,13 +172,15 @@ class MongoService {
         id: template.id,
         name: template.name,
         description: template.description,
+        longDescription: template.longDescription,
         type: template.type || 'fullstack',
         category: template.category,
         githubUrl: template.githubUrl,
         requiredPlan: template.requiredPlan || 'free',
         requiredServices: template.requiredServices || [],
         demoUrl: template.demoUrl,
-        techStack: template.techStack || []
+        techStack: template.techStack || [],
+        libraries: template.libraries || []
       }))
     } catch (error) {
       console.error('Error fetching templates from MongoDB:', error)
@@ -207,13 +214,15 @@ class MongoService {
         id: template.id,
         name: template.name,
         description: template.description,
+        longDescription: template.longDescription,
         type: template.type || 'fullstack',
         category: template.category,
         githubUrl: template.githubUrl,
         requiredPlan: template.requiredPlan || 'free',
         requiredServices: template.requiredServices || [],
         demoUrl: template.demoUrl,
-        techStack: template.techStack || []
+        techStack: template.techStack || [],
+        libraries: template.libraries || []
       }
     } catch (error) {
       console.error('Error fetching template from MongoDB:', error)

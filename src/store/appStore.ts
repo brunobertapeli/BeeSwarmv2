@@ -125,7 +125,6 @@ export const initAuth = async () => {
 
         // Validate user data structure
         if (!user || !user.plan || !user.email || !user.id) {
-          console.warn('⚠️ Invalid user data in secure storage')
           localStorage.removeItem('codedeck_auth_encrypted')
           localStorage.removeItem('codedeck_auth_fallback')
           return
@@ -134,24 +133,53 @@ export const initAuth = async () => {
         // Check if session is expired (older than 30 days)
         const SESSION_EXPIRY = 30 * 24 * 60 * 60 * 1000 // 30 days
         if (Date.now() - timestamp > SESSION_EXPIRY) {
-          console.warn('⚠️ Session expired, user needs to re-authenticate')
           localStorage.removeItem('codedeck_auth_encrypted')
           localStorage.removeItem('codedeck_auth_fallback')
           return
         }
 
         // All validations passed, restore session
-        // Tell the backend about the restored user session
         await window.electronAPI?.auth.restoreSession(user.id)
 
-        useAppStore.setState({ user, isAuthenticated: true })
+        // Validate user plan against MongoDB on startup
+        try {
+          const validationResult = await window.electronAPI?.auth.validateUser(user.email, user.id)
+
+          if (validationResult?.success && validationResult.user) {
+            // Update secure storage with fresh data from MongoDB
+            const freshAuthData = JSON.stringify({
+              user: validationResult.user,
+              timestamp: Date.now()
+            })
+
+            const storeResult = await window.electronAPI.secureStorage.set('codedeck_auth', freshAuthData)
+
+            if (storeResult.success && storeResult.encrypted) {
+              localStorage.setItem('codedeck_auth_encrypted', storeResult.encrypted)
+
+              // Always update fallback flag (set or remove)
+              if (storeResult.fallback) {
+                localStorage.setItem('codedeck_auth_fallback', 'true')
+              } else {
+                localStorage.removeItem('codedeck_auth_fallback')
+              }
+            }
+
+            // Set state with validated data from MongoDB
+            useAppStore.setState({ user: validationResult.user, isAuthenticated: true })
+          } else {
+            // Fallback to cached data if validation fails
+            useAppStore.setState({ user, isAuthenticated: true })
+          }
+        } catch (validationError) {
+          // Fallback to cached data on error
+          useAppStore.setState({ user, isAuthenticated: true })
+        }
       } else {
-        console.error('❌ Failed to decrypt auth data:', result.error)
         localStorage.removeItem('codedeck_auth_encrypted')
         localStorage.removeItem('codedeck_auth_fallback')
       }
     } catch (e) {
-      console.error('❌ Failed to restore auth session:', e)
       localStorage.removeItem('codedeck_auth_encrypted')
       localStorage.removeItem('codedeck_auth_fallback')
     }
@@ -159,7 +187,6 @@ export const initAuth = async () => {
     // Check for legacy BeeSwarm storage and clear it
     const oldAuth = localStorage.getItem('beeswarm_auth')
     if (oldAuth) {
-      console.warn('⚠️ Found legacy BeeSwarm auth storage, clearing')
       localStorage.removeItem('beeswarm_auth')
     }
   }

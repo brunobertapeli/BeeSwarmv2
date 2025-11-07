@@ -56,6 +56,13 @@ export const TECH_STACK_CONFIG: Record<string, TechStackConfig> = {
  * Get tech stack configuration by key (case-insensitive)
  */
 export function getTechConfig(techKey: string): TechStackConfig {
+  if (!techKey) {
+    return {
+      displayName: 'Unknown',
+      color: '#888888',
+      iconFileName: 'default.svg'
+    }
+  }
   const key = techKey.toLowerCase()
   return TECH_STACK_CONFIG[key] || {
     displayName: techKey.charAt(0).toUpperCase() + techKey.slice(1),

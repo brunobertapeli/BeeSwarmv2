@@ -13,12 +13,17 @@ function TechIcon({ name, label }: TechIconProps) {
   // Use display name from config or provided label
   const displayName = label || config.displayName
 
-  // Get the SVG path using icon filename from config
-  const svgPath = `/src/assets/tech-icons/${config.iconFileName}`
+  // Try to dynamically load the icon, fallback to a colored circle if not found
+  let iconSrc = ''
+  try {
+    iconSrc = `/src/assets/tech-icons/${config.iconFileName}`
+  } catch (e) {
+    // If icon doesn't exist, we'll show a colored circle with the first letter
+  }
 
   return (
     <div
-      className="relative group"
+      className="relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -31,35 +36,35 @@ function TechIcon({ name, label }: TechIconProps) {
           backgroundColor: isHovered ? `${config.color}15` : 'transparent',
         }}
       >
-        {/* SVG Icon */}
-        <img
-          src={svgPath}
-          alt={displayName}
-          className="w-4 h-4 transition-all duration-200"
-          style={{
-            filter: isHovered ? 'none' : 'grayscale(100%) brightness(1.2) opacity(0.9)',
-          }}
-        />
+        {/* SVG Icon or Fallback */}
+        {iconSrc ? (
+          <img
+            src={iconSrc}
+            alt={displayName}
+            className="w-4 h-4 transition-all duration-200"
+            style={{
+              filter: isHovered ? 'none' : 'grayscale(100%) brightness(1.2) opacity(0.9)',
+            }}
+            onError={(e) => {
+              // Hide image on error
+              e.currentTarget.style.display = 'none'
+            }}
+          />
+        ) : (
+          <div
+            className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white"
+            style={{ backgroundColor: config.color }}
+          >
+            {displayName.charAt(0).toUpperCase()}
+          </div>
+        )}
       </div>
 
       {/* Tooltip */}
       {isHovered && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none">
-          <div className="px-2 py-1 bg-dark-bg/95 backdrop-blur-sm border border-dark-border rounded shadow-xl">
-            <span className="text-[10px] text-white whitespace-nowrap font-medium">
-              {displayName}
-            </span>
-          </div>
-          {/* Arrow */}
-          <div className="absolute top-full left-1/2 -translate-x-1/2">
-            <div
-              className="w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px] border-transparent border-t-dark-border"
-              style={{ marginTop: '-1px' }}
-            />
-            <div
-              className="absolute top-0 left-1/2 -translate-x-1/2 w-0 h-0 border-l-[3px] border-r-[3px] border-t-[3px] border-transparent border-t-dark-bg/95"
-              style={{ marginTop: '-4px' }}
-            />
+        <div className="absolute left-0 bottom-full mb-1.5 pointer-events-none z-[9999]">
+          <div className="px-2 py-1 bg-dark-bg/95 backdrop-blur-sm border border-dark-border rounded text-[10px] text-gray-300 whitespace-nowrap shadow-lg">
+            {displayName}
           </div>
         </div>
       )}

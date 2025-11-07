@@ -30,14 +30,20 @@ export function registerSecureStorageHandlers() {
         return { success: true, value: decoded }
       }
 
-      if (!safeStorage.isEncryptionAvailable()) {
-        return { success: false, error: 'Encryption not available' }
+      // Always try to decrypt, even if isEncryptionAvailable() returns false
+      // The keychain might still work even if the check returns false
+      try {
+        const buffer = Buffer.from(encrypted, 'base64')
+        const decrypted = safeStorage.decryptString(buffer)
+        return { success: true, value: decrypted }
+      } catch (decryptError: any) {
+        // If decryption fails and encryption isn't available, provide helpful error
+        if (!safeStorage.isEncryptionAvailable()) {
+          return { success: false, error: 'Encryption not available for decryption' }
+        }
+        // Otherwise, throw the error to be caught by outer catch
+        throw decryptError
       }
-
-      const buffer = Buffer.from(encrypted, 'base64')
-      const decrypted = safeStorage.decryptString(buffer)
-
-      return { success: true, value: decrypted }
     } catch (error: any) {
       console.error('Error decrypting data:', error)
       return { success: false, error: error.message }

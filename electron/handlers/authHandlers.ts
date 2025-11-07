@@ -276,4 +276,32 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
       return { success: false, error: error.message }
     }
   })
+
+  // Validate user plan from MongoDB (no Supabase session required)
+  ipcMain.handle('auth:validate-user', async (_event, email: string, userId: string) => {
+    try {
+      // Fetch user data directly from MongoDB
+      const userData = await mongoService.getUserByEmail(email)
+
+      if (!userData) {
+        return { success: false, error: 'User not found' }
+      }
+
+      // Return Supabase user ID along with fresh MongoDB data
+      const userResult = {
+        id: userId, // Preserve Supabase user ID from cached data
+        email: userData.email,
+        name: userData.name,
+        photoUrl: userData.photoUrl,
+        plan: userData.plan
+      }
+
+      return {
+        success: true,
+        user: userResult
+      }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  })
 }

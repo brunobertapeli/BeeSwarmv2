@@ -4,15 +4,14 @@ import { useToast } from '../hooks/useToast'
 import ActionBar from './ActionBar'
 import ProjectHeader from './ProjectHeader'
 import ProjectSelector from './ProjectSelector'
-import TemplateSelector from './TemplateSelector'
-import { ProjectCreationWizard } from './ProjectCreationWizard'
+import { ProjectCreationFlow } from './ProjectCreationFlow'
 import ProjectSettings from './ProjectSettings'
 import TerminalModal from './TerminalModal'
 import DeviceFrame from './DeviceFrame'
 import DesktopPreviewFrame from './DesktopPreviewFrame'
 import DeviceSelector from './DeviceSelector'
 import HelpChat from './HelpChat'
-import { Project, ProcessState, ProcessOutput, Template } from '../types/electron'
+import { Project, ProcessState, ProcessOutput } from '../types/electron'
 
 function ProjectView() {
   const {
@@ -44,9 +43,7 @@ function ProjectView() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
-  const [showCreationWizard, setShowCreationWizard] = useState(false)
-  const [wizardProjectName, setWizardProjectName] = useState('')
-  const [wizardTemplate, setWizardTemplate] = useState<Template | null>(null)
+  const [showCreationFlow, setShowCreationFlow] = useState(false)
 
   // Dev server and preview state
   const [serverStatus, setServerStatus] = useState<ProcessState>('stopped')
@@ -252,40 +249,29 @@ function ProjectView() {
 
   const handleCreateProject = () => {
     setShowProjectSelector(false)
-    setShowTemplateSelector(true)
+    setShowCreationFlow(true)
   }
 
-  const handleCreateFromTemplate = (template: Template, projectName: string) => {
-    // Close template selector and open wizard
-    setShowTemplateSelector(false)
-    setWizardProjectName(projectName)
-    setWizardTemplate(template)
-    setShowCreationWizard(true)
-  }
-
-  const handleWizardComplete = async () => {
-    // Wizard is complete - refresh projects and open the new project
-    setShowCreationWizard(false)
+  const handleCreationFlowComplete = async () => {
+    // Creation flow is complete - refresh projects and close
+    setShowCreationFlow(false)
     setRefreshKey(prev => prev + 1)
 
-    // Wait for refresh then find and open the new project
+    // Wait for refresh then find and open the newest project
     setTimeout(async () => {
       const result = await window.electronAPI?.projects.getAll()
-      if (result?.success) {
-        const newProject = result.projects.find(
-          (p: any) => p.name.toLowerCase() === wizardProjectName.toLowerCase()
-        )
-        if (newProject) {
-          setCurrentProject(newProject.id)
+      if (result?.success && result.projects.length > 0) {
+        // Get the most recently created project
+        const newestProject = result.projects[0]
+        if (newestProject) {
+          setCurrentProject(newestProject.id)
         }
       }
     }, 500)
   }
 
-  const handleWizardCancel = () => {
-    setShowCreationWizard(false)
-    setWizardProjectName('')
-    setWizardTemplate(null)
+  const handleCreationFlowCancel = () => {
+    setShowCreationFlow(false)
   }
 
   const handleRefresh = () => {
@@ -314,23 +300,12 @@ function ProjectView() {
         onProjectUpdated={() => setRefreshKey(prev => prev + 1)}
       />
 
-      {/* Template Selector Modal */}
-      <TemplateSelector
-        isOpen={showTemplateSelector}
-        onClose={() => setShowTemplateSelector(false)}
-        onCreateProject={handleCreateFromTemplate}
+      {/* Project Creation Flow */}
+      <ProjectCreationFlow
+        isOpen={showCreationFlow}
+        onComplete={handleCreationFlowComplete}
+        onCancel={handleCreationFlowCancel}
       />
-
-      {/* Project Creation Wizard */}
-      {wizardTemplate && (
-        <ProjectCreationWizard
-          isOpen={showCreationWizard}
-          projectName={wizardProjectName}
-          template={wizardTemplate}
-          onComplete={handleWizardComplete}
-          onCancel={handleWizardCancel}
-        />
-      )}
 
       {/* Preview Area - Desktop or Mobile Mode */}
       <div className="w-full flex-1 relative overflow-hidden">
