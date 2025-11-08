@@ -19,6 +19,7 @@ import { registerChatHandlers, setChatHandlersWindow } from './handlers/chatHand
 import { registerSupportHandlers } from './handlers/supportHandlers.js'
 import { registerGitHandlers, setGitHandlersWindow } from './handlers/gitHandlers.js'
 import { registerSecureStorageHandlers } from './handlers/secureStorageHandlers.js'
+import { registerWebsiteImportHandlers } from './handlers/websiteImportHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 
 // Global state for current user
@@ -369,6 +370,7 @@ async function initializeApp() {
     registerChatHandlers()
     registerSupportHandlers()
     registerGitHandlers()
+    registerWebsiteImportHandlers()
 
     // App-level IPC handlers
     ipcMain.on('app:flash-window', () => {

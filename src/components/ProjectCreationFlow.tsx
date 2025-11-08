@@ -31,7 +31,7 @@ type WizardStep = 'category' | 'templates' | 'details' | 'configure' | 'creating
 
 interface ProjectCreationFlowProps {
   isOpen: boolean
-  onComplete: () => void
+  onComplete: (newProjectId?: string) => void
   onCancel: () => void
 }
 
@@ -254,6 +254,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
   const [isImportFlow, setIsImportFlow] = useState(false)
   const [isFetchingWebsite, setIsFetchingWebsite] = useState(false)
   const [fetchComplete, setFetchComplete] = useState(false)
+  const [tempImportProjectId, setTempImportProjectId] = useState<string | null>(null)
   const [fetchProgress, setFetchProgress] = useState<{
     stage: 'fetching' | 'extracting' | 'downloading' | 'complete'
     message: string
@@ -373,6 +374,15 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     fetchTemplates()
   }, [currentStep, isImportFlow])
 
+  // Cleanup handler - cleans up temp data and closes wizard
+  const handleCancel = async () => {
+    if (tempImportProjectId) {
+      console.log('🗑️ [WEBSITE IMPORT] Cleaning up on cancel:', tempImportProjectId)
+      await window.electronAPI?.websiteImport.cleanup(tempImportProjectId)
+    }
+    onCancel()
+  }
+
   // Start project creation when in creating step
   useEffect(() => {
     if (currentStep !== 'creating' || hasStartedRef.current) return
@@ -383,10 +393,24 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
       if (!selectedTemplate) return
 
       try {
+        // Convert screenshot to base64 if present
+        let screenshotData: string | undefined
+        if (screenshotFile && (importDesignOption === 'screenshot')) {
+          const reader = new FileReader()
+          screenshotData = await new Promise((resolve, reject) => {
+            reader.onload = () => resolve(reader.result as string)
+            reader.onerror = reject
+            reader.readAsDataURL(screenshotFile)
+          })
+        }
+
         // Step 1: Clone template
         const result = await window.electronAPI?.projects.create(
           selectedTemplate.id,
-          projectName
+          projectName,
+          tempImportProjectId || undefined, // Pass temp project ID if this is an import flow
+          screenshotData, // Pass screenshot if present
+          importDesignOption || undefined // Pass import type (template/screenshot/ai)
         )
 
         if (!result?.success) {
@@ -425,7 +449,14 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           throw new Error('Failed to start development server')
         }
 
-        // Step 5: Complete
+        // Step 5: Clean up temp folder if this was a website import
+        if (tempImportProjectId) {
+          console.log('🗑️ [WEBSITE IMPORT] Cleaning up temp folder after success:', tempImportProjectId)
+          await window.electronAPI?.websiteImport.cleanup(tempImportProjectId)
+          setTempImportProjectId(null)
+        }
+
+        // Step 6: Complete
         setCurrentStep('complete')
       } catch (err) {
         console.error('Project creation failed:', err)
@@ -435,7 +466,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     }
 
     createProject()
-  }, [currentStep, selectedTemplate, projectName, envVariables])
+  }, [currentStep, selectedTemplate, projectName, envVariables, tempImportProjectId])
 
   const handleCategorySelect = (category: ProjectCategory) => {
     if (!category.available) return
@@ -550,47 +581,73 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     setIsFetchingWebsite(true)
     setFetchComplete(false)
 
-    // Simulate fetching process with realistic stages
-    // Stage 1: Fetching website (0-30%)
-    setFetchProgress({ stage: 'fetching', message: 'Connecting to website...', progress: 0 })
-    await new Promise(resolve => setTimeout(resolve, 800))
+    try {
+      console.log('🌐 [WEBSITE IMPORT] Starting analysis for:', normalizedUrl)
 
-    setFetchProgress({ stage: 'fetching', message: 'Loading page content...', progress: 15 })
-    await new Promise(resolve => setTimeout(resolve, 1200))
+      // Stage 1: Fetching website (0-30%)
+      setFetchProgress({ stage: 'fetching', message: 'Launching browser...', progress: 5 })
+      await new Promise(resolve => setTimeout(resolve, 500))
 
-    setFetchProgress({ stage: 'fetching', message: 'Analyzing structure...', progress: 30 })
-    await new Promise(resolve => setTimeout(resolve, 1000))
+      setFetchProgress({ stage: 'fetching', message: 'Connecting to website...', progress: 10 })
 
-    // Stage 2: Extracting content (30-60%)
-    setFetchProgress({ stage: 'extracting', message: 'Extracting text content...', progress: 35 })
-    await new Promise(resolve => setTimeout(resolve, 1000))
+      // Call Puppeteer backend
+      const analysisPromise = window.electronAPI.websiteImport.analyze(normalizedUrl)
 
-    setFetchProgress({ stage: 'extracting', message: 'Identifying sections...', progress: 45 })
-    await new Promise(resolve => setTimeout(resolve, 1200))
+      // Show progress while Puppeteer works
+      setFetchProgress({ stage: 'fetching', message: 'Loading page content...', progress: 20 })
+      await new Promise(resolve => setTimeout(resolve, 2000))
 
-    setFetchProgress({ stage: 'extracting', message: 'Processing navigation...', progress: 60 })
-    await new Promise(resolve => setTimeout(resolve, 800))
+      setFetchProgress({ stage: 'fetching', message: 'Analyzing structure...', progress: 30 })
+      await new Promise(resolve => setTimeout(resolve, 1500))
 
-    // Stage 3: Downloading images (60-95%)
-    setFetchProgress({ stage: 'downloading', message: 'Finding images...', progress: 65 })
-    await new Promise(resolve => setTimeout(resolve, 1000))
+      // Stage 2: Extracting content (30-60%)
+      setFetchProgress({ stage: 'extracting', message: 'Extracting text content...', progress: 40 })
+      await new Promise(resolve => setTimeout(resolve, 1500))
 
-    setFetchProgress({ stage: 'downloading', message: 'Downloading images (1/8)...', progress: 70 })
-    await new Promise(resolve => setTimeout(resolve, 1500))
+      setFetchProgress({ stage: 'extracting', message: 'Identifying sections...', progress: 50 })
+      await new Promise(resolve => setTimeout(resolve, 1500))
 
-    setFetchProgress({ stage: 'downloading', message: 'Downloading images (4/8)...', progress: 80 })
-    await new Promise(resolve => setTimeout(resolve, 1500))
+      setFetchProgress({ stage: 'extracting', message: 'Processing navigation...', progress: 60 })
+      await new Promise(resolve => setTimeout(resolve, 1000))
 
-    setFetchProgress({ stage: 'downloading', message: 'Downloading images (7/8)...', progress: 90 })
-    await new Promise(resolve => setTimeout(resolve, 1200))
+      // Stage 3: Downloading images (60-95%)
+      setFetchProgress({ stage: 'downloading', message: 'Finding images...', progress: 65 })
+      await new Promise(resolve => setTimeout(resolve, 1000))
 
-    setFetchProgress({ stage: 'downloading', message: 'Optimizing assets...', progress: 95 })
-    await new Promise(resolve => setTimeout(resolve, 800))
+      setFetchProgress({ stage: 'downloading', message: 'Downloading images...', progress: 75 })
+      await new Promise(resolve => setTimeout(resolve, 2000))
 
-    // Stage 4: Complete (100%)
-    setFetchProgress({ stage: 'complete', message: 'Website analysis complete!', progress: 100 })
-    setFetchComplete(true)
-    setIsFetchingWebsite(false)
+      setFetchProgress({ stage: 'downloading', message: 'Processing images...', progress: 85 })
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      setFetchProgress({ stage: 'downloading', message: 'Creating manifest...', progress: 95 })
+
+      // Wait for analysis to complete
+      const result = await analysisPromise
+
+      if (result.success && result.tempProjectId) {
+        console.log('✅ [WEBSITE IMPORT] Analysis complete!')
+        console.log('📊 [WEBSITE IMPORT] Stats:', result.stats)
+        console.log('🆔 [WEBSITE IMPORT] Temp Project ID:', result.tempProjectId)
+
+        // Store temp project ID for later use
+        setTempImportProjectId(result.tempProjectId)
+
+        // Stage 4: Complete (100%)
+        setFetchProgress({ stage: 'complete', message: 'Website analysis complete!', progress: 100 })
+        setFetchComplete(true)
+
+        toast.success(`Analyzed ${result.stats?.sections || 0} sections, ${result.stats?.images || 0} images!`)
+      } else {
+        throw new Error(result.error || 'Analysis failed')
+      }
+    } catch (error) {
+      console.error('❌ [WEBSITE IMPORT] Error:', error)
+      toast.error('Failed to analyze website. Please try again.')
+      setFetchComplete(false)
+    } finally {
+      setIsFetchingWebsite(false)
+    }
   }
 
   const handleContinueToDesignSelection = () => {
@@ -694,7 +751,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fadeIn"
-        onClick={currentStep === 'complete' || currentStep === 'error' ? onCancel : undefined}
+        onClick={currentStep === 'complete' || currentStep === 'error' ? onCancel : handleCancel}
       />
 
       {/* Modal */}
@@ -742,7 +799,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           </div>
           {(currentStep === 'complete' || currentStep === 'error' || currentStep === 'category') && (
             <button
-              onClick={onCancel}
+              onClick={handleCancel}
               className="p-1.5 hover:bg-dark-bg/70 rounded-md transition-all"
             >
               <X size={16} className="text-gray-400" />
@@ -839,9 +896,6 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-300 mb-1.5">
-                      Website URL
-                    </label>
                     <div className="flex gap-2">
                       <input
                         type="text"
@@ -855,17 +909,17 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                             handleStartFetch()
                           }
                         }}
-                        placeholder="example.com or www.example.com"
+                        placeholder="Enter your website URL"
                         className="flex-1 bg-dark-bg/50 border border-dark-border rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 outline-none focus:border-primary/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         autoFocus
                         disabled={isFetchingWebsite}
                       />
                       <button
                         onClick={handleStartFetch}
-                        disabled={!isValidWebsiteUrl(importUrl) || isFetchingWebsite}
+                        disabled={!isValidWebsiteUrl(importUrl) || isFetchingWebsite || fetchComplete}
                         className={`px-4 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center gap-2 flex-shrink-0 ${
                           fetchComplete
-                            ? 'bg-green-500 text-white cursor-default'
+                            ? 'bg-green-500 text-white cursor-not-allowed'
                             : isFetchingWebsite
                             ? 'bg-primary/20 text-primary cursor-not-allowed'
                             : isValidWebsiteUrl(importUrl)
@@ -999,7 +1053,6 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                             <li>Images and media files</li>
                             <li>Navigation and sections</li>
                           </ul>
-                          <p className="mt-2 text-gray-500 italic">This can take up to 2 minutes depending on the website size</p>
                         </div>
                       </div>
                     </div>
@@ -1244,7 +1297,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
             )}
 
             {/* Step 3: Template Details */}
-            {currentStep === 'details' && selectedTemplate && (
+            {currentStep === 'details' && (selectedTemplate || importDesignOption === 'screenshot' || importDesignOption === 'ai') && (
               <motion.div
                 key="details"
                 initial={{ opacity: 0, x: 20 }}
@@ -1252,7 +1305,73 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 exit={{ opacity: 0, x: -20 }}
                 className="max-w-3xl mx-auto overflow-x-hidden"
               >
-                <div className="space-y-5">
+                {/* Simplified view for screenshot/AI import */}
+                {(importDesignOption === 'screenshot' || importDesignOption === 'ai') && !selectedTemplate ? (
+                  <div className="space-y-5">
+                    <div>
+                      <h3 className="text-base font-semibold text-white mb-1.5">Project Details</h3>
+                      <p className="text-xs text-gray-400">
+                        {importDesignOption === 'screenshot'
+                          ? 'Enter a name for your project. We\'ll use your uploaded screenshot as design reference.'
+                          : 'Enter a name for your project. AI will design it based on your imported content.'}
+                      </p>
+                    </div>
+
+                    {/* Project Name Input */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1.5">
+                        Project Name
+                      </label>
+                      <input
+                        type="text"
+                        value={projectName}
+                        onChange={(e) => setProjectName(e.target.value)}
+                        placeholder="my-awesome-project"
+                        className="w-full px-3 py-2.5 bg-dark-bg/50 border border-dark-border rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary transition-colors"
+                        autoFocus
+                      />
+                    </div>
+
+                    {/* Screenshot Preview */}
+                    {importDesignOption === 'screenshot' && screenshotFile && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-300 mb-1.5">
+                          Design Reference
+                        </label>
+                        <div className="p-3 bg-dark-bg/50 border border-dark-border rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4 text-green-500" />
+                            <span className="text-xs text-white">{screenshotFile.name}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* AI Design Choice Card */}
+                    {importDesignOption === 'ai' && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-300 mb-1.5">
+                          Your Choice
+                        </label>
+                        <div className="p-4 bg-gradient-to-br from-primary/10 to-purple-500/10 border border-primary/30 rounded-lg">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 bg-primary/20 rounded-lg">
+                              <Sparkles className="w-5 h-5 text-primary" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="text-sm font-semibold text-white mb-1">AI-Powered Design</h4>
+                              <p className="text-xs text-gray-400 leading-relaxed">
+                                Our AI will analyze the website content you imported and create a custom design tailored to your needs.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-5">{selectedTemplate && (
+                    <>
                   {/* Header with Plan Badge */}
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
@@ -1360,7 +1479,10 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       </div>
                     </div>
                   )}
+                    </>
+                  )}
                 </div>
+                )}
               </motion.div>
             )}
 
@@ -1542,7 +1664,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 </p>
 
                 <button
-                  onClick={onComplete}
+                  onClick={() => onComplete(projectId)}
                   className="inline-flex items-center gap-2 px-8 py-3 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-medium shadow-lg shadow-primary/20"
                 >
                   <Rocket className="w-5 h-5" />
@@ -1575,7 +1697,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
                 <div className="flex gap-3 justify-center">
                   <button
-                    onClick={onCancel}
+                    onClick={handleCancel}
                     className="px-6 py-2.5 border border-dark-border text-gray-300 rounded-lg hover:bg-dark-bg/30 transition-colors font-medium"
                   >
                     Cancel
@@ -1623,7 +1745,27 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 )}
                 {currentStep === 'import-design' && (
                   <button
-                    onClick={() => setCurrentStep('import-url')}
+                    onClick={async () => {
+                      console.log('🔙 [WEBSITE IMPORT] Back button clicked from import-design step')
+                      console.log('🔍 [WEBSITE IMPORT] tempImportProjectId:', tempImportProjectId)
+
+                      // Clean up temp data when going back
+                      if (tempImportProjectId) {
+                        console.log('🗑️ [WEBSITE IMPORT] Calling cleanup for:', tempImportProjectId)
+                        const result = await window.electronAPI?.websiteImport.cleanup(tempImportProjectId)
+                        console.log('✅ [WEBSITE IMPORT] Cleanup result:', result)
+                        setTempImportProjectId(null)
+                        console.log('🧹 [WEBSITE IMPORT] Cleared tempImportProjectId state')
+                      } else {
+                        console.log('⚠️ [WEBSITE IMPORT] No tempImportProjectId found, skipping cleanup')
+                      }
+
+                      console.log('🔄 [WEBSITE IMPORT] Resetting states...')
+                      setFetchComplete(false)
+                      setIsFetchingWebsite(false)
+                      setCurrentStep('import-url')
+                      console.log('✅ [WEBSITE IMPORT] States reset, navigating back to import-url')
+                    }}
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                   >
                     <ArrowLeft size={14} />
@@ -1676,8 +1818,11 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 {currentStep === 'import-design' && (
                   <button
                     onClick={() => {
-                      // TODO: Phase 2 - Start extraction process
-                      toast.success('Starting website import...')
+                      if (importDesignOption === 'screenshot' || importDesignOption === 'ai') {
+                        // For screenshot and AI options, skip template selection and go to details
+                        setCurrentStep('details')
+                      }
+                      // For 'template' option, navigation already handled in the button onClick above
                     }}
                     disabled={!importDesignOption || (importDesignOption === 'screenshot' && !screenshotFile)}
                     className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
@@ -1686,13 +1831,13 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                         : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
                     }`}
                   >
-                    <Download size={13} />
-                    Start Import
+                    Continue
+                    <ArrowRight size={13} />
                   </button>
                 )}
                 {currentStep === 'details' && (
                   <>
-                    {!canAccess ? (
+                    {!canAccess && selectedTemplate ? (
                       <button
                         onClick={handleUpgrade}
                         className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium text-sm transition-all text-white shadow-lg ${
@@ -1706,10 +1851,40 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       </button>
                     ) : (
                       <button
-                        onClick={handleContinueToConfig}
-                        className="inline-flex items-center gap-2 px-5 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors font-medium shadow-lg shadow-primary/20"
+                        onClick={async () => {
+                          // For screenshot/AI, create project directly with hardcoded template
+                          if (importDesignOption === 'screenshot' || importDesignOption === 'ai') {
+                            // Fetch the hardcoded template
+                            const hardcodedTemplateId = 'react_boilerplate' // Change this ID to use a different template
+                            const templateResult = await window.electronAPI?.templates.getById(hardcodedTemplateId)
+
+                            if (templateResult?.success && templateResult.template) {
+                              setSelectedTemplate(templateResult.template)
+                              // Skip configure and go straight to creating
+                              setCurrentStep('creating')
+                            } else {
+                              toast.error('Failed to load template')
+                            }
+                          } else {
+                            // Normal flow - go to configure
+                            handleContinueToConfig()
+                          }
+                        }}
+                        disabled={(importDesignOption === 'screenshot' || importDesignOption === 'ai') && !projectName.trim()}
+                        className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
+                          (importDesignOption === 'screenshot' || importDesignOption === 'ai')
+                            ? projectName.trim()
+                              ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
+                              : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                            : 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
+                        }`}
                       >
-                        {isImportFlow ? (
+                        {importDesignOption === 'screenshot' || importDesignOption === 'ai' ? (
+                          <>
+                            <Sparkles size={13} />
+                            Create Project
+                          </>
+                        ) : isImportFlow ? (
                           <>
                             <CheckCircle size={13} />
                             Select this Design

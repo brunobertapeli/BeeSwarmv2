@@ -55,7 +55,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Project methods
   projects: {
-    create: (templateId, projectName) => ipcRenderer.invoke('project:create', templateId, projectName),
+    create: (templateId, projectName, tempImportProjectId, screenshotData, importType) => ipcRenderer.invoke('project:create', templateId, projectName, tempImportProjectId, screenshotData, importType),
     getAll: () => ipcRenderer.invoke('project:get-all'),
     getById: (id) => ipcRenderer.invoke('project:get-by-id', id),
     delete: (id) => ipcRenderer.invoke('project:delete', id),
@@ -289,5 +289,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Keywords for educational tooltips
   keywords: {
     getAll: () => ipcRenderer.invoke('keywords:get-all')
+  },
+
+  // Website Import
+  websiteImport: {
+    analyze: (url) => ipcRenderer.invoke('website-import:analyze', url),
+    cleanup: (tempProjectId) => ipcRenderer.invoke('website-import:cleanup', tempProjectId),
+    checkImportStatus: (projectId) => ipcRenderer.invoke('website-import:check-status', projectId),
+    markMigrationComplete: (projectId) => ipcRenderer.invoke('website-import:mark-complete', projectId)
   }
 })

@@ -273,7 +273,7 @@ export interface ElectronAPI {
   }
 
   projects: {
-    create: (templateId: string, projectName: string) => Promise<{
+    create: (templateId: string, projectName: string, tempImportProjectId?: string, screenshotData?: string, importType?: 'template' | 'screenshot' | 'ai') => Promise<{
       success: boolean
       project?: Project
       error?: string
@@ -609,6 +609,36 @@ export interface ElectronAPI {
     getAll: () => Promise<{
       success: boolean
       keywords: Record<string, string>
+    }>
+  }
+
+  websiteImport: {
+    analyze: (url: string) => Promise<{
+      success: boolean
+      tempProjectId?: string
+      tempDir?: string
+      stats?: {
+        sections: number
+        images: number
+        navigationItems: number
+      }
+      error?: string
+    }>
+    cleanup: (tempProjectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    checkImportStatus: (projectId: string) => Promise<{
+      success: boolean
+      isImport?: boolean
+      importType?: 'template' | 'screenshot' | 'ai'
+      migrationCompleted?: boolean
+      manifest?: any
+      error?: string
+    }>
+    markMigrationComplete: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
     }>
   }
 }

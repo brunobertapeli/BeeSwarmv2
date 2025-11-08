@@ -30,6 +30,10 @@ interface ActionBarProps {
   onImagesClick?: () => void
   onSettingsClick?: () => void
   onConsoleClick?: () => void
+  autoOpen?: boolean
+  autoPinned?: boolean
+  autoMessage?: string
+  onAutoMessageSent?: () => void
 }
 
 type ViewMode = 'desktop' | 'mobile'
@@ -56,7 +60,11 @@ function ActionBar({
   onChatClick,
   onImagesClick,
   onSettingsClick,
-  onConsoleClick
+  onConsoleClick,
+  autoOpen = false,
+  autoPinned = false,
+  autoMessage,
+  onAutoMessageSent
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
   const toast = useToast()
@@ -87,6 +95,8 @@ function ActionBar({
   const modelDropdownRef = useRef<HTMLDivElement>(null)
   const plusMenuRef = useRef<HTMLDivElement>(null)
   const tweakMenuRef = useRef<HTMLDivElement>(null)
+  const autoMessageSentRef = useRef(false) // Track if auto-message was already sent
+  const autoMessageTimerRef = useRef<NodeJS.Timeout | null>(null) // Track timer to prevent cleanup
 
   // Check if Claude is working (also block if status is undefined to prevent race condition)
   const isClaudeWorking = claudeStatus === 'starting' || claudeStatus === 'running' || claudeStatus === undefined
@@ -103,6 +113,19 @@ function ActionBar({
     }, 300)
     return () => clearTimeout(timer)
   }, [])
+
+  // Handle auto-open and auto-pin for website import
+  useEffect(() => {
+    if (autoOpen && !isHidden) {
+      // Auto-open is already handled by isVisible animation above
+      // Just ensure it's not hidden
+      setIsHidden(false)
+    }
+    if (autoPinned) {
+      setIsLocked(true)
+      console.log('📌 [WEBSITE IMPORT] ActionBar auto-pinned')
+    }
+  }, [autoOpen, autoPinned])
 
   // Load available models on mount
   useEffect(() => {
@@ -131,6 +154,15 @@ function ActionBar({
       if (id === projectId) {
         toast.success('Done!', 'Claude finished successfully')
         setClaudeStatus('completed')
+
+        // If this was a website import auto-message, mark migration as complete
+        // Only do this if we actually sent an auto-message (check the ref)
+        if (autoMessage && onAutoMessageSent && autoMessageSentRef.current) {
+          console.log('✅ [WEBSITE IMPORT] Claude completed, marking migration as complete')
+          onAutoMessageSent()
+          // Clear the auto-message to prevent triggering again
+          autoMessageSentRef.current = false
+        }
       }
     })
 
@@ -255,6 +287,9 @@ function ActionBar({
       unsubQuestions()
     }
   }, [projectId])
+
+  // Auto-send message for website import
+  // This needs to be after handleSend is defined, so we'll move it below
 
   const startHideTimer = () => {
     if (!isLocked) {
@@ -453,6 +488,101 @@ function ActionBar({
       }
     }
   }
+
+  // Auto-send message for website import (after handleSend is defined)
+  useEffect(() => {
+    // For website import, send when ready (idle or completed - both mean Claude is not currently working)
+    const isClaudeReady = claudeStatus === 'idle' || claudeStatus === 'completed'
+    if (autoMessage && projectId && !autoMessageSentRef.current && isClaudeReady && !isInputBlocked) {
+      console.log('🤖 [WEBSITE IMPORT] Ready to auto-send!')
+      console.log('🤖 [WEBSITE IMPORT] Message:', autoMessage)
+      console.log('🤖 [WEBSITE IMPORT] isInputBlocked:', isInputBlocked, 'claudeStatus:', claudeStatus)
+
+      // Mark as sent to prevent re-sending
+      autoMessageSentRef.current = true
+
+      // Send directly without setting message in UI
+      const sendAutoMessage = async () => {
+        try {
+          console.log('📝 [WEBSITE IMPORT] Creating chat block...')
+          // Create chat block first
+          const blockResult = await window.electronAPI?.chat.createBlock(projectId, autoMessage)
+
+          if (!blockResult?.success) {
+            toast.error('Failed to create chat block', blockResult?.error || 'Unknown error')
+            console.error('Failed to create chat block:', blockResult?.error)
+            return
+          }
+
+          console.log('✅ Chat block created:', blockResult.block.id)
+
+          // Start session with the prompt (always starts fresh for website import)
+          console.log('🔍 Starting website import session with model:', selectedModel)
+          const result = await window.electronAPI?.claude.startSession(
+            projectId,
+            autoMessage,
+            selectedModel,
+            undefined, // No attachments
+            thinkingEnabled,
+            false // Not plan mode
+          )
+
+          if (!result?.success) {
+            toast.error('Failed to start Claude', result?.error || 'Unknown error')
+            console.error('Failed to start Claude:', result?.error)
+            return
+          }
+
+          console.log('✅ [WEBSITE IMPORT] Auto-message sent successfully')
+
+          // DON'T call onAutoMessageSent here - we'll call it when Claude completes
+        } catch (error) {
+          console.error('❌ [WEBSITE IMPORT] Error sending auto message:', error)
+          toast.error('Failed to send message', error instanceof Error ? error.message : 'Unknown error')
+        }
+      }
+
+      // Only set timer if we don't already have one
+      if (!autoMessageTimerRef.current) {
+        console.log('⏱️ [WEBSITE IMPORT] Setting up auto-send timer (1.5s) for project:', projectId)
+        const currentProjectId = projectId // Capture current project ID
+        const currentAutoMessage = autoMessage // Capture current auto message
+        autoMessageTimerRef.current = setTimeout(() => {
+          // Verify we're still on the same project AND have the same auto message
+          // This prevents sending if the user switched projects or if autoMessage was cleared
+          if (currentProjectId === projectId && currentAutoMessage === autoMessage && autoMessage) {
+            console.log('⏰ [WEBSITE IMPORT] Timer triggered, calling sendAutoMessage for project:', projectId)
+            sendAutoMessage()
+          } else {
+            console.log('⚠️ [WEBSITE IMPORT] Context changed, skipping auto-send. Current:', { projectId, autoMessage }, 'Captured:', { currentProjectId, currentAutoMessage })
+          }
+          autoMessageTimerRef.current = null
+        }, 1500)
+      }
+    } else if (autoMessage && projectId && !autoMessageSentRef.current) {
+      console.log('⏳ [WEBSITE IMPORT] Waiting for ready state...', { claudeStatus, isInputBlocked })
+    }
+
+    // Cleanup: only clear timer if autoMessage is removed (project changed)
+    return () => {
+      if (!autoMessage && autoMessageTimerRef.current) {
+        console.log('🧹 [WEBSITE IMPORT] Project changed, clearing timer')
+        clearTimeout(autoMessageTimerRef.current)
+        autoMessageTimerRef.current = null
+      }
+    }
+  }, [autoMessage, projectId, selectedModel, thinkingEnabled, toast, claudeStatus, isInputBlocked])
+
+  // Reset auto-message sent flag when autoMessage changes or projectId changes
+  useEffect(() => {
+    // Reset when autoMessage is cleared OR when projectId changes
+    autoMessageSentRef.current = false
+    if (autoMessageTimerRef.current) {
+      clearTimeout(autoMessageTimerRef.current)
+      autoMessageTimerRef.current = null
+    }
+    console.log('🔄 [WEBSITE IMPORT] Reset auto-send refs for project:', projectId)
+  }, [autoMessage, projectId])
 
   const handleDeploy = () => {
     if (!netlifyConnected || isDeploying || isLive) return

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '../store/appStore'
 import { useToast } from '../hooks/useToast'
+import { useWebsiteImport } from '../hooks/useWebsiteImport'
 import ActionBar from './ActionBar'
 import ProjectHeader from './ProjectHeader'
 import ProjectSelector from './ProjectSelector'
@@ -11,6 +12,7 @@ import DeviceFrame from './DeviceFrame'
 import DesktopPreviewFrame from './DesktopPreviewFrame'
 import DeviceSelector from './DeviceSelector'
 import HelpChat from './HelpChat'
+import WebsiteImportPreparingModal from './WebsiteImportPreparingModal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
 
 function ProjectView() {
@@ -52,6 +54,12 @@ function ProjectView() {
   const [terminalOutput, setTerminalOutput] = useState<ProcessOutput[]>([])
   const previewContainerRef = useRef<HTMLDivElement>(null)
 
+  // Website import state
+  const websiteImport = useWebsiteImport(currentProjectId)
+  const [showPreparingModal, setShowPreparingModal] = useState(false)
+  const [websiteImportPrompt, setWebsiteImportPrompt] = useState<string | undefined>(undefined)
+  const [claudeStatusForModal, setClaudeStatusForModal] = useState<string>('idle')
+
   // Fetch projects and auto-open last project
   useEffect(() => {
     const fetchProjects = async () => {
@@ -79,6 +87,108 @@ function ProjectView() {
   }, [refreshKey, isAuthenticated])
 
   const currentProject = projects.find((p) => p.id === currentProjectId)
+
+  // Handle website import - show modal and auto-send prompt
+  useEffect(() => {
+    // Only run when we detect a first-time website import
+    // The .migration-completed flag (checked via isFirstOpen) ensures this only runs once
+    if (websiteImport.isWebsiteImport && websiteImport.isFirstOpen && currentProjectId) {
+      console.log('🌐 [WEBSITE IMPORT] Detected first-time website import project:', currentProjectId)
+      console.log('🌐 [WEBSITE IMPORT] Import Type:', websiteImport.importType)
+
+      // Show preparing modal
+      setShowPreparingModal(true)
+
+      // Generate the appropriate prompt based on import type
+      let prompt = ''
+      const manifestPath = '/website-import/manifest.json'
+      const imagesPath = '/website-import/images'
+
+      switch (websiteImport.importType) {
+        case 'template':
+          prompt = `I want to migrate all content from my old website into this codebase while preserving the current template's design and structure.
+
+My old website's data is located at: ${manifestPath} (contains all text content, sections, navigation, and footer data)
+Images from my old website are at: ${imagesPath}
+
+Please analyze the manifest.json to understand my content, then integrate it into the current template, use bash command to transfer the images from the old website to this codebase, replacing placeholder content while maintaining the template's design patterns and component structure.`
+          break
+
+        case 'screenshot':
+          prompt = `I want to create a new website using my old website's content and a design inspired by a screenshot I provided.
+
+- Design reference: Look for user-design-screenshot.* in the project root (use this as design inspiration)
+- Content data: ${manifestPath} (contains all text, sections, navigation)
+- Images: ${imagesPath}
+
+Please create a website that matches the design aesthetic from the screenshot while incorporating all the content from my old website. Use bash command to transfer the images from the old website to this codebase`
+          break
+
+        case 'ai':
+          prompt = `I want you to create a modern, sleek website using content from my old website.
+
+- Content data: ${manifestPath} (analyze this to understand my website's purpose, industry, and content)
+- Images: ${imagesPath}
+
+Please read the manifest to understand what my website is about, then create an appropriate theme, color palette, and design style that fits my use case. Make it modern and professional. Use bash command to transfer the images from the old website to this codebase`
+          break
+      }
+
+      console.log('📝 [WEBSITE IMPORT] Generated prompt:', prompt)
+      setWebsiteImportPrompt(prompt)
+    }
+
+    // Clean up state when switching projects
+    return () => {
+      setShowPreparingModal(false)
+      setWebsiteImportPrompt(undefined)
+      setClaudeStatusForModal('idle')
+    }
+  }, [websiteImport.isWebsiteImport, websiteImport.isFirstOpen, websiteImport.importType, currentProjectId])
+
+  // Listen for Claude status to hide modal when work starts
+  useEffect(() => {
+    if (!currentProjectId || !window.electronAPI?.claude) return
+
+    const unsubStatus = window.electronAPI.claude.onStatusChanged((id, status) => {
+      console.log('🔔 [WEBSITE IMPORT] Claude status changed:', { id, status, currentProjectId, showPreparingModal })
+
+      if (id === currentProjectId) {
+        setClaudeStatusForModal(status)
+
+        // Hide modal when Claude starts working
+        if (showPreparingModal && (status === 'starting' || status === 'running')) {
+          console.log('🎬 [WEBSITE IMPORT] Claude started, hiding modal')
+          setShowPreparingModal(false)
+        }
+      }
+    })
+
+    return () => {
+      unsubStatus()
+    }
+  }, [currentProjectId, showPreparingModal])
+
+  // Fallback: Hide modal after 5 seconds if Claude hasn't started
+  useEffect(() => {
+    if (showPreparingModal) {
+      console.log('⏱️ [WEBSITE IMPORT] Setting fallback timeout to hide modal')
+      const fallbackTimer = setTimeout(() => {
+        console.log('⚠️ [WEBSITE IMPORT] Fallback timeout reached, hiding modal')
+        setShowPreparingModal(false)
+      }, 5000)
+
+      return () => clearTimeout(fallbackTimer)
+    }
+  }, [showPreparingModal])
+
+  // Handle marking migration as complete when Claude finishes
+  const handleWebsiteImportPromptSent = useCallback(async () => {
+    console.log('✅ [WEBSITE IMPORT] Claude completed auto-message, marking migration as complete for:', currentProjectId)
+    await websiteImport.markMigrationComplete()
+    setWebsiteImportPrompt(undefined) // Clear the prompt so it doesn't send again
+    console.log('🎉 [WEBSITE IMPORT] Migration complete! This project will no longer show the modal.')
+  }, [websiteImport, currentProjectId])
 
   // Define startDevServer at component level so it's accessible throughout
   const startDevServer = useCallback(async () => {
@@ -252,22 +362,16 @@ function ProjectView() {
     setShowCreationFlow(true)
   }
 
-  const handleCreationFlowComplete = async () => {
+  const handleCreationFlowComplete = async (newProjectId?: string) => {
     // Creation flow is complete - refresh projects and close
     setShowCreationFlow(false)
     setRefreshKey(prev => prev + 1)
 
-    // Wait for refresh then find and open the newest project
-    setTimeout(async () => {
-      const result = await window.electronAPI?.projects.getAll()
-      if (result?.success && result.projects.length > 0) {
-        // Get the most recently created project
-        const newestProject = result.projects[0]
-        if (newestProject) {
-          setCurrentProject(newestProject.id)
-        }
-      }
-    }, 500)
+    // If we received the new project ID, switch to it immediately
+    if (newProjectId) {
+      console.log('✅ [PROJECT CREATION] Switching to new project:', newProjectId)
+      setCurrentProject(newProjectId)
+    }
   }
 
   const handleCreationFlowCancel = () => {
@@ -497,10 +601,20 @@ function ProjectView() {
         onImagesClick={handleImagesClick}
         onSettingsClick={handleSettingsClick}
         onConsoleClick={handleConsoleClick}
+        autoOpen={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
+        autoPinned={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
+        autoMessage={websiteImportPrompt}
+        onAutoMessageSent={handleWebsiteImportPromptSent}
       />
 
       {/* Help Chat */}
       <HelpChat projectId={currentProjectId || undefined} />
+
+      {/* Website Import Preparing Modal */}
+      <WebsiteImportPreparingModal
+        show={showPreparingModal}
+        importType={websiteImport.importType || 'template'}
+      />
 
       {/* Project Settings Modal */}
       <ProjectSettings

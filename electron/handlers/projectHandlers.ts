@@ -10,12 +10,21 @@ import { claudeService } from '../services/ClaudeService'
 
 export function registerProjectHandlers() {
   // Create new project from template
-  ipcMain.handle('project:create', async (_event, templateId: string, projectName: string) => {
+  ipcMain.handle('project:create', async (_event, templateId: string, projectName: string, tempImportProjectId?: string, screenshotData?: string, importType?: 'template' | 'screenshot' | 'ai') => {
     try {
       // SECURITY: Ensure user is authenticated
       const userId = requireAuth()
 
       console.log(`🚀 Creating project: "${projectName}" from template: ${templateId}`)
+      if (tempImportProjectId) {
+        console.log(`📦 [WEBSITE IMPORT] Temp project ID provided: ${tempImportProjectId}`)
+      }
+      if (screenshotData) {
+        console.log(`📸 [SCREENSHOT IMPORT] Screenshot provided`)
+      }
+      if (importType) {
+        console.log(`🎨 [IMPORT TYPE] ${importType}`)
+      }
 
       // Fetch template details from MongoDB
       const template = await mongoService.getTemplateById(templateId)
@@ -27,8 +36,8 @@ export function registerProjectHandlers() {
         }
       }
 
-      // Create the project with userId
-      const project = await projectService.createProject(userId, templateId, projectName, template)
+      // Create the project with userId (and optional tempImportProjectId/screenshot/importType for import)
+      const project = await projectService.createProject(userId, templateId, projectName, template, tempImportProjectId, screenshotData, importType)
 
       return {
         success: true,

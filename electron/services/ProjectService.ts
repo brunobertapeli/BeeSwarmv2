@@ -7,7 +7,7 @@ import { getCurrentUserId } from '../main'
 import { pathValidator } from '../utils/PathValidator'
 import fs from 'fs'
 import path from 'path'
-import { shell } from 'electron'
+import { shell, app } from 'electron'
 
 class ProjectService {
   /**
@@ -22,13 +22,22 @@ class ProjectService {
     userId: string,
     templateId: string,
     projectName: string,
-    template: Template
+    template: Template,
+    tempImportProjectId?: string,
+    screenshotData?: string,
+    importType?: 'template' | 'screenshot' | 'ai'
   ): Promise<Project> {
     try {
       console.log('🚀 Starting project creation...')
       console.log('   User:', userId)
       console.log('   Template:', template.name)
       console.log('   Project Name:', projectName)
+      if (tempImportProjectId) {
+        console.log('   📦 [WEBSITE IMPORT] Temp Import ID:', tempImportProjectId)
+      }
+      if (screenshotData) {
+        console.log('   📸 [SCREENSHOT IMPORT] Screenshot data provided')
+      }
 
       // Step 1: Check if project name already exists for this user
       if (databaseService.projectNameExists(projectName, userId)) {
@@ -108,7 +117,81 @@ class ProjectService {
 
         console.log('✅ Configuration files updated')
 
-        // Step 6: Update project status to 'ready'
+        // Step 6: Transfer website import data if this is an import project
+        if (tempImportProjectId) {
+          console.log('📦 [WEBSITE IMPORT] Transferring imported website data...')
+
+          const tempDir = path.join(
+            app.getPath('home'),
+            'Documents',
+            'CodeDeck',
+            userId,
+            'temp',
+            tempImportProjectId
+          )
+
+          if (fs.existsSync(tempDir)) {
+            // Create website-import folder in project
+            const importDataDir = path.join(clonedPath, 'website-import')
+            if (!fs.existsSync(importDataDir)) {
+              fs.mkdirSync(importDataDir, { recursive: true })
+            }
+
+            // Copy manifest.json and add importType
+            const manifestSrc = path.join(tempDir, 'manifest.json')
+            const manifestDest = path.join(importDataDir, 'manifest.json')
+            if (fs.existsSync(manifestSrc)) {
+              // Read manifest, add config.importType, then save
+              const manifestContent = JSON.parse(fs.readFileSync(manifestSrc, 'utf-8'))
+              manifestContent.config = {
+                importType: importType || 'template' // Default to 'template' if not specified
+              }
+              fs.writeFileSync(manifestDest, JSON.stringify(manifestContent, null, 2))
+              console.log(`✅ [WEBSITE IMPORT] Copied manifest.json with importType: ${importType || 'template'}`)
+            }
+
+            // Copy images folder
+            const imagesSrc = path.join(tempDir, 'images')
+            const imagesDest = path.join(importDataDir, 'images')
+            if (fs.existsSync(imagesSrc)) {
+              this.copyDirectory(imagesSrc, imagesDest)
+              console.log('✅ [WEBSITE IMPORT] Copied images folder')
+            }
+
+            // Clean up temp directory
+            try {
+              fs.rmSync(tempDir, { recursive: true, force: true })
+              console.log('🗑️ [WEBSITE IMPORT] Cleaned up temp directory')
+            } catch (cleanupError) {
+              console.warn('⚠️ [WEBSITE IMPORT] Failed to clean up temp directory:', cleanupError)
+            }
+
+            console.log('✅ [WEBSITE IMPORT] Website data transferred successfully!')
+          } else {
+            console.warn('⚠️ [WEBSITE IMPORT] Temp directory not found:', tempDir)
+          }
+        }
+
+        // Step 6b: Save screenshot if provided
+        if (screenshotData) {
+          console.log('📸 [SCREENSHOT IMPORT] Saving screenshot...')
+
+          // Extract extension from base64 data
+          const matches = screenshotData.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,/)
+          const ext = matches ? matches[1] : 'png'
+
+          // Remove data URL prefix
+          const base64Data = screenshotData.replace(/^data:image\/\w+;base64,/, '')
+          const buffer = Buffer.from(base64Data, 'base64')
+
+          // Save to project root
+          const screenshotPath = path.join(clonedPath, `user-design-screenshot.${ext}`)
+          fs.writeFileSync(screenshotPath, buffer)
+
+          console.log(`✅ [SCREENSHOT IMPORT] Screenshot saved: user-design-screenshot.${ext}`)
+        }
+
+        // Step 7: Update project status to 'ready'
         databaseService.updateProjectStatus(project.id, 'ready')
 
         console.log('✅ Project created successfully!')
@@ -246,6 +329,33 @@ class ProjectService {
    */
   updateLastOpened(id: string): void {
     databaseService.updateLastOpened(id)
+  }
+
+  /**
+   * Recursively copy a directory
+   * @private
+   */
+  private copyDirectory(src: string, dest: string): void {
+    // Create destination directory
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true })
+    }
+
+    // Read source directory
+    const entries = fs.readdirSync(src, { withFileTypes: true })
+
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name)
+      const destPath = path.join(dest, entry.name)
+
+      if (entry.isDirectory()) {
+        // Recursively copy subdirectory
+        this.copyDirectory(srcPath, destPath)
+      } else {
+        // Copy file
+        fs.copyFileSync(srcPath, destPath)
+      }
+    }
   }
 }
 

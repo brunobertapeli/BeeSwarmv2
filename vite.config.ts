@@ -23,6 +23,8 @@ export default defineConfig({
                 'better-sqlite3',
                 'simple-git',
                 'node-pty',
+                'puppeteer',
+                'axios',
                 // MongoDB optional dependencies
                 'kerberos',
                 'mongodb-client-encryption',
@@ -34,7 +36,10 @@ export default defineConfig({
                 '@aws-sdk/credential-providers',
                 '@aws-sdk/client-sso-oidc',
                 'saslprep',
-                'bson'
+                'bson',
+                // Puppeteer optional dependencies
+                'bufferutil',
+                'utf-8-validate'
               ]
             }
           }
