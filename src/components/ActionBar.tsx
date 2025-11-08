@@ -18,6 +18,7 @@ import {
   X as CloseIcon
 } from 'lucide-react'
 import { useAppStore, type DeploymentStatus } from '../store/appStore'
+import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import StatusSheet from './StatusSheet'
 import ContextBar from './ContextBar'
@@ -67,10 +68,11 @@ function ActionBar({
   onAutoMessageSent
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
+  const { layoutState, isActionBarVisible } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
-  const [isHidden, setIsHidden] = useState(false)
-  const [isLocked, setIsLocked] = useState(false)
+  const [isHidden, setIsHidden] = useState(true)
+  const [isLocked, setIsLocked] = useState(true)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
   const [claudeContext, setClaudeContext] = useState<ClaudeContext | null>(null)
   const [availableModels, setAvailableModels] = useState<ClaudeModel[]>([])
@@ -723,6 +725,11 @@ function ActionBar({
         reader.readAsDataURL(file)
       }
     }
+  }
+
+  // Hide ActionBar when in BROWSER_FULL state
+  if (layoutState === 'BROWSER_FULL') {
+    return null
   }
 
   return (

@@ -42,6 +42,8 @@ interface AppState {
   setShowProjectSettings: (show: boolean) => void
   showTerminal: boolean
   setShowTerminal: (show: boolean) => void
+  showStatusSheet: boolean
+  setShowStatusSheet: (show: boolean) => void
   isProjectSetupMode: boolean
   setProjectSetupMode: (isSetup: boolean) => void
   newProjectData: { templateId: string; requiredTechConfigs: TechConfig[] } | null
@@ -55,6 +57,9 @@ interface AppState {
   orientation: Orientation
   setOrientation: (orientation: Orientation) => void
   toggleOrientation: () => void
+
+  // Computed property: Check if any overlay is blocking the preview
+  hasOverlayOpen: () => boolean
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -93,6 +98,8 @@ export const useAppStore = create<AppState>((set) => ({
   setShowProjectSettings: (show) => set({ showProjectSettings: show }),
   showTerminal: false,
   setShowTerminal: (show) => set({ showTerminal: show }),
+  showStatusSheet: false,
+  setShowStatusSheet: (show) => set({ showStatusSheet: show }),
   isProjectSetupMode: false,
   setProjectSetupMode: (isSetup) => set({ isProjectSetupMode: isSetup }),
   newProjectData: null,
@@ -108,6 +115,18 @@ export const useAppStore = create<AppState>((set) => ({
   toggleOrientation: () => set((state) => ({
     orientation: state.orientation === 'portrait' ? 'landscape' : 'portrait'
   })),
+
+  // Computed getter for overlay state
+  hasOverlayOpen: () => {
+    const state = useAppStore.getState()
+    return (
+      state.showTerminal ||
+      state.showProjectSettings ||
+      state.showProjectSelector ||
+      state.showTemplateSelector ||
+      state.showStatusSheet
+    )
+  },
 }))
 
 // Export function to initialize auth (called from App.tsx after electronAPI is ready)

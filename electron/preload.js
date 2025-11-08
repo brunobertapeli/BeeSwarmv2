@@ -117,6 +117,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     toggleDevTools: (projectId) => ipcRenderer.invoke('preview:toggle-devtools', projectId),
     navigate: (projectId, url) => ipcRenderer.invoke('preview:navigate', projectId, url),
     destroy: (projectId) => ipcRenderer.invoke('preview:destroy', projectId),
+    hide: (projectId) => ipcRenderer.invoke('preview:hide', projectId),
+    show: (projectId) => ipcRenderer.invoke('preview:show', projectId),
 
     // Preview event listeners
     onCreated: (callback) => {
@@ -297,5 +299,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cleanup: (tempProjectId) => ipcRenderer.invoke('website-import:cleanup', tempProjectId),
     checkImportStatus: (projectId) => ipcRenderer.invoke('website-import:check-status', projectId),
     markMigrationComplete: (projectId) => ipcRenderer.invoke('website-import:mark-complete', projectId)
+  },
+
+  // Layout methods
+  layout: {
+    setState: (state, projectId) => ipcRenderer.invoke('layout:set-state', state, projectId),
+    cycleState: (projectId) => ipcRenderer.invoke('layout:cycle-state', projectId),
+    getState: () => ipcRenderer.invoke('layout:get-state'),
+    captureThumbnail: (projectId) => ipcRenderer.invoke('layout:capture-thumbnail', projectId),
+    setActionBarHeight: (height) => ipcRenderer.invoke('layout:set-actionbar-height', height),
+
+    // Layout event listeners
+    onStateChanged: (callback) => {
+      const listener = (_event, newState, previousState, thumbnail) => callback(newState, previousState, thumbnail)
+      ipcRenderer.on('layout-state-changed', listener)
+      return () => ipcRenderer.removeListener('layout-state-changed', listener)
+    },
+    onCycleRequested: (callback) => {
+      const listener = () => callback()
+      ipcRenderer.on('layout-cycle-requested', listener)
+      return () => ipcRenderer.removeListener('layout-cycle-requested', listener)
+    },
+    onActionBarHeightChanged: (callback) => {
+      const listener = (_event, height) => callback(height)
+      ipcRenderer.on('layout-actionbar-height-changed', listener)
+      return () => ipcRenderer.removeListener('layout-actionbar-height-changed', listener)
+    }
   }
 })

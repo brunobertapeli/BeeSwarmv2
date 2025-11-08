@@ -127,6 +127,42 @@ export function registerPreviewHandlers(): void {
     }
   });
 
+  // Hide preview
+  ipcMain.handle('preview:hide', async (_event, projectId: string) => {
+    try {
+      console.log(`🙈 Hiding preview for project: ${projectId}`);
+      previewService.hide(projectId);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error hiding preview:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to hide preview',
+      };
+    }
+  });
+
+  // Show preview
+  ipcMain.handle('preview:show', async (_event, projectId: string) => {
+    try {
+      console.log(`👁️  Showing preview for project: ${projectId}`);
+      previewService.show(projectId);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error showing preview:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to show preview',
+      };
+    }
+  });
+
   // Setup event listeners to forward to renderer
   setupPreviewEventForwarding();
 }

@@ -1,11 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Device, Orientation } from '../types/devices'
+import { useLayoutStore } from '../store/layoutStore'
 import bgImage from '../assets/images/bg.jpg'
 
 interface DeviceFrameProps {
   device: Device
   orientation: Orientation
   children: React.ReactNode
+  projectId?: string
+  port?: number
+  useBrowserView?: boolean
 }
 
 // Layout constants
@@ -14,7 +18,15 @@ const TOP_OFFSET = 64        // Below header + DeviceSelector
 const SIDE_PADDING = 32      // 16px on each side
 const SCALE_PADDING = 0.95   // 5% breathing room
 
-function DeviceFrame({ device, orientation, children }: DeviceFrameProps) {
+function DeviceFrame({ device, orientation, children, projectId, port, useBrowserView = true }: DeviceFrameProps) {
+  const { layoutState } = useLayoutStore()
+  const screenAreaRef = useRef<HTMLDivElement>(null)
+
+  // Only show DeviceFrame in DEFAULT state (mobile preview mode)
+  if (layoutState !== 'DEFAULT') {
+    return null
+  }
+
   // Calculate dimensions based on orientation
   const width = orientation === 'portrait' ? device.width : device.height
   const height = orientation === 'portrait' ? device.height : device.width
@@ -32,6 +44,20 @@ function DeviceFrame({ device, orientation, children }: DeviceFrameProps) {
 
   const [scale, setScale] = useState(calculateScale())
 
+  // Calculate bounds for BrowserView
+  const calculateBounds = useCallback(() => {
+    if (!screenAreaRef.current) return null
+
+    const rect = screenAreaRef.current.getBoundingClientRect()
+
+    return {
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    }
+  }, [])
+
   // Recalculate scale on window resize or device/orientation change
   useEffect(() => {
     const newScale = calculateScale()
@@ -44,6 +70,78 @@ function DeviceFrame({ device, orientation, children }: DeviceFrameProps) {
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [width, height])
+
+  // Create/Update BrowserView when using BrowserView mode
+  useEffect(() => {
+    if (!useBrowserView || !projectId || !port) return
+
+    const createOrUpdatePreview = async () => {
+      const bounds = calculateBounds()
+      if (!bounds) return
+
+      try {
+        await window.electronAPI?.preview.create(
+          projectId,
+          `http://localhost:${port}`,
+          bounds
+        )
+      } catch (error) {
+        console.error('Failed to create mobile preview:', error)
+      }
+    }
+
+    const timer = setTimeout(createOrUpdatePreview, 100)
+
+    return () => {
+      clearTimeout(timer)
+      if (projectId) {
+        window.electronAPI?.preview.destroy(projectId)
+      }
+    }
+  }, [useBrowserView, projectId, port, calculateBounds])
+
+  // Update bounds when device/orientation/scale changes
+  useEffect(() => {
+    if (!useBrowserView || !projectId) return
+
+    const updateBounds = async () => {
+      const bounds = calculateBounds()
+      if (!bounds) return
+
+      try {
+        await window.electronAPI?.preview.updateBounds(projectId, bounds)
+      } catch (error) {
+        console.error('Failed to update mobile preview bounds:', error)
+      }
+    }
+
+    const timer = setTimeout(updateBounds, 550)
+    return () => clearTimeout(timer)
+  }, [scale, device, orientation, useBrowserView, projectId, calculateBounds])
+
+  // Handle window resize for BrowserView
+  useEffect(() => {
+    if (!useBrowserView || !projectId) return
+
+    const handleResize = () => {
+      const bounds = calculateBounds()
+      if (!bounds) return
+
+      window.electronAPI?.preview.updateBounds(projectId, bounds)
+    }
+
+    let resizeTimer: NodeJS.Timeout
+    const debouncedResize = () => {
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(handleResize, 150)
+    }
+
+    window.addEventListener('resize', debouncedResize)
+    return () => {
+      window.removeEventListener('resize', debouncedResize)
+      clearTimeout(resizeTimer)
+    }
+  }, [useBrowserView, projectId, calculateBounds])
 
   return (
     <div className="relative w-full h-full">
@@ -89,10 +187,15 @@ function DeviceFrame({ device, orientation, children }: DeviceFrameProps) {
           )}
 
           {/* Device Screen */}
-          <div className="w-full h-full bg-white rounded-[22px] overflow-hidden relative z-10">
+          <div
+            ref={screenAreaRef}
+            className="w-full h-full bg-white rounded-[22px] overflow-hidden relative z-10"
+          >
             {/* Preview Content */}
             <div className="absolute inset-0">
-              {children}
+              {/* BrowserView will be positioned here when useBrowserView=true */}
+              {/* Iframe fallback (use useBrowserView=false to enable) */}
+              {!useBrowserView && children}
             </div>
           </div>
 

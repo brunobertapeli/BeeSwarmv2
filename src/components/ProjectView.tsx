@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '../store/appStore'
+import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import { useWebsiteImport } from '../hooks/useWebsiteImport'
 import ActionBar from './ActionBar'
@@ -28,6 +29,7 @@ function ProjectView() {
     setShowProjectSettings,
     showTerminal,
     setShowTerminal,
+    showStatusSheet,
     isProjectSetupMode,
     setProjectSetupMode,
     newProjectData,
@@ -288,12 +290,36 @@ Please read the manifest to understand what my website is about, then create an 
       }
     })
 
+    // Setup preview console listener (for BrowserView console.log capture)
+    const unsubConsole = window.electronAPI?.preview.onConsole?.((projectId, message) => {
+      if (projectId === currentProject.id) {
+        // Log frontend console messages to our console
+        const levelMap = ['log', 'warn', 'error']
+        const level = levelMap[message.level] || 'log'
+        console.log(`[Preview ${level.toUpperCase()}]`, message.message, `(${message.sourceId}:${message.line})`)
+
+        // TODO: Feed to Claude for debugging loop
+        // You can add logic here to automatically send errors to Claude
+        // if (message.level === 2) { // Error level
+        //   window.electronAPI?.claude.sendPrompt(
+        //     currentProject.id,
+        //     `Frontend error detected: ${message.message} at ${message.sourceId}:${message.line}`,
+        //     'haiku',
+        //     [],
+        //     false,
+        //     false
+        //   )
+        // }
+      }
+    })
+
     // Cleanup on unmount or project change
     return () => {
       unsubStatusChanged?.()
       unsubOutput?.()
       unsubReady?.()
       unsubError?.()
+      unsubConsole?.()
 
       // Destroy terminal and Claude sessions when switching projects or unmounting
       if (currentProject) {
@@ -302,6 +328,45 @@ Please read the manifest to understand what my website is about, then create an 
       }
     }
   }, [currentProject?.id])
+
+  // Listen for Tab key from Electron (layout cycling)
+  useEffect(() => {
+    if (!currentProject?.id) return
+
+    const unsubscribe = window.electronAPI?.layout.onCycleRequested?.(() => {
+      console.log('⌨️  Tab pressed - cycling layout state')
+      window.electronAPI?.layout.cycleState(currentProject.id)
+    })
+
+    return unsubscribe
+  }, [currentProject?.id])
+
+  // NEW: Listen for layout state changes from Electron
+  useEffect(() => {
+    const unsubscribe = window.electronAPI?.layout.onStateChanged?.((newState, previousState, thumbnail) => {
+      console.log(`🎨 Layout state changed: ${previousState} → ${newState}`)
+      console.log('📸 Thumbnail received:', thumbnail ? `YES (${thumbnail.length} chars)` : 'NO')
+      useLayoutStore.getState().setLayoutState(newState)
+
+      // If thumbnail data is provided, update the store
+      if (thumbnail) {
+        console.log('📸 Setting thumbnail data in store')
+        useLayoutStore.getState().setThumbnailData(thumbnail)
+      } else {
+        console.log('⚠️ No thumbnail data received')
+      }
+    })
+
+    return unsubscribe
+  }, [])
+
+  // NEW: Set initial layout state to DEFAULT when project loads
+  useEffect(() => {
+    if (!currentProject?.id || !serverPort || serverStatus !== 'running') return
+
+    // Set to DEFAULT state on load
+    window.electronAPI?.layout.setState('DEFAULT', currentProject.id)
+  }, [currentProject?.id, serverPort, serverStatus])
 
   // Determine project name for header
   const getProjectName = () => {
@@ -473,8 +538,13 @@ Please read the manifest to understand what my website is about, then create an 
           </div>
         ) : viewMode === 'desktop' ? (
           // Desktop Mode: Browser frame with scaled preview
-          <DesktopPreviewFrame port={serverPort || undefined}>
-              {serverPort && serverStatus === 'running' ? (
+          <DesktopPreviewFrame
+            port={serverPort || undefined}
+            projectId={currentProject?.id}
+            useBrowserView={true}
+          >
+              {/* IFRAME FALLBACK (commented out - using BrowserView instead) */}
+              {/* {serverPort && serverStatus === 'running' ? (
                 <iframe
                   key={`${currentProject?.id}-${serverPort}`}
                   src={`http://localhost:${serverPort}`}
@@ -483,7 +553,8 @@ Please read the manifest to understand what my website is about, then create an 
                   onLoad={() => setPreviewReady(true)}
                   sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
                 />
-              ) : (
+              ) : ( */}
+              {!(serverPort && serverStatus === 'running') && (
                 <div className="w-full h-full bg-white flex items-center justify-center">
                   <div className="text-center px-4">
                     <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
@@ -529,13 +600,20 @@ Please read the manifest to understand what my website is about, then create an 
                   </div>
                 </div>
               )}
-            </DesktopPreviewFrame>
+              {/* )} END OF IFRAME FALLBACK COMMENT */}
+          </DesktopPreviewFrame>
         ) : (
           // Mobile Mode: Device frame with phone silhouette
           <div className="w-full h-full animate-fadeIn">
-            <DeviceFrame device={selectedDevice} orientation={orientation}>
-              {/* Preview content inside the device frame */}
-              {serverPort && serverStatus === 'running' ? (
+            <DeviceFrame
+              device={selectedDevice}
+              orientation={orientation}
+              projectId={currentProject?.id}
+              port={serverPort || undefined}
+              useBrowserView={true}
+            >
+              {/* IFRAME FALLBACK (commented out - using BrowserView instead) */}
+              {/* {serverPort && serverStatus === 'running' ? (
                 <iframe
                   key={`${currentProject?.id}-${serverPort}`}
                   src={`http://localhost:${serverPort}`}
@@ -543,7 +621,8 @@ Please read the manifest to understand what my website is about, then create an 
                   title="Mobile Preview"
                   sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
                 />
-              ) : (
+              ) : ( */}
+              {!(serverPort && serverStatus === 'running') && (
                 <div className="w-full h-full bg-white flex items-center justify-center">
                   <div className="text-center px-4">
                     <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
@@ -577,6 +656,7 @@ Please read the manifest to understand what my website is about, then create an 
                   </div>
                 </div>
               )}
+              {/* )} END OF IFRAME FALLBACK COMMENT */}
             </DeviceFrame>
           </div>
         )}

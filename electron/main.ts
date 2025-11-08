@@ -3,7 +3,7 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 // Now import everything else
-import { app, BrowserWindow, Menu, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, Menu, shell, ipcMain, globalShortcut } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
@@ -12,6 +12,7 @@ import { registerTemplateHandlers } from './handlers/templateHandlers.js'
 import { registerProjectHandlers } from './handlers/projectHandlers.js'
 import { registerProcessHandlers, setProcessHandlersWindow } from './handlers/processHandlers.js'
 import { registerPreviewHandlers, setPreviewHandlersWindow } from './handlers/previewHandlers.js'
+import { registerLayoutHandlers, setLayoutHandlersWindow } from './handlers/layoutHandlers.js'
 import { registerShellHandlers } from './handlers/shellHandlers.js'
 import { registerTerminalHandlers, setTerminalHandlersWindow } from './handlers/terminalHandlers.js'
 import { registerClaudeHandlers, setClaudeHandlersWindow } from './handlers/claudeHandlers.js'
@@ -19,8 +20,9 @@ import { registerChatHandlers, setChatHandlersWindow } from './handlers/chatHand
 import { registerSupportHandlers } from './handlers/supportHandlers.js'
 import { registerGitHandlers, setGitHandlersWindow } from './handlers/gitHandlers.js'
 import { registerSecureStorageHandlers } from './handlers/secureStorageHandlers.js'
-import { registerWebsiteImportHandlers } from './handlers/websiteImportHandlers.js'
+import { registerWebsiteImportHandlers} from './handlers/websiteImportHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
+import { layoutManager } from './services/LayoutManager.js'
 
 // Global state for current user
 let currentUserId: string | null = null
@@ -329,12 +331,14 @@ User: ${currentUserId || 'not logged in'}
     mainWindow = null
   })
 
-  // Set up PreviewService with main window
+  // Set up PreviewService and LayoutManager with main window
   previewService.setMainWindow(mainWindow)
+  layoutManager.setMainWindow(mainWindow)
 
   // Set up event forwarding windows
   setProcessHandlersWindow(mainWindow.webContents)
   setPreviewHandlersWindow(mainWindow.webContents)
+  setLayoutHandlersWindow(mainWindow.webContents)
   setTerminalHandlersWindow(mainWindow.webContents)
   setClaudeHandlersWindow(mainWindow.webContents)
   setChatHandlersWindow(mainWindow.webContents)
@@ -364,6 +368,7 @@ async function initializeApp() {
     registerProjectHandlers()
     registerProcessHandlers()
     registerPreviewHandlers()
+    registerLayoutHandlers()
     registerShellHandlers()
     registerTerminalHandlers()
     registerClaudeHandlers()
@@ -504,9 +509,28 @@ User: ${currentUserId || 'not logged in'}
   }
 })
 
-// Log when app is ready
+// Log when app is ready and register global shortcuts
 app.on('ready', () => {
   console.log('✅ Electron app ready')
+
+  // Register global Tab shortcut for layout cycling
+  const tabRegistered = globalShortcut.register('Tab', () => {
+    // Send IPC event to cycle layout (will be handled by renderer)
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('layout-cycle-requested')
+    }
+  })
+
+  if (tabRegistered) {
+    console.log('⌨️  Global Tab shortcut registered')
+  } else {
+    console.log('⚠️  Failed to register Tab shortcut')
+  }
+})
+
+// Unregister shortcuts when app is quitting
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })
 
 // IPC Handler to get crash logs

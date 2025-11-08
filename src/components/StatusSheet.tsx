@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X, Brain, Clock, Server, MessageCircle, ClipboardCheck } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
+import { useLayoutStore } from '../store/layoutStore'
 import { KeywordHighlight } from './KeywordHighlight'
 
 // Import workflow icons
@@ -97,7 +98,8 @@ function hasPlanWaitingApproval(block: ConversationBlock): boolean {
 }
 
 function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, questions, onApprovePlan, onRejectPlan, onAnswerQuestions }: StatusSheetProps) {
-  const { deploymentStatus } = useAppStore()
+  const { deploymentStatus, showStatusSheet, setShowStatusSheet } = useAppStore()
+  const { layoutState, thumbnailData, setThumbnailData } = useLayoutStore()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
   const [allBlocks, setAllBlocks] = useState<ConversationBlock[]>([])
@@ -795,49 +797,19 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   // Check if there's any conversation history
   const hasHistory = allBlocks.length > 0
 
-  // Delayed slide in animation - appears after action bar
-  useEffect(() => {
-    if (hasHistory) {
-      const timer = setTimeout(() => {
-        setIsVisible(true)
-      }, 600) // 600ms delay - appears after action bar animation (500ms)
-      return () => clearTimeout(timer)
-    }
-  }, [hasHistory])
-
-  // Use ResizeObserver to watch ActionBar height changes in real-time
-  useEffect(() => {
-    if (!actionBarRef?.current) return
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setActionBarHeight(entry.target.clientHeight)
-      }
-    })
-
-    resizeObserver.observe(actionBarRef.current)
-
-    // Set initial height
-    setActionBarHeight(actionBarRef.current.clientHeight)
-
-    return () => {
-      resizeObserver.disconnect()
-    }
-  }, [actionBarRef])
-
-  // Don't render if no history
-  if (!hasHistory) {
-    return null
-  }
-
-  const currentBlock = allBlocks[allBlocks.length - 1]
-  const latestMessage = currentBlock.type === 'conversation' && currentBlock.messages
+  // Calculate these values BEFORE early returns (must always execute in same order)
+  const currentBlock = hasHistory ? allBlocks[allBlocks.length - 1] : null
+  const latestMessage = currentBlock && currentBlock.type === 'conversation' && currentBlock.messages
     ? currentBlock.messages[currentBlock.messages.length - 1]
     : null
-  const isWorking = !currentBlock.isComplete
+  const isWorking = currentBlock ? !currentBlock.isComplete : false
 
   // Get display text and icon for collapsed state
   const getCollapsedState = () => {
+    if (!currentBlock) {
+      return { text: '', icon: null, needsAttention: false }
+    }
+
     // Check if Claude has questions that need answers (only show after block is complete)
     if (questions && questions.questions && questions.questions.length > 0 && currentBlock.isComplete) {
       return { text: 'Claude has questions for you - click to answer', icon: MessageCircle, needsAttention: true }
@@ -889,14 +861,89 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     return { text: latestMessage?.content || '', icon: null, needsAttention: false }
   }
 
+  // Thumbnail is now captured by LayoutManager before hiding the BrowserView
+  // and passed via the state-changed event (see ProjectView.tsx)
+
+  // Delayed slide in animation - appears after action bar (MUST be before return)
+  useEffect(() => {
+    if (hasHistory) {
+      const timer = setTimeout(() => {
+        setIsVisible(true)
+      }, 600) // 600ms delay - appears after action bar animation (500ms)
+      return () => clearTimeout(timer)
+    }
+  }, [hasHistory])
+
+  // Use ResizeObserver to watch ActionBar height changes in real-time (MUST be before return)
+  useEffect(() => {
+    if (!actionBarRef?.current) return
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setActionBarHeight(entry.target.clientHeight)
+      }
+    })
+
+    resizeObserver.observe(actionBarRef.current)
+
+    // Set initial height
+    setActionBarHeight(actionBarRef.current.clientHeight)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [actionBarRef])
+
+  // Auto-expand when entering STATUS_EXPANDED state
+  useEffect(() => {
+    if (layoutState === 'STATUS_EXPANDED') {
+      setIsExpanded(true)
+    }
+  }, [layoutState])
+
   // Calculate bottom position based on action bar height
   const baseOffset = -2 // Gap between action bar and status sheet
   const bottomPosition = isVisible
     ? (actionBarHeight > 0 ? actionBarHeight + baseOffset : 100)
     : (actionBarHeight > 0 ? actionBarHeight - 4 : 80)
 
+  const handleThumbnailClick = () => {
+    if (projectId) {
+      window.electronAPI?.layout.setState('DEFAULT', projectId)
+    }
+  }
+
+  // Render collapsed in DEFAULT/BROWSER_FULL (if has history), expanded in STATUS_EXPANDED
+  const shouldRenderCollapsed = (layoutState === 'DEFAULT' || layoutState === 'BROWSER_FULL') && hasHistory && !isExpanded
+  const shouldRenderExpanded = layoutState === 'STATUS_EXPANDED' && hasHistory
+
   return (
     <>
+      {(shouldRenderCollapsed || shouldRenderExpanded) && (
+        <>
+      {/* Thumbnail Preview - Top Left - Static screenshot for navigation (only in STATUS_EXPANDED) */}
+      {shouldRenderExpanded && thumbnailData && (
+        <div
+          className="fixed top-16 left-4 z-[98] cursor-pointer group"
+          onClick={handleThumbnailClick}
+          title="Click to return to default view"
+        >
+          <div className="relative">
+            <img
+              src={thumbnailData}
+              alt="Preview Thumbnail"
+              className="rounded-lg border-2 border-gray-700 shadow-2xl transition-all group-hover:border-primary group-hover:scale-105 select-none pointer-events-none"
+              style={{ width: '224px', height: '126px', objectFit: 'cover' }}
+              draggable={false}
+            />
+            {/* Overlay hint */}
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center pointer-events-none">
+              <span className="text-white text-sm font-medium">Return to Default View</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
         className={`fixed left-1/2 transform -translate-x-1/2 z-[99] pointer-events-none ${
           isVisible ? 'opacity-100' : 'opacity-0'
@@ -931,7 +978,19 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
           return (
             <div
               className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10"
-              onClick={() => setIsExpanded(true)}
+              onClick={() => {
+                // If in DEFAULT/BROWSER_FULL: transition to STATUS_EXPANDED
+                // If already in STATUS_EXPANDED: just expand in place
+                if (layoutState === 'DEFAULT' || layoutState === 'BROWSER_FULL') {
+                  if (projectId) {
+                    window.electronAPI?.layout.setState('STATUS_EXPANDED', projectId)
+                  }
+                } else {
+                  // Already in STATUS_EXPANDED, just expand
+                  setIsExpanded(true)
+                  setShowStatusSheet(true)
+                }
+              }}
             >
               {currentBlock.type === 'deployment' ? (
                 <>
@@ -977,7 +1036,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             {/* Collapsible header */}
             <div
               className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 px-3 transition-colors"
-              onClick={() => setIsExpanded(false)}
+              onClick={() => {
+                setIsExpanded(false)
+                setShowStatusSheet(false)
+              }}
             >
               <span className="text-xs font-medium text-gray-300">Workflow Activity</span>
               <button className="p-1">
@@ -2566,6 +2628,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
         `}</style>
       </div>
     </div>
+        </>
+      )}
     </>
   )
 }

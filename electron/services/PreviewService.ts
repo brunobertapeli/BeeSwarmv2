@@ -21,6 +21,8 @@ class PreviewService extends EventEmitter {
   private browserViews: Map<string, BrowserView> = new Map();
   private devToolsOpen: Map<string, boolean> = new Map();
   private mainWindow: BrowserWindow | null = null;
+  private hiddenBounds: Map<string, PreviewBounds> = new Map(); // Store bounds when hidden
+  private isHidden: Map<string, boolean> = new Map(); // Track visibility state
 
   /**
    * Set the main window reference
@@ -41,6 +43,10 @@ class PreviewService extends EventEmitter {
       throw new Error('Main window not set. Call setMainWindow first.');
     }
 
+    console.log(`🖼️  [PreviewService] Creating preview for ${projectId}`);
+    console.log(`🖼️  [PreviewService] Bounds:`, bounds);
+    console.log(`🖼️  [PreviewService] URL: ${url}`);
+
     // Destroy existing preview if any
     this.destroyPreview(projectId);
 
@@ -56,6 +62,7 @@ class PreviewService extends EventEmitter {
 
     // Set bounds
     view.setBounds(bounds);
+    console.log(`🖼️  [PreviewService] BrowserView bounds set to:`, view.getBounds());
 
     // Attach to main window
     this.mainWindow.setBrowserView(view);
@@ -66,6 +73,13 @@ class PreviewService extends EventEmitter {
     // Store reference
     this.browserViews.set(projectId, view);
     this.devToolsOpen.set(projectId, false);
+
+    // Disable tab-cycling in BrowserView (Tab key used for layout switching)
+    view.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'Tab' && input.type === 'keyDown') {
+        event.preventDefault();
+      }
+    });
 
     // Setup event handlers
     this.setupEventHandlers(projectId, view);
@@ -145,9 +159,21 @@ class PreviewService extends EventEmitter {
    */
   updateBounds(projectId: string, bounds: PreviewBounds): void {
     const view = this.browserViews.get(projectId);
-    if (!view) return;
+    if (!view) {
+      console.log(`🖼️  [PreviewService] Cannot update bounds - no view found for ${projectId}`);
+      return;
+    }
 
+    // Don't update bounds if view is hidden (off-screen)
+    if (this.isHidden.get(projectId)) {
+      console.log(`🖼️  [PreviewService] Skipping bounds update - view ${projectId} is hidden`);
+      return;
+    }
+
+    console.log(`🖼️  [PreviewService] Updating bounds for ${projectId}:`, bounds);
+    console.log(`🖼️  [PreviewService] Current bounds before update:`, view.getBounds());
     view.setBounds(bounds);
+    console.log(`🖼️  [PreviewService] BrowserView bounds updated to:`, view.getBounds());
     this.emit('preview-bounds-updated', projectId, bounds);
   }
 
@@ -255,6 +281,60 @@ class PreviewService extends EventEmitter {
    */
   isDevToolsOpen(projectId: string): boolean {
     return this.devToolsOpen.get(projectId) || false;
+  }
+
+  /**
+   * Hide a preview (move off-screen to avoid z-index issues with modals)
+   * @param projectId - Unique project identifier
+   */
+  hide(projectId: string): void {
+    const view = this.browserViews.get(projectId);
+    if (!view || this.isHidden.get(projectId)) return;
+
+    // Store current bounds
+    const currentBounds = view.getBounds();
+    this.hiddenBounds.set(projectId, currentBounds);
+
+    // Move off-screen (far to the right)
+    view.setBounds({
+      x: 99999,
+      y: 99999,
+      width: currentBounds.width,
+      height: currentBounds.height
+    });
+
+    this.isHidden.set(projectId, true);
+    this.emit('preview-hidden', projectId);
+  }
+
+  /**
+   * Show a previously hidden preview
+   * @param projectId - Unique project identifier
+   */
+  show(projectId: string): void {
+    const view = this.browserViews.get(projectId);
+    if (!view) return;
+
+    // If already visible, nothing to do
+    if (!this.isHidden.get(projectId)) {
+      console.log(`🖼️  [PreviewService] View ${projectId} already visible`);
+      return;
+    }
+
+    // Mark as visible (bounds will be set by subsequent updateBounds call)
+    this.isHidden.set(projectId, false);
+    this.hiddenBounds.delete(projectId);
+
+    console.log(`🖼️  [PreviewService] Showing view ${projectId} (bounds will be set separately)`);
+    this.emit('preview-shown', projectId);
+  }
+
+  /**
+   * Check if a preview is currently hidden
+   * @param projectId - Unique project identifier
+   */
+  isPreviewHidden(projectId: string): boolean {
+    return this.isHidden.get(projectId) || false;
   }
 }
 
