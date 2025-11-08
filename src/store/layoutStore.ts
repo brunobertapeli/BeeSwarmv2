@@ -15,6 +15,12 @@ interface LayoutStoreState {
   actionBarHeight: number;
   setActionBarHeight: (height: number) => void;
 
+  // Modal freeze state (for blur overlay)
+  modalFreezeActive: boolean;
+  modalFreezeImage: string | null;
+  setModalFreezeActive: (active: boolean) => void;
+  setModalFreezeImage: (image: string | null) => void;
+
   // Helper to check if in specific state
   isState: (state: LayoutState) => boolean;
 
@@ -36,6 +42,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   layoutState: 'DEFAULT', // Start in DEFAULT state
   thumbnailData: null,
   actionBarHeight: 110, // Default ActionBar height
+  modalFreezeActive: false,
+  modalFreezeImage: null,
 
   // Setters
   setLayoutState: (state) => set({ layoutState: state }),
@@ -45,6 +53,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
     // Notify Electron
     window.electronAPI?.layout.setActionBarHeight(height);
   },
+  setModalFreezeActive: (active) => set({ modalFreezeActive: active }),
+  setModalFreezeImage: (image) => set({ modalFreezeImage: image }),
 
   // Helpers
   isState: (state) => get().layoutState === state,

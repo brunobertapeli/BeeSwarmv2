@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { RotateCw, ExternalLink, Code2, Maximize2 } from 'lucide-react'
+import { RotateCw, ExternalLink, Code2 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
+import FrozenBackground from './FrozenBackground'
 
 interface DesktopPreviewFrameProps {
   children: React.ReactNode
@@ -138,12 +139,6 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
     }
   }
 
-  const handleFullView = () => {
-    if (projectId) {
-      window.electronAPI?.layout.setState('BROWSER_FULL', projectId)
-    }
-  }
-
   // Hide the frame UI in STATUS_EXPANDED state (only thumbnail shows in StatusSheet)
   if (layoutState === 'STATUS_EXPANDED') {
     return null
@@ -198,19 +193,6 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
               </button>
             )}
 
-            {/* Full View (goes to BROWSER_FULL state) */}
-            <button
-              onClick={handleFullView}
-              className={`w-7 h-7 rounded flex items-center justify-center transition-colors group ${
-                layoutState === 'BROWSER_FULL' ? 'bg-primary/20' : 'hover:bg-gray-700'
-              }`}
-              title="Full Screen Preview"
-            >
-              <Maximize2 size={13} className={`transition-colors ${
-                layoutState === 'BROWSER_FULL' ? 'text-primary' : 'text-gray-400 group-hover:text-gray-200'
-              }`} />
-            </button>
-
             {/* Open in Browser */}
             <button
               onClick={handleOpenInBrowser}
@@ -227,6 +209,9 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
           ref={contentAreaRef}
           className="flex-1 bg-white overflow-hidden relative"
         >
+          {/* Frozen background overlay - positioned exactly where BrowserView appears */}
+          <FrozenBackground />
+
           {/* BrowserView will be positioned here when useBrowserView=true */}
           {/* Iframe fallback (use useBrowserView=false to enable) */}
           {!useBrowserView && children}

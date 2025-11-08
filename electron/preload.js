@@ -308,6 +308,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getState: () => ipcRenderer.invoke('layout:get-state'),
     captureThumbnail: (projectId) => ipcRenderer.invoke('layout:capture-thumbnail', projectId),
     setActionBarHeight: (height) => ipcRenderer.invoke('layout:set-actionbar-height', height),
+    captureModalFreeze: (projectId) => ipcRenderer.invoke('layout:capture-modal-freeze', projectId),
+    getCachedModalFreeze: (projectId) => ipcRenderer.invoke('layout:get-cached-modal-freeze', projectId),
+    clearModalFreezeCache: (projectId) => ipcRenderer.invoke('layout:clear-modal-freeze-cache', projectId),
 
     // Layout event listeners
     onStateChanged: (callback) => {

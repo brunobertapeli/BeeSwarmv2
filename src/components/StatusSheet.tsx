@@ -894,10 +894,12 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     }
   }, [actionBarRef])
 
-  // Auto-expand when entering STATUS_EXPANDED state
+  // Auto-expand when entering STATUS_EXPANDED state, collapse when leaving
   useEffect(() => {
     if (layoutState === 'STATUS_EXPANDED') {
       setIsExpanded(true)
+    } else if (layoutState === 'DEFAULT') {
+      setIsExpanded(false)
     }
   }, [layoutState])
 

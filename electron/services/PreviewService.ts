@@ -203,7 +203,7 @@ class PreviewService extends EventEmitter {
       view.webContents.closeDevTools();
       this.devToolsOpen.set(projectId, false);
     } else {
-      view.webContents.openDevTools({ mode: 'detach' });
+      view.webContents.openDevTools({ mode: 'right' });
       this.devToolsOpen.set(projectId, true);
     }
 
@@ -321,11 +321,20 @@ class PreviewService extends EventEmitter {
       return;
     }
 
-    // Mark as visible (bounds will be set by subsequent updateBounds call)
+    // Restore previous bounds if available
+    const previousBounds = this.hiddenBounds.get(projectId);
+
+    // Mark as visible BEFORE setting bounds (so updateBounds doesn't skip)
     this.isHidden.set(projectId, false);
     this.hiddenBounds.delete(projectId);
 
-    console.log(`🖼️  [PreviewService] Showing view ${projectId} (bounds will be set separately)`);
+    if (previousBounds) {
+      console.log(`🖼️  [PreviewService] Restoring view ${projectId} with previous bounds:`, previousBounds);
+      view.setBounds(previousBounds);
+    } else {
+      console.log(`🖼️  [PreviewService] Showing view ${projectId} (bounds will be set separately)`);
+    }
+
     this.emit('preview-shown', projectId);
   }
 

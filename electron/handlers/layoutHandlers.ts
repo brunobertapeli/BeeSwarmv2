@@ -106,6 +106,60 @@ export function registerLayoutHandlers(): void {
     }
   });
 
+  // Capture for modal freeze
+  ipcMain.handle('layout:capture-modal-freeze', async (_event, projectId: string) => {
+    try {
+      console.log(`📸 Capturing modal freeze for project: ${projectId}`);
+      const freezeImage = await layoutManager.captureForModalFreeze(projectId);
+
+      return {
+        success: true,
+        freezeImage,
+      };
+    } catch (error) {
+      console.error('❌ Error capturing modal freeze:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to capture modal freeze',
+      };
+    }
+  });
+
+  // Get cached modal freeze
+  ipcMain.handle('layout:get-cached-modal-freeze', async (_event, projectId: string) => {
+    try {
+      const freezeImage = layoutManager.getCachedModalFreeze(projectId);
+
+      return {
+        success: true,
+        freezeImage,
+      };
+    } catch (error) {
+      console.error('❌ Error getting cached modal freeze:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get cached modal freeze',
+      };
+    }
+  });
+
+  // Clear modal freeze cache
+  ipcMain.handle('layout:clear-modal-freeze-cache', async (_event, projectId: string) => {
+    try {
+      layoutManager.clearModalFreezeCache(projectId);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error clearing modal freeze cache:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to clear modal freeze cache',
+      };
+    }
+  });
+
   // Setup event listeners to forward to renderer
   setupLayoutEventForwarding();
 }

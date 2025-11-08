@@ -31,6 +31,7 @@ class LayoutManager extends EventEmitter {
   private thumbnailSize = { width: 224, height: 126 }; // Thumbnail dimensions (30% smaller: 320*0.7, 180*0.7)
   private thumbnailPosition = { top: 64, left: 16 }; // Below header, left margin
   private thumbnailCache: Map<string, string> = new Map(); // Cache thumbnails per project
+  private modalFreezeCache: Map<string, string> = new Map(); // Cache full-size captures for modal freeze
 
   /**
    * Set the main window reference
@@ -93,12 +94,17 @@ class LayoutManager extends EventEmitter {
       // Emit with thumbnail data (use cached if capture failed)
       this.emit('state-changed', state, previousState, finalThumbnail);
     } else if (state === 'BROWSER_FULL' || state === 'DEFAULT') {
-      // Show full BrowserView with appropriate bounds
-      previewService.show(projectId);
-      previewService.updateBounds(projectId, bounds);
+      // Hide BrowserView briefly to avoid flash during transition
+      previewService.hide(projectId);
 
-      // Emit state change event to renderer
+      // Emit state change event to renderer first (so DOM can update)
       this.emit('state-changed', state, previousState);
+
+      // Wait for DOM to settle, then show with correct bounds
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Show BrowserView - bounds will be set by DesktopPreviewFrame
+      previewService.show(projectId);
     }
   }
 
@@ -219,6 +225,57 @@ class LayoutManager extends EventEmitter {
       size: this.thumbnailSize,
       position: this.thumbnailPosition,
     };
+  }
+
+  /**
+   * Capture full-size screenshot for modal freeze effect
+   */
+  async captureForModalFreeze(projectId: string): Promise<string | null> {
+    const preview = previewService.getPreview(projectId);
+    if (!preview) {
+      console.log('⚠️ No preview found for modal freeze capture');
+      return null;
+    }
+
+    try {
+      console.log('📸 Capturing full-size screenshot for modal freeze...');
+
+      // Ensure BrowserView is visible
+      const wasHidden = previewService.isPreviewHidden(projectId);
+      if (wasHidden) {
+        console.log('📸 BrowserView was hidden, showing temporarily for modal freeze capture...');
+        previewService.show(projectId);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      const image = await preview.webContents.capturePage();
+
+      // Return full-size as base64 data URL
+      const dataUrl = `data:image/png;base64,${image.toPNG().toString('base64')}`;
+
+      // Cache it for quick reuse
+      this.modalFreezeCache.set(projectId, dataUrl);
+
+      console.log('✅ Modal freeze capture successful, length:', dataUrl.length);
+      return dataUrl;
+    } catch (error) {
+      console.error('❌ Failed to capture for modal freeze:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get cached modal freeze image if available
+   */
+  getCachedModalFreeze(projectId: string): string | null {
+    return this.modalFreezeCache.get(projectId) || null;
+  }
+
+  /**
+   * Clear modal freeze cache for a project
+   */
+  clearModalFreezeCache(projectId: string): void {
+    this.modalFreezeCache.delete(projectId);
   }
 }
 

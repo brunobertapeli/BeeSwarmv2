@@ -71,8 +71,8 @@ function ActionBar({
   const { layoutState, isActionBarVisible } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
-  const [isHidden, setIsHidden] = useState(true)
-  const [isLocked, setIsLocked] = useState(true)
+  const [isHidden, setIsHidden] = useState(false) // Start visible (not hidden)
+  const [isLocked, setIsLocked] = useState(true) // Start pinned
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
   const [claudeContext, setClaudeContext] = useState<ClaudeContext | null>(null)
   const [availableModels, setAvailableModels] = useState<ClaudeModel[]>([])
@@ -125,7 +125,8 @@ function ActionBar({
     }
     if (autoPinned) {
       setIsLocked(true)
-      console.log('📌 [WEBSITE IMPORT] ActionBar auto-pinned')
+      setIsHidden(false) // Show the ActionBar when auto-pinned
+      console.log('📌 [WEBSITE IMPORT] ActionBar auto-pinned and shown')
     }
   }, [autoOpen, autoPinned])
 

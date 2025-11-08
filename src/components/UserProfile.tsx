@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
+import { useLayoutStore } from '../store/layoutStore'
 import { LogOut, Settings, CreditCard, User as UserIcon } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
 import bgImage from '../assets/images/bg.jpg'
 
 function UserProfile() {
-  const { user, logout } = useAppStore()
+  const { user, logout, currentProjectId } = useAppStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const toast = useToast()
@@ -21,6 +23,39 @@ function UserProfile() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Handle modal freeze when dropdown opens/closes
+  useEffect(() => {
+    const handleFreeze = async () => {
+      if (isDropdownOpen && currentProjectId) {
+        // If in STATUS_EXPANDED, use the existing thumbnail (BrowserView is already hidden)
+        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
+          console.log('📸 Using existing thumbnail for modal freeze (STATUS_EXPANDED)')
+          setModalFreezeImage(thumbnailData)
+          setModalFreezeActive(true)
+        } else {
+          // Otherwise, capture fresh image to match current layout state
+          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
+            // Hide BrowserView
+            await window.electronAPI?.preview.hide(currentProjectId)
+          }
+        }
+      } else {
+        // Unfreeze when dropdown closes
+        setModalFreezeActive(false)
+        // Show BrowserView again (only if not in STATUS_EXPANDED)
+        if (currentProjectId && layoutState !== 'STATUS_EXPANDED') {
+          await window.electronAPI?.preview.show(currentProjectId)
+        }
+      }
+    }
+
+    handleFreeze()
+  }, [isDropdownOpen, currentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
 
   if (!user) return null
 
@@ -104,7 +139,7 @@ function UserProfile() {
 
       {/* Dropdown Menu */}
       {isDropdownOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-dark-card border border-dark-border rounded-lg shadow-xl overflow-hidden z-50">
+        <div className="absolute right-0 mt-2 w-64 bg-dark-card border border-dark-border rounded-lg shadow-xl overflow-hidden z-[100]">
           {/* Background Image */}
           <div
             className="absolute inset-0 opacity-10 pointer-events-none"
