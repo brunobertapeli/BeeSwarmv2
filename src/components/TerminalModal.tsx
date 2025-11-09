@@ -3,6 +3,8 @@ import { X, Square, Trash2, Minimize2, Maximize2, Terminal as TerminalIcon, Copy
 import { Terminal } from 'xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import 'xterm/css/xterm.css'
+import { useAppStore } from '../store/appStore'
+import { useLayoutStore } from '../store/layoutStore'
 import bgImage from '../assets/images/bg.jpg'
 
 interface TerminalLine {
@@ -22,6 +24,8 @@ interface TerminalModalProps {
 }
 
 function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: TerminalModalProps) {
+  const { currentProjectId } = useAppStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
   const [isMaximized, setIsMaximized] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const [commandInput, setCommandInput] = useState('')
@@ -147,6 +151,38 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
       console.error('Failed to load terminal history:', error)
     }
   }
+
+  // Handle freeze frame when terminal opens/closes
+  useEffect(() => {
+    const activeProjectId = projectId || currentProjectId
+
+    const handleFreezeFrame = async () => {
+      if (isOpen && activeProjectId) {
+        // Opening terminal - activate freeze frame
+        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
+          // Use existing thumbnail when in STATUS_EXPANDED
+          setModalFreezeImage(thumbnailData)
+          setModalFreezeActive(true)
+        } else {
+          // Capture and freeze for other states
+          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
+            await window.electronAPI?.preview.hide(activeProjectId)
+          }
+        }
+      } else {
+        // Closing terminal - deactivate freeze frame
+        setModalFreezeActive(false)
+        if (activeProjectId && layoutState !== 'STATUS_EXPANDED') {
+          await window.electronAPI?.preview.show(activeProjectId)
+        }
+      }
+    }
+
+    handleFreezeFrame()
+  }, [isOpen, projectId, currentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
 
   // Initialize xterm.js terminal
   useEffect(() => {

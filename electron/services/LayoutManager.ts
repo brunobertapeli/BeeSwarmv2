@@ -28,16 +28,33 @@ class LayoutManager extends EventEmitter {
   private mainWindow: BrowserWindow | null = null;
   private actionBarHeight: number = 110; // Default ActionBar height
   private headerHeight: number = 48; // Top header height
-  private thumbnailSize = { width: 224, height: 126 }; // Thumbnail dimensions (30% smaller: 320*0.7, 180*0.7)
+  private desktopThumbnailSize = { width: 224, height: 126 }; // Desktop: landscape (16:9)
+  private mobileThumbnailSize = { width: 126, height: 224 }; // Mobile: portrait (9:16)
   private thumbnailPosition = { top: 64, left: 16 }; // Below header, left margin
   private thumbnailCache: Map<string, string> = new Map(); // Cache thumbnails per project
   private modalFreezeCache: Map<string, string> = new Map(); // Cache full-size captures for modal freeze
+  private currentViewMode: 'desktop' | 'mobile' = 'desktop'; // Track current view mode
 
   /**
    * Set the main window reference
    */
   setMainWindow(window: BrowserWindow): void {
     this.mainWindow = window;
+  }
+
+  /**
+   * Set current view mode (desktop/mobile)
+   */
+  setViewMode(viewMode: 'desktop' | 'mobile'): void {
+    console.log(`📱 View mode updated: ${this.currentViewMode} → ${viewMode}`);
+    const wasChanged = this.currentViewMode !== viewMode;
+    this.currentViewMode = viewMode;
+
+    // Clear thumbnail cache when view mode changes to force re-capture with new size
+    if (wasChanged) {
+      console.log(`🗑️ Clearing thumbnail cache due to view mode change`);
+      this.thumbnailCache.clear();
+    }
   }
 
   /**
@@ -154,12 +171,16 @@ class LayoutManager extends EventEmitter {
         };
 
       case 'STATUS_EXPANDED':
-        // Small thumbnail (top-left)
+        // Small thumbnail (top-left) - size depends on view mode
+        const thumbnailSize = this.currentViewMode === 'mobile'
+          ? this.mobileThumbnailSize
+          : this.desktopThumbnailSize;
+        console.log(`📐 STATUS_EXPANDED bounds: ${thumbnailSize.width}x${thumbnailSize.height} (${this.currentViewMode} mode)`);
         return {
           x: this.thumbnailPosition.left,
           y: this.thumbnailPosition.top,
-          width: this.thumbnailSize.width,
-          height: this.thumbnailSize.height,
+          width: thumbnailSize.width,
+          height: thumbnailSize.height,
         };
 
       case 'BROWSER_FULL':
@@ -203,10 +224,15 @@ class LayoutManager extends EventEmitter {
     if (!preview) return null;
 
     try {
+      console.log(`📸 Current view mode for thumbnail: ${this.currentViewMode}`);
       const image = await preview.webContents.capturePage();
+      const thumbnailSize = this.currentViewMode === 'mobile'
+        ? this.mobileThumbnailSize
+        : this.desktopThumbnailSize;
+      console.log(`📸 Thumbnail size selected: ${thumbnailSize.width}x${thumbnailSize.height} (${this.currentViewMode} mode)`);
       const resized = image.resize({
-        width: this.thumbnailSize.width,
-        height: this.thumbnailSize.height,
+        width: thumbnailSize.width,
+        height: thumbnailSize.height,
       });
 
       // Return as base64 data URL
@@ -221,8 +247,11 @@ class LayoutManager extends EventEmitter {
    * Get thumbnail size and position
    */
   getThumbnailInfo() {
+    const thumbnailSize = this.currentViewMode === 'mobile'
+      ? this.mobileThumbnailSize
+      : this.desktopThumbnailSize;
     return {
-      size: this.thumbnailSize,
+      size: thumbnailSize,
       position: this.thumbnailPosition,
     };
   }

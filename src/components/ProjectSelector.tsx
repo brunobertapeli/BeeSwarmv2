@@ -16,6 +16,7 @@ import TechIcon from './TechIcon'
 import { Project, Template } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 import { useAppStore } from '../store/appStore'
+import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 
 interface ProjectSelectorProps {
@@ -43,7 +44,8 @@ function ProjectSelector({
   onCreateProject,
   onProjectUpdated,
 }: ProjectSelectorProps) {
-  const { isAuthenticated } = useAppStore()
+  const { isAuthenticated, currentProjectId: appCurrentProjectId } = useAppStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
   const toast = useToast()
   const [projects, setProjects] = useState<ProjectWithMeta[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
@@ -68,6 +70,38 @@ function ProjectSelector({
     setActiveMenu(null)
     setMenuPosition(null)
   }
+
+  // Handle freeze frame when project selector opens/closes
+  useEffect(() => {
+    const activeProjectId = currentProjectId || appCurrentProjectId
+
+    const handleFreezeFrame = async () => {
+      if (isOpen && activeProjectId) {
+        // Opening project selector - activate freeze frame
+        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
+          // Use existing thumbnail when in STATUS_EXPANDED
+          setModalFreezeImage(thumbnailData)
+          setModalFreezeActive(true)
+        } else {
+          // Capture and freeze for other states
+          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
+            await window.electronAPI?.preview.hide(activeProjectId)
+          }
+        }
+      } else {
+        // Closing project selector - deactivate freeze frame
+        setModalFreezeActive(false)
+        if (activeProjectId && layoutState !== 'STATUS_EXPANDED') {
+          await window.electronAPI?.preview.show(activeProjectId)
+        }
+      }
+    }
+
+    handleFreezeFrame()
+  }, [isOpen, currentProjectId, appCurrentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
 
   // Fetch projects and templates from database
   useEffect(() => {

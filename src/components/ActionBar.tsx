@@ -635,9 +635,25 @@ function ActionBar({
     window.open(url, '_blank')
   }
 
-  const toggleViewMode = () => {
+  const toggleViewMode = async () => {
     const newMode = viewMode === 'desktop' ? 'mobile' : 'desktop'
     setViewMode(newMode)
+
+    // Notify LayoutManager about view mode change
+    await window.electronAPI?.layout.setViewMode(newMode)
+
+    // Clear thumbnail cache so next capture uses correct size
+    if (projectId) {
+      const { layoutState } = useLayoutStore.getState()
+      // If we're currently in thumbnail state, re-capture with new size
+      if (layoutState === 'STATUS_EXPANDED') {
+        await window.electronAPI?.layout.setState('DEFAULT', projectId)
+        setTimeout(async () => {
+          await window.electronAPI?.layout.setState('STATUS_EXPANDED', projectId)
+        }, 100)
+      }
+    }
+
     toast.info(
       `Switched to ${newMode} view`,
       'Preview mode updated'
@@ -1244,6 +1260,7 @@ function ActionBar({
             {/* Context Usage Bar */}
             <ContextBar
               context={claudeContext}
+              projectId={projectId}
               onClearContext={async () => {
                 if (!projectId) return
 
@@ -1274,7 +1291,12 @@ function ActionBar({
 
             <button
               onClick={toggleViewMode}
-              className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
+              disabled={layoutState === 'STATUS_EXPANDED'}
+              className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
+                layoutState === 'STATUS_EXPANDED'
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:bg-dark-bg/50'
+              }`}
             >
               {viewMode === 'desktop' ? (
                 <Monitor size={15} className="text-gray-400 hover:text-primary transition-colors" />

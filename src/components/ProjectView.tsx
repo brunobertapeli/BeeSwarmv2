@@ -95,6 +95,9 @@ function ProjectView() {
     }
 
     const applyDeviceEmulation = async () => {
+      // Sync view mode with LayoutManager
+      await window.electronAPI?.layout.setViewMode(viewMode)
+
       if (viewMode === 'mobile' && selectedDevice) {
         console.log('📱 Enabling device emulation:', selectedDevice)
         const result = await window.electronAPI?.preview.enableDeviceEmulation(currentProjectId, selectedDevice.name)
@@ -463,7 +466,7 @@ Please read the manifest to understand what my website is about, then create an 
   }
 
   return (
-    <div className="w-full h-screen relative flex flex-col pt-12 bg-gradient-to-br from-purple-950 via-blue-950 to-black">
+    <div className="w-full h-screen relative flex flex-col pt-12 bg-gradient-to-br from-zinc-950 via-neutral-900 to-black">
       {/* Project Header - Fixed */}
       <ProjectHeader
         projectName={getProjectName()}

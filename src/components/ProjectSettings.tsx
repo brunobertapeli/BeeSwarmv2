@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import type { TechConfig } from './TemplateSelector'
 import { useAppStore } from '../store/appStore'
+import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import bgImage from '../assets/images/bg.jpg'
 
@@ -46,7 +47,8 @@ function ProjectSettings({
   onSetupComplete,
   initialTab = 'general'
 }: ProjectSettingsProps) {
-  const { netlifyConnected, setNetlifyConnected } = useAppStore()
+  const { netlifyConnected, setNetlifyConnected, currentProjectId } = useAppStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
   const toast = useToast()
   const [editedName, setEditedName] = useState(projectName)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
@@ -63,6 +65,38 @@ function ProjectSettings({
       setActiveTab(initialTab)
     }
   }, [isOpen, initialTab])
+
+  // Handle freeze frame when settings opens/closes
+  useEffect(() => {
+    const activeProjectId = projectId || currentProjectId
+
+    const handleFreezeFrame = async () => {
+      if (isOpen && activeProjectId) {
+        // Opening settings - activate freeze frame
+        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
+          // Use existing thumbnail when in STATUS_EXPANDED
+          setModalFreezeImage(thumbnailData)
+          setModalFreezeActive(true)
+        } else {
+          // Capture and freeze for other states
+          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
+            await window.electronAPI?.preview.hide(activeProjectId)
+          }
+        }
+      } else {
+        // Closing settings - deactivate freeze frame
+        setModalFreezeActive(false)
+        if (activeProjectId && layoutState !== 'STATUS_EXPANDED') {
+          await window.electronAPI?.preview.show(activeProjectId)
+        }
+      }
+    }
+
+    handleFreezeFrame()
+  }, [isOpen, projectId, currentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
 
   // Calculate setup progress based on required keys
   const totalRequiredKeys = requiredTechConfigs.reduce((sum, tech) => sum + tech.apiKeys.length, 0)

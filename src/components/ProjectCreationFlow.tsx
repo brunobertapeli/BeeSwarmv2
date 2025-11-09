@@ -25,6 +25,7 @@ import { Template } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 import TechIcon from './TechIcon'
 import { useAppStore } from '../store/appStore'
+import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 
 type WizardStep = 'category' | 'templates' | 'details' | 'configure' | 'creating' | 'installing' | 'initializing' | 'complete' | 'error' | 'import-url' | 'import-design'
@@ -230,7 +231,8 @@ const getPlanLabel = (plan: 'free' | 'plus' | 'premium') => {
 const FORBIDDEN_IMPORT_CATEGORIES = ['Ecommerce']
 
 export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCreationFlowProps) {
-  const { user } = useAppStore()
+  const { user, currentProjectId } = useAppStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
   const toast = useToast()
   const [currentStep, setCurrentStep] = useState<WizardStep>('category')
   const [selectedCategory, setSelectedCategory] = useState<ProjectCategory | null>(null)
@@ -296,6 +298,36 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     if (!selectedTemplate || !user) return true
     return canAccessTemplate(user.plan, selectedTemplate.requiredPlan)
   }, [selectedTemplate, user])
+
+  // Handle freeze frame when project creation flow opens/closes
+  useEffect(() => {
+    const handleFreezeFrame = async () => {
+      if (isOpen && currentProjectId) {
+        // Opening project creation - activate freeze frame
+        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
+          // Use existing thumbnail when in STATUS_EXPANDED
+          setModalFreezeImage(thumbnailData)
+          setModalFreezeActive(true)
+        } else {
+          // Capture and freeze for other states
+          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
+            await window.electronAPI?.preview.hide(currentProjectId)
+          }
+        }
+      } else {
+        // Closing project creation - deactivate freeze frame
+        setModalFreezeActive(false)
+        if (currentProjectId && layoutState !== 'STATUS_EXPANDED') {
+          await window.electronAPI?.preview.show(currentProjectId)
+        }
+      }
+    }
+
+    handleFreezeFrame()
+  }, [isOpen, currentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
 
   // Refresh user session when modal opens
   useEffect(() => {

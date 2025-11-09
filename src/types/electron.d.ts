@@ -681,6 +681,10 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
+    setViewMode: (viewMode: 'desktop' | 'mobile') => Promise<{
+      success: boolean
+      error?: string
+    }>
     captureModalFreeze: (projectId: string) => Promise<{
       success: boolean
       freezeImage?: string

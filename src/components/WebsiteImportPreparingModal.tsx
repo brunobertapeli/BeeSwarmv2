@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { useAppStore } from '../store/appStore'
+import { useLayoutStore } from '../store/layoutStore'
 import bgImage from '../assets/images/bg.jpg'
 
 interface WebsiteImportPreparingModalProps {
@@ -14,8 +16,40 @@ const PHRASES = [
 ]
 
 export default function WebsiteImportPreparingModal({ show, importType }: WebsiteImportPreparingModalProps) {
+  const { currentProjectId } = useAppStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
   const [currentPhrase, setCurrentPhrase] = useState(0)
   const [progress, setProgress] = useState(0)
+
+  // Handle freeze frame when modal shows/hides
+  useEffect(() => {
+    const handleFreezeFrame = async () => {
+      if (show && currentProjectId) {
+        // Opening modal - activate freeze frame
+        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
+          // Use existing thumbnail when in STATUS_EXPANDED
+          setModalFreezeImage(thumbnailData)
+          setModalFreezeActive(true)
+        } else {
+          // Capture and freeze for other states
+          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
+            await window.electronAPI?.preview.hide(currentProjectId)
+          }
+        }
+      } else {
+        // Closing modal - deactivate freeze frame
+        setModalFreezeActive(false)
+        if (currentProjectId && layoutState !== 'STATUS_EXPANDED') {
+          await window.electronAPI?.preview.show(currentProjectId)
+        }
+      }
+    }
+
+    handleFreezeFrame()
+  }, [show, currentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
 
   useEffect(() => {
     if (!show) {

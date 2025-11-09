@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { RotateCw, ExternalLink, Code2 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import FrozenBackground from './FrozenBackground'
+import bgImage from '../assets/images/bg.jpg'
 
 interface DesktopPreviewFrameProps {
   children: React.ReactNode
@@ -148,7 +149,7 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
   const isFullscreen = layoutState === 'BROWSER_FULL'
 
   return (
-    <div className={`w-full h-full bg-gradient-to-br from-gray-900 via-gray-800 to-black ${
+    <div className={`w-full h-full ${
       isFullscreen ? '' : 'pb-40 flex items-center justify-center p-8 pt-0'
     }`}>
       {/* Scaled container in DEFAULT, fullscreen in BROWSER_FULL */}
@@ -158,9 +159,23 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
           : 'w-[90%] h-[90%] rounded-lg overflow-hidden shadow-2xl'
       }`} style={!isFullscreen ? { boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)' } : {}}>
         {/* Minimal top bar with controls */}
-        <div className="h-10 bg-gray-800/50 border-b border-gray-700/50 flex items-center px-3 gap-2 flex-shrink-0">
+        <div className="h-10 bg-gray-800/50 border-b border-gray-700/50 flex items-center px-3 gap-2 flex-shrink-0 relative overflow-hidden">
+          {/* Background image with low opacity */}
+          <div
+            className="absolute inset-0 opacity-10 pointer-events-none"
+            style={{
+              backgroundImage: `url(${bgImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+          {/* Browser label */}
+          <div className="text-[12px] text-gray-500 font-medium px-2 relative z-10">
+            CodeDeck Browser v.1.0
+          </div>
+
           {/* URL indicator */}
-          <div className="flex-1 bg-gray-900/50 rounded px-3 py-1.5 flex items-center gap-2">
+          <div className="flex-1 bg-gray-900/50 rounded px-3 py-1.5 flex items-center gap-2 relative z-10">
             <svg className="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
@@ -168,7 +183,7 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
           </div>
 
           {/* Controls */}
-          <div className="flex gap-1">
+          <div className="flex gap-1 relative z-10">
             {/* Refresh */}
             <button
               onClick={handleRefresh}

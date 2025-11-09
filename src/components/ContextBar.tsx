@@ -2,14 +2,19 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Trash2, Database, Info, X, AlertTriangle } from 'lucide-react'
 import type { ClaudeContext } from '../types/electron'
+import { useAppStore } from '../store/appStore'
+import { useLayoutStore } from '../store/layoutStore'
 import bgImage from '../assets/images/bg.jpg'
 
 interface ContextBarProps {
   context?: ClaudeContext | null
   onClearContext?: () => void
+  projectId?: string
 }
 
-function ContextBar({ context, onClearContext }: ContextBarProps) {
+function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
+  const { currentProjectId } = useAppStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
   const [showTooltip, setShowTooltip] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const tooltipRef = useRef<HTMLDivElement>(null)
@@ -29,6 +34,38 @@ function ContextBar({ context, onClearContext }: ContextBarProps) {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showTooltip])
+
+  // Handle freeze frame when tooltip opens/closes
+  useEffect(() => {
+    const activeProjectId = projectId || currentProjectId
+
+    const handleFreezeFrame = async () => {
+      if (showTooltip && activeProjectId) {
+        // Opening tooltip - activate freeze frame
+        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
+          // Use existing thumbnail when in STATUS_EXPANDED
+          setModalFreezeImage(thumbnailData)
+          setModalFreezeActive(true)
+        } else {
+          // Capture and freeze for other states
+          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
+            await window.electronAPI?.preview.hide(activeProjectId)
+          }
+        }
+      } else {
+        // Closing tooltip - deactivate freeze frame
+        setModalFreezeActive(false)
+        if (activeProjectId && layoutState !== 'STATUS_EXPANDED') {
+          await window.electronAPI?.preview.show(activeProjectId)
+        }
+      }
+    }
+
+    handleFreezeFrame()
+  }, [showTooltip, projectId, currentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
 
   const handleToggleTooltip = () => {
     setShowTooltip(!showTooltip)

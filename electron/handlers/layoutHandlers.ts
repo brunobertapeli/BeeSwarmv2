@@ -106,6 +106,23 @@ export function registerLayoutHandlers(): void {
     }
   });
 
+  // Set view mode (desktop/mobile)
+  ipcMain.handle('layout:set-view-mode', async (_event, viewMode: 'desktop' | 'mobile') => {
+    try {
+      layoutManager.setViewMode(viewMode);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error setting view mode:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to set view mode',
+      };
+    }
+  });
+
   // Capture for modal freeze
   ipcMain.handle('layout:capture-modal-freeze', async (_event, projectId: string) => {
     try {

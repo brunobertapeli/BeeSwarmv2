@@ -3,6 +3,7 @@ import { RotateCw, Code2 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
 import FrozenBackground from './FrozenBackground'
+import bgImage from '../assets/images/bg.jpg'
 
 interface MobilePreviewFrameProps {
   port?: number
@@ -155,7 +156,7 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   const calculatedHeight = calculatedWidth * aspectRatio
 
   return (
-    <div className={`w-full h-full bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center ${
+    <div className={`w-full h-full flex items-center justify-center ${
       isFullscreen ? 'pt-12 pb-8' : 'pb-40'
     }`}>
       {/* Mobile phone container - centered */}
@@ -168,14 +169,23 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
         }}
       >
         {/* Minimal top bar with controls */}
-        <div className="h-8 bg-gray-800/50 border-b border-gray-700/50 flex items-center px-2 gap-2 flex-shrink-0">
+        <div className="h-8 bg-gray-800/50 border-b border-gray-700/50 flex items-center px-2 gap-2 flex-shrink-0 relative overflow-hidden">
+          {/* Background image with low opacity */}
+          <div
+            className="absolute inset-0 opacity-10 pointer-events-none"
+            style={{
+              backgroundImage: `url(${bgImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
           {/* Device name indicator */}
-          <div className="flex-1 text-[10px] text-gray-400 font-medium px-2">
+          <div className="flex-1 text-[10px] text-gray-400 font-medium px-2 relative z-10">
             {selectedDevice?.name || 'Mobile'}
           </div>
 
           {/* Controls */}
-          <div className="flex gap-1">
+          <div className="flex gap-1 relative z-10">
             {/* Refresh */}
             <button
               onClick={handleRefresh}

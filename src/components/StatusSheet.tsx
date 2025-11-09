@@ -98,7 +98,7 @@ function hasPlanWaitingApproval(block: ConversationBlock): boolean {
 }
 
 function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, questions, onApprovePlan, onRejectPlan, onAnswerQuestions }: StatusSheetProps) {
-  const { deploymentStatus, showStatusSheet, setShowStatusSheet } = useAppStore()
+  const { deploymentStatus, showStatusSheet, setShowStatusSheet, viewMode } = useAppStore()
   const { layoutState, thumbnailData, setThumbnailData } = useLayoutStore()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
@@ -930,17 +930,26 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
           onClick={handleThumbnailClick}
           title="Click to return to default view"
         >
-          <div className="relative">
+          <div
+            className="relative rounded-lg border-2 border-gray-700 shadow-2xl transition-all group-hover:scale-105 overflow-hidden"
+            style={{
+              width: viewMode === 'mobile' ? '126px' : '224px',
+              height: viewMode === 'mobile' ? '224px' : '126px',
+            }}
+          >
             <img
               src={thumbnailData}
               alt="Preview Thumbnail"
-              className="rounded-lg border-2 border-gray-700 shadow-2xl transition-all group-hover:border-primary group-hover:scale-105 select-none pointer-events-none"
-              style={{ width: '224px', height: '126px', objectFit: 'cover' }}
+              className="w-full h-full select-none pointer-events-none"
+              style={{ objectFit: 'cover' }}
               draggable={false}
             />
             {/* Overlay hint */}
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center pointer-events-none">
-              <span className="text-white text-sm font-medium">Return to Default View</span>
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center pointer-events-none gap-2">
+              <span className="text-white text-sm font-medium">Return to Default</span>
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+              </svg>
             </div>
           </div>
         </div>
