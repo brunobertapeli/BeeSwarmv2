@@ -21,6 +21,7 @@ import { registerSupportHandlers } from './handlers/supportHandlers.js'
 import { registerGitHandlers, setGitHandlersWindow } from './handlers/gitHandlers.js'
 import { registerSecureStorageHandlers } from './handlers/secureStorageHandlers.js'
 import { registerWebsiteImportHandlers} from './handlers/websiteImportHandlers.js'
+import { registerClaudeMdHandlers } from './handlers/claudeMdHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { layoutManager } from './services/LayoutManager.js'
 
@@ -370,6 +371,7 @@ async function initializeApp() {
     registerPreviewHandlers()
     registerLayoutHandlers()
     registerShellHandlers()
+    registerClaudeMdHandlers()
     registerTerminalHandlers()
     registerClaudeHandlers()
     registerChatHandlers()

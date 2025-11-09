@@ -703,6 +703,22 @@ export interface ElectronAPI {
     onCycleRequested: (callback: () => void) => () => void
     onActionBarHeightChanged: (callback: (height: number) => void) => () => void
   }
+
+  claudeMd: {
+    getAddendum: (projectId: string) => Promise<{
+      success: boolean
+      addendum?: string
+      error?: string
+    }>
+    saveAddendum: (projectId: string, addendum: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    removeAddendum: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+  }
 }
 
 declare global {

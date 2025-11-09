@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Trash2, Database, Info, X, AlertTriangle } from 'lucide-react'
+import { Trash2, Database, Info, X, AlertTriangle, FileText } from 'lucide-react'
 import type { ClaudeContext } from '../types/electron'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
@@ -17,7 +17,33 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
   const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
   const [showTooltip, setShowTooltip] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [showAddendumModal, setShowAddendumModal] = useState(false)
+  const [addendumText, setAddendumText] = useState('')
+  const [isLoadingAddendum, setIsLoadingAddendum] = useState(false)
+  const [isSavingAddendum, setIsSavingAddendum] = useState(false)
   const tooltipRef = useRef<HTMLDivElement>(null)
+
+  // Load addendum when project changes
+  useEffect(() => {
+    const activeProjectId = projectId || currentProjectId
+    if (!activeProjectId) return
+
+    const loadAddendum = async () => {
+      try {
+        const result = await window.electronAPI?.claudeMd.getAddendum(activeProjectId)
+        if (result?.success && result.addendum) {
+          setAddendumText(result.addendum)
+        } else {
+          setAddendumText('') // Clear if no addendum
+        }
+      } catch (error) {
+        console.error('Failed to load addendum:', error)
+        setAddendumText('')
+      }
+    }
+
+    loadAddendum()
+  }, [projectId, currentProjectId])
 
   // Close tooltip when clicking outside
   useEffect(() => {
@@ -81,8 +107,64 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
     setShowTooltip(false)
   }
 
-  const cancelClearContext = () => {
+  const cancelClearContext = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
     setShowConfirmDialog(false)
+    setShowTooltip(false)
+  }
+
+  const handleOpenAddendum = async () => {
+    const activeProjectId = projectId || currentProjectId
+    if (!activeProjectId) return
+
+    setIsLoadingAddendum(true)
+    setShowAddendumModal(true)
+
+    try {
+      // Load existing addendum from CLAUDE.md
+      const result = await window.electronAPI?.claudeMd.getAddendum(activeProjectId)
+      if (result?.success && result.addendum) {
+        setAddendumText(result.addendum)
+      }
+    } catch (error) {
+      console.error('Failed to load addendum:', error)
+    } finally {
+      setIsLoadingAddendum(false)
+    }
+  }
+
+  const handleSaveAddendum = async () => {
+    const activeProjectId = projectId || currentProjectId
+    if (!activeProjectId) return
+
+    setIsSavingAddendum(true)
+
+    try {
+      // Save addendum to CLAUDE.md
+      const result = await window.electronAPI?.claudeMd.saveAddendum(activeProjectId, addendumText)
+      if (result?.success) {
+        console.log('✅ Addendum saved to CLAUDE.md')
+      } else {
+        console.error('Failed to save addendum:', result?.error)
+      }
+    } catch (error) {
+      console.error('Failed to save addendum:', error)
+    } finally {
+      setIsSavingAddendum(false)
+      setShowAddendumModal(false)
+      setShowTooltip(false)
+    }
+  }
+
+  const handleCancelAddendum = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    setShowAddendumModal(false)
     setShowTooltip(false)
   }
 
@@ -124,6 +206,14 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
     return 'from-primary to-green-600'
   }
 
+  // Estimate tokens from addendum text (rough estimate: ~4 chars per token)
+  const estimateTokens = (text: string): number => {
+    if (!text) return 0
+    return Math.ceil(text.length / 4)
+  }
+
+  const addendumTokens = estimateTokens(addendumText)
+
   return (
     <div ref={tooltipRef} className="relative flex items-center">
       {/* Compact Context Bar */}
@@ -164,18 +254,27 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
               }}
             />
 
-            {/* Header with Clear Button */}
+            {/* Header with Action Buttons */}
             <div className="mb-2 pb-2 border-b border-dark-border flex items-center justify-between gap-3 relative z-10">
               <p className="text-[11px] font-semibold text-gray-300">
                 {formatTokens(totalTokens)}/{formatTokens(contextWindow)} ({percentage}%)
               </p>
-              <button
-                onClick={handleClearContext}
-                className="p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group"
-                title="Clear context"
-              >
-                <Trash2 size={13} className="text-gray-400 group-hover:text-red-400 transition-colors" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleOpenAddendum}
+                  className="p-1.5 hover:bg-primary/10 rounded-lg transition-colors group"
+                  title="Context Addendum"
+                >
+                  <FileText size={13} className="text-gray-400 group-hover:text-primary transition-colors" />
+                </button>
+                <button
+                  onClick={handleClearContext}
+                  className="p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group"
+                  title="Clear context"
+                >
+                  <Trash2 size={13} className="text-gray-400 group-hover:text-red-400 transition-colors" />
+                </button>
+              </div>
             </div>
 
             {/* Baseline System Usage */}
@@ -215,6 +314,22 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
                 </span>
               </div>
             </div>
+
+            {/* Custom Addendum - only show if addendum exists */}
+            {addendumText && (
+              <div className="space-y-1.5 mb-2 pb-2 border-b border-dark-border/50 relative z-10">
+                <div className="text-[9px] text-gray-500 font-semibold uppercase tracking-wide mb-1">
+                  Custom
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+                  <span className="text-[10px] text-gray-400 flex-1">System prompt addendum:</span>
+                  <span className="text-[10px] text-gray-300 font-medium tabular-nums">
+                    {formatTokens(addendumTokens)}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Conversation Stats */}
             <div className="space-y-1.5 relative z-10">
@@ -287,7 +402,8 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999]"
-            onClick={cancelClearContext}
+            onClick={(e) => cancelClearContext(e)}
+            onMouseDown={(e) => e.stopPropagation()}
           />
 
           {/* Dialog */}
@@ -347,6 +463,94 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
                   className="flex-1 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-[12px] font-medium text-red-400 transition-colors"
                 >
                   Clear Context
+                </button>
+              </div>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+
+      {/* Context Addendum Modal - Use Portal to render at document body */}
+      {showAddendumModal && createPortal(
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999]"
+            onClick={(e) => handleCancelAddendum(e)}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
+
+          {/* Dialog */}
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+            <div className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[500px] overflow-hidden relative">
+              {/* Background Image */}
+              <div
+                className="absolute inset-0 opacity-10 pointer-events-none"
+                style={{
+                  backgroundImage: `url(${bgImage})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              />
+
+              {/* Header */}
+              <div className="flex items-start gap-3 mb-4 relative z-10">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <FileText size={20} className="text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-[15px] font-semibold text-white mb-1">
+                    Context Addendum
+                  </h3>
+                  <p className="text-[12px] text-gray-400 leading-relaxed">
+                    Add custom instructions to the system prompt
+                  </p>
+                </div>
+                <button
+                  onClick={handleCancelAddendum}
+                  className="p-1 hover:bg-dark-bg rounded transition-colors"
+                >
+                  <X size={16} className="text-gray-500" />
+                </button>
+              </div>
+
+              {/* Info Box */}
+              <div className="bg-dark-bg/50 border border-dark-border/50 rounded-lg p-3 mb-4 relative z-10">
+                <div className="flex items-start gap-2">
+                  <Info size={14} className="text-primary mt-0.5 flex-shrink-0" />
+                  <p className="text-[11px] text-gray-400 leading-relaxed">
+                    This adds an addendum on the bottom of the system prompt.
+                  </p>
+                </div>
+              </div>
+
+              {/* Textarea */}
+              <div className="mb-4 relative z-10">
+                <textarea
+                  value={addendumText}
+                  onChange={(e) => setAddendumText(e.target.value)}
+                  placeholder={isLoadingAddendum ? "Loading..." : "Enter your custom system prompt addendum..."}
+                  disabled={isLoadingAddendum || isSavingAddendum}
+                  className="w-full h-32 bg-dark-bg/50 border border-dark-border rounded-lg px-3 py-2 text-[12px] text-white placeholder-gray-500 outline-none focus:border-primary/50 transition-colors resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 relative z-10">
+                <button
+                  onClick={handleCancelAddendum}
+                  disabled={isSavingAddendum}
+                  className="flex-1 px-4 py-2 bg-dark-bg hover:bg-dark-bg/80 border border-dark-border rounded-lg text-[12px] font-medium text-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveAddendum}
+                  disabled={isSavingAddendum}
+                  className="flex-1 px-4 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-[12px] font-medium text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSavingAddendum ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </div>

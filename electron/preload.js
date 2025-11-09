@@ -331,5 +331,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('layout-actionbar-height-changed', listener)
       return () => ipcRenderer.removeListener('layout-actionbar-height-changed', listener)
     }
+  },
+
+  // CLAUDE.md management methods
+  claudeMd: {
+    getAddendum: (projectId) => ipcRenderer.invoke('claude-md:get-addendum', projectId),
+    saveAddendum: (projectId, addendum) => ipcRenderer.invoke('claude-md:save-addendum', projectId, addendum),
+    removeAddendum: (projectId) => ipcRenderer.invoke('claude-md:remove-addendum', projectId)
   }
 })
