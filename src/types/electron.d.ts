@@ -373,7 +373,7 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
-    toggleDevTools: (projectId: string) => Promise<{
+    toggleDevTools: (projectId: string, isMobile?: boolean, layoutState?: string) => Promise<{
       success: boolean
       error?: string
     }>
@@ -382,6 +382,22 @@ export interface ElectronAPI {
       error?: string
     }>
     destroy: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    hide: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    show: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    enableDeviceEmulation: (projectId: string, device: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    disableDeviceEmulation: (projectId: string) => Promise<{
       success: boolean
       error?: string
     }>
@@ -640,6 +656,48 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
+  }
+
+  layout: {
+    setState: (state: 'DEFAULT' | 'STATUS_EXPANDED' | 'BROWSER_FULL', projectId?: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    cycleState: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    getState: () => Promise<{
+      success: boolean
+      state?: 'DEFAULT' | 'STATUS_EXPANDED' | 'BROWSER_FULL'
+      error?: string
+    }>
+    captureThumbnail: (projectId: string) => Promise<{
+      success: boolean
+      thumbnail?: string
+      error?: string
+    }>
+    setActionBarHeight: (height: number) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    captureModalFreeze: (projectId: string) => Promise<{
+      success: boolean
+      freezeImage?: string
+      error?: string
+    }>
+    getCachedModalFreeze: (projectId: string) => Promise<{
+      success: boolean
+      freezeImage?: string
+      error?: string
+    }>
+    clearModalFreezeCache: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    onStateChanged: (callback: (newState: string, previousState: string, thumbnail: string | null) => void) => () => void
+    onCycleRequested: (callback: () => void) => () => void
+    onActionBarHeightChanged: (callback: (height: number) => void) => () => void
   }
 }
 

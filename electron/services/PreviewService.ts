@@ -20,6 +20,7 @@ export interface PreviewBounds {
 class PreviewService extends EventEmitter {
   private browserViews: Map<string, BrowserView> = new Map();
   private devToolsOpen: Map<string, boolean> = new Map();
+  private devToolsWindows: Map<string, BrowserWindow> = new Map(); // Track DevTools windows
   private mainWindow: BrowserWindow | null = null;
   private hiddenBounds: Map<string, PreviewBounds> = new Map(); // Store bounds when hidden
   private isHidden: Map<string, boolean> = new Map(); // Track visibility state
@@ -192,19 +193,79 @@ class PreviewService extends EventEmitter {
   /**
    * Toggle DevTools for the preview
    * @param projectId - Unique project identifier
+   * @param isMobile - Whether in mobile mode
+   * @param layoutState - Current layout state (DEFAULT, BROWSER_FULL, STATUS_EXPANDED)
    */
-  toggleDevTools(projectId: string): void {
+  toggleDevTools(projectId: string, isMobile?: boolean, layoutState?: string): void {
     const view = this.browserViews.get(projectId);
     if (!view) return;
 
     const isOpen = this.devToolsOpen.get(projectId) || false;
 
     if (isOpen) {
+      // Close DevTools
       view.webContents.closeDevTools();
       this.devToolsOpen.set(projectId, false);
+
+      // Clean up window reference
+      const devToolsWindow = this.devToolsWindows.get(projectId);
+      if (devToolsWindow && !devToolsWindow.isDestroyed()) {
+        devToolsWindow.close();
+      }
+      this.devToolsWindows.delete(projectId);
     } else {
-      view.webContents.openDevTools({ mode: 'right' });
+      // For mobile: detached window, for desktop: docked to right
+      const devToolsMode = isMobile ? 'detach' : 'right';
+      view.webContents.openDevTools({ mode: devToolsMode, activate: true });
       this.devToolsOpen.set(projectId, true);
+
+      // Only position if mobile (detached mode)
+      if (isMobile) {
+        // Position the DevTools window after it opens
+        view.webContents.once('devtools-opened', () => {
+          // Get all windows to find the DevTools window
+          const { BrowserWindow } = require('electron');
+          const allWindows = BrowserWindow.getAllWindows();
+
+          // The last window should be the DevTools window
+          const devToolsWindow = allWindows[allWindows.length - 1];
+
+          if (devToolsWindow && this.mainWindow) {
+            this.devToolsWindows.set(projectId, devToolsWindow);
+
+            // Get the current preview bounds
+            const bounds = view.getBounds();
+            const mainWindowBounds = this.mainWindow.getBounds();
+
+            console.log(`🔧 DevTools opened - Layout state: ${layoutState}`);
+            console.log(`🔧 Preview bounds:`, bounds);
+            console.log(`🔧 Main window bounds:`, mainWindowBounds);
+
+            // Listen for when DevTools window is closed
+            devToolsWindow.on('closed', () => {
+              console.log(`🔧 DevTools window closed for ${projectId}`);
+              this.devToolsOpen.set(projectId, false);
+              this.devToolsWindows.delete(projectId);
+              this.emit('preview-devtools-toggled', projectId, false);
+            });
+
+            // Position DevTools to the right of the mobile frame
+             if (layoutState === 'BROWSER_FULL') {
+               const devToolsWidth = 600; // Width for BROWSER_FULL state
+               const devToolsX = mainWindowBounds.x + bounds.x + bounds.width + 20; // 20px gap to the right
+               const devToolsY = mainWindowBounds.y + bounds.y + 10; // 10px down from preview top
+               const devToolsHeight = bounds.height; // Same height as preview
+               devToolsWindow.setBounds({ x: devToolsX, y: devToolsY, width: devToolsWidth, height: devToolsHeight });
+             } else { // DEFAULT state
+               const devToolsWidth = 500; // Width for DEFAULT state
+               const devToolsX = mainWindowBounds.x + bounds.x + bounds.width + 20; // 20px gap to the right
+               const devToolsY = mainWindowBounds.y + bounds.y - 30; // 30px up from preview top
+               const devToolsHeight = bounds.height; // Same height as preview
+               devToolsWindow.setBounds({ x: devToolsX, y: devToolsY, width: devToolsWidth, height: devToolsHeight });
+             }
+          }
+        });
+      }
     }
 
     this.emit('preview-devtools-toggled', projectId, !isOpen);
@@ -233,6 +294,12 @@ class PreviewService extends EventEmitter {
     // Close DevTools if open
     if (this.devToolsOpen.get(projectId)) {
       view.webContents.closeDevTools();
+
+      // Close DevTools window
+      const devToolsWindow = this.devToolsWindows.get(projectId);
+      if (devToolsWindow && !devToolsWindow.isDestroyed()) {
+        devToolsWindow.close();
+      }
     }
 
     // Remove from window
@@ -247,6 +314,7 @@ class PreviewService extends EventEmitter {
     // Clean up
     this.browserViews.delete(projectId);
     this.devToolsOpen.delete(projectId);
+    this.devToolsWindows.delete(projectId);
 
     this.emit('preview-destroyed', projectId);
   }
@@ -281,6 +349,41 @@ class PreviewService extends EventEmitter {
    */
   isDevToolsOpen(projectId: string): boolean {
     return this.devToolsOpen.get(projectId) || false;
+  }
+
+  /**
+   * Reposition DevTools window (for mobile mode when layout changes)
+   * @param projectId - Unique project identifier
+   * @param layoutState - New layout state
+   */
+  repositionDevTools(projectId: string, layoutState: string): void {
+    const devToolsWindow = this.devToolsWindows.get(projectId);
+    const view = this.browserViews.get(projectId);
+
+    if (!devToolsWindow || devToolsWindow.isDestroyed() || !view || !this.mainWindow) {
+      return;
+    }
+
+    const bounds = view.getBounds();
+    const mainWindowBounds = this.mainWindow.getBounds();
+
+    console.log(`🔧 Repositioning DevTools for layout state: ${layoutState}`);
+    console.log(`🔧 New preview bounds:`, bounds);
+
+    // TODO: Uncomment and adjust based on layoutState
+    // if (layoutState === 'BROWSER_FULL') {
+    //   const devToolsWidth = ???;
+    //   const devToolsX = ???;
+    //   const devToolsY = ???;
+    //   const devToolsHeight = ???;
+    //   devToolsWindow.setBounds({ x: devToolsX, y: devToolsY, width: devToolsWidth, height: devToolsHeight });
+    // } else { // DEFAULT
+    //   const devToolsWidth = ???;
+    //   const devToolsX = ???;
+    //   const devToolsY = ???;
+    //   const devToolsHeight = ???;
+    //   devToolsWindow.setBounds({ x: devToolsX, y: devToolsY, width: devToolsWidth, height: devToolsHeight });
+    // }
   }
 
   /**
@@ -344,6 +447,63 @@ class PreviewService extends EventEmitter {
    */
   isPreviewHidden(projectId: string): boolean {
     return this.isHidden.get(projectId) || false;
+  }
+
+  /**
+   * Enable device emulation (mobile view)
+   * @param projectId - Unique project identifier
+   * @param deviceName - Device name (matches display names from frontend)
+   */
+  enableDeviceEmulation(projectId: string, deviceName: string): void {
+    const view = this.browserViews.get(projectId);
+    if (!view) return;
+
+    // Map device names to metrics (supports various device names)
+    const deviceMetrics: Record<string, { width: number; height: number; deviceScaleFactor: number; mobile: boolean }> = {
+      // iPhone devices
+      'iPhone SE': { width: 375, height: 667, deviceScaleFactor: 2, mobile: true },
+      'iPhone 14 Pro': { width: 393, height: 852, deviceScaleFactor: 3, mobile: true },
+      'iPhone 14 Pro Max': { width: 430, height: 932, deviceScaleFactor: 3, mobile: true },
+      'iPhone 16': { width: 390, height: 844, deviceScaleFactor: 3, mobile: true },
+      'iPhone 16 Pro': { width: 393, height: 852, deviceScaleFactor: 3, mobile: true },
+
+      // Android devices
+      'Pixel 7': { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true },
+      'Google Pixel 8 Pro': { width: 412, height: 915, deviceScaleFactor: 2.625, mobile: true },
+      'Samsung Galaxy S23': { width: 360, height: 780, deviceScaleFactor: 3, mobile: true },
+      'Samsung Galaxy S22': { width: 360, height: 800, deviceScaleFactor: 3, mobile: true },
+      'Samsung S24 Ultra': { width: 384, height: 824, deviceScaleFactor: 3, mobile: true },
+
+      // Tablets
+      'iPad Air': { width: 820, height: 1180, deviceScaleFactor: 2, mobile: true },
+      'iPad Pro': { width: 1024, height: 1366, deviceScaleFactor: 2, mobile: true },
+    };
+
+    const metrics = deviceMetrics[deviceName];
+    if (metrics) {
+      view.webContents.enableDeviceEmulation({
+        screenPosition: 'mobile',
+        screenSize: { width: metrics.width, height: metrics.height },
+        viewSize: { width: metrics.width, height: metrics.height },
+        deviceScaleFactor: metrics.deviceScaleFactor,
+        scale: 1,
+      });
+      console.log(`📱 Device emulation enabled: ${deviceName}`);
+    } else {
+      console.warn(`⚠️ Unknown device: ${deviceName}, device emulation not enabled`);
+    }
+  }
+
+  /**
+   * Disable device emulation (back to desktop view)
+   * @param projectId - Unique project identifier
+   */
+  disableDeviceEmulation(projectId: string): void {
+    const view = this.browserViews.get(projectId);
+    if (!view) return;
+
+    view.webContents.disableDeviceEmulation();
+    console.log(`🖥️  Device emulation disabled (desktop view)`);
   }
 }
 

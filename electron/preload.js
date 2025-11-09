@@ -114,11 +114,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     create: (projectId, url, bounds) => ipcRenderer.invoke('preview:create', projectId, url, bounds),
     updateBounds: (projectId, bounds) => ipcRenderer.invoke('preview:update-bounds', projectId, bounds),
     refresh: (projectId) => ipcRenderer.invoke('preview:refresh', projectId),
-    toggleDevTools: (projectId) => ipcRenderer.invoke('preview:toggle-devtools', projectId),
+    toggleDevTools: (projectId, isMobile, layoutState) => ipcRenderer.invoke('preview:toggle-devtools', projectId, isMobile, layoutState),
     navigate: (projectId, url) => ipcRenderer.invoke('preview:navigate', projectId, url),
     destroy: (projectId) => ipcRenderer.invoke('preview:destroy', projectId),
     hide: (projectId) => ipcRenderer.invoke('preview:hide', projectId),
     show: (projectId) => ipcRenderer.invoke('preview:show', projectId),
+    enableDeviceEmulation: (projectId, device) => ipcRenderer.invoke('preview:enable-device-emulation', projectId, device),
+    disableDeviceEmulation: (projectId) => ipcRenderer.invoke('preview:disable-device-emulation', projectId),
 
     // Preview event listeners
     onCreated: (callback) => {

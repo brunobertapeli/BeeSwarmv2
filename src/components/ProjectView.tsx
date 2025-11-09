@@ -9,9 +9,8 @@ import ProjectSelector from './ProjectSelector'
 import { ProjectCreationFlow } from './ProjectCreationFlow'
 import ProjectSettings from './ProjectSettings'
 import TerminalModal from './TerminalModal'
-import DeviceFrame from './DeviceFrame'
 import DesktopPreviewFrame from './DesktopPreviewFrame'
-import DeviceSelector from './DeviceSelector'
+import MobilePreviewFrame from './MobilePreviewFrame'
 import HelpChat from './HelpChat'
 import WebsiteImportPreparingModal from './WebsiteImportPreparingModal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
@@ -38,8 +37,6 @@ function ProjectView() {
     viewMode,
     selectedDevice,
     setSelectedDevice,
-    orientation,
-    toggleOrientation,
   } = useAppStore()
 
   const toast = useToast()
@@ -89,6 +86,28 @@ function ProjectView() {
   }, [refreshKey, isAuthenticated])
 
   const currentProject = projects.find((p) => p.id === currentProjectId)
+
+  // Handle device emulation based on viewMode
+  useEffect(() => {
+    if (!currentProjectId) {
+      console.log('⚠️ No project ID for device emulation')
+      return
+    }
+
+    const applyDeviceEmulation = async () => {
+      if (viewMode === 'mobile' && selectedDevice) {
+        console.log('📱 Enabling device emulation:', selectedDevice)
+        const result = await window.electronAPI?.preview.enableDeviceEmulation(currentProjectId, selectedDevice.name)
+        console.log('📱 Device emulation result:', result)
+      } else if (viewMode === 'desktop') {
+        console.log('🖥️ Disabling device emulation')
+        const result = await window.electronAPI?.preview.disableDeviceEmulation(currentProjectId)
+        console.log('🖥️ Device emulation disable result:', result)
+      }
+    }
+
+    applyDeviceEmulation()
+  }, [viewMode, selectedDevice, currentProjectId])
 
   // Handle website import - show modal and auto-send prompt
   useEffect(() => {
@@ -443,14 +462,6 @@ Please read the manifest to understand what my website is about, then create an 
     setShowCreationFlow(false)
   }
 
-  const handleRefresh = () => {
-    // Trigger iframe reload by updating its src
-    const iframe = document.querySelector('iframe[title="Mobile Preview"]') as HTMLIFrameElement
-    if (iframe && iframe.src) {
-      iframe.src = iframe.src
-    }
-  }
-
   return (
     <div className="w-full h-screen relative flex flex-col pt-12 bg-gradient-to-br from-purple-950 via-blue-950 to-black">
       {/* Project Header - Fixed */}
@@ -536,24 +547,19 @@ Please read the manifest to understand what my website is about, then create an 
               </button>
             </div>
           </div>
-        ) : viewMode === 'desktop' ? (
-          // Desktop Mode: Browser frame with scaled preview
+        ) : viewMode === 'mobile' ? (
+          // Mobile Mode: Use MobilePreviewFrame with device emulation
+          <MobilePreviewFrame
+            port={serverPort || undefined}
+            projectId={currentProject?.id}
+          />
+        ) : (
+          // Desktop Mode: Use DesktopPreviewFrame
           <DesktopPreviewFrame
             port={serverPort || undefined}
             projectId={currentProject?.id}
             useBrowserView={true}
           >
-              {/* IFRAME FALLBACK (commented out - using BrowserView instead) */}
-              {/* {serverPort && serverStatus === 'running' ? (
-                <iframe
-                  key={`${currentProject?.id}-${serverPort}`}
-                  src={`http://localhost:${serverPort}`}
-                  className="w-full h-full border-0 bg-white"
-                  title="Desktop Preview"
-                  onLoad={() => setPreviewReady(true)}
-                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-                />
-              ) : ( */}
               {!(serverPort && serverStatus === 'running') && (
                 <div className="w-full h-full bg-white flex items-center justify-center">
                   <div className="text-center px-4">
@@ -602,75 +608,6 @@ Please read the manifest to understand what my website is about, then create an 
               )}
               {/* )} END OF IFRAME FALLBACK COMMENT */}
           </DesktopPreviewFrame>
-        ) : (
-          // Mobile Mode: Device frame with phone silhouette
-          <div className="w-full h-full animate-fadeIn">
-            <DeviceFrame
-              device={selectedDevice}
-              orientation={orientation}
-              projectId={currentProject?.id}
-              port={serverPort || undefined}
-              useBrowserView={true}
-            >
-              {/* IFRAME FALLBACK (commented out - using BrowserView instead) */}
-              {/* {serverPort && serverStatus === 'running' ? (
-                <iframe
-                  key={`${currentProject?.id}-${serverPort}`}
-                  src={`http://localhost:${serverPort}`}
-                  className="w-full h-full border-0 bg-white"
-                  title="Mobile Preview"
-                  sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-                />
-              ) : ( */}
-              {!(serverPort && serverStatus === 'running') && (
-                <div className="w-full h-full bg-white flex items-center justify-center">
-                  <div className="text-center px-4">
-                    <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
-                      <svg width="40" height="40" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M32 8L16 24L32 40L48 24L32 8Z" fill="url(#grad1)" opacity="0.9"/>
-                        <path d="M32 28L20 40L32 52L44 40L32 28Z" fill="url(#grad2)" opacity="0.7"/>
-                        <defs>
-                          <linearGradient id="grad1" x1="16" y1="8" x2="48" y2="40" gradientUnits="userSpaceOnUse">
-                            <stop stopColor="#10B981"/>
-                            <stop offset="1" stopColor="#059669"/>
-                          </linearGradient>
-                          <linearGradient id="grad2" x1="20" y1="28" x2="44" y2="52" gradientUnits="userSpaceOnUse">
-                            <stop stopColor="#10B981"/>
-                            <stop offset="1" stopColor="#8B5CF6"/>
-                          </linearGradient>
-                        </defs>
-                      </svg>
-                    </div>
-                    <h2 className="text-lg font-bold text-gray-900 mb-1">Your Project Preview</h2>
-                    <p className="text-sm text-gray-600">
-                      {serverStatus === 'starting' && 'Starting servers...'}
-                      {serverStatus === 'stopped' && 'Server stopped'}
-                      {serverStatus === 'error' && 'Error starting server'}
-                    </p>
-                    {serverStatus === 'starting' && (
-                      <div className="mt-4 flex items-center justify-center gap-2 text-xs text-gray-500">
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></div>
-                        <span>Loading...</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {/* )} END OF IFRAME FALLBACK COMMENT */}
-            </DeviceFrame>
-          </div>
-        )}
-
-        {/* Device Selector - Only for mobile mode */}
-        {viewMode === 'mobile' && (
-          <DeviceSelector
-            viewMode={viewMode}
-            selectedDevice={selectedDevice}
-            orientation={orientation}
-            onSelectDevice={setSelectedDevice}
-            onToggleOrientation={toggleOrientation}
-            onRefresh={handleRefresh}
-          />
         )}
       </div>
 

@@ -74,10 +74,10 @@ export function registerPreviewHandlers(): void {
   });
 
   // Toggle DevTools
-  ipcMain.handle('preview:toggle-devtools', async (_event, projectId: string) => {
+  ipcMain.handle('preview:toggle-devtools', async (_event, projectId: string, isMobile?: boolean, layoutState?: string) => {
     try {
-      console.log(`🔧 Toggling DevTools for project: ${projectId}`);
-      previewService.toggleDevTools(projectId);
+      console.log(`🔧 Toggling DevTools for project: ${projectId}, mobile: ${isMobile}, state: ${layoutState}`);
+      previewService.toggleDevTools(projectId, isMobile, layoutState);
 
       return {
         success: true,
@@ -159,6 +159,42 @@ export function registerPreviewHandlers(): void {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to show preview',
+      };
+    }
+  });
+
+  // Enable device emulation
+  ipcMain.handle('preview:enable-device-emulation', async (_event, projectId: string, device: string) => {
+    try {
+      console.log(`📱 Enabling device emulation for project: ${projectId}, device: ${device}`);
+      previewService.enableDeviceEmulation(projectId, device as any);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error enabling device emulation:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to enable device emulation',
+      };
+    }
+  });
+
+  // Disable device emulation
+  ipcMain.handle('preview:disable-device-emulation', async (_event, projectId: string) => {
+    try {
+      console.log(`🖥️  Disabling device emulation for project: ${projectId}`);
+      previewService.disableDeviceEmulation(projectId);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error disabling device emulation:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to disable device emulation',
       };
     }
   });

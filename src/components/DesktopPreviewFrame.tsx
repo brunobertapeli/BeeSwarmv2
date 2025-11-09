@@ -135,7 +135,7 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
 
   const handleToggleDevTools = () => {
     if (useBrowserView && projectId) {
-      window.electronAPI?.preview.toggleDevTools(projectId)
+      window.electronAPI?.preview.toggleDevTools(projectId, false, layoutState)
     }
   }
 
