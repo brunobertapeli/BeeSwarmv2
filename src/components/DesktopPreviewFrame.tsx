@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { RotateCw, ExternalLink, Code2 } from 'lucide-react'
+import { RotateCw, ExternalLink, Code2, Maximize2, Minimize2 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import FrozenBackground from './FrozenBackground'
 import bgImage from '../assets/images/bg.jpg'
@@ -140,6 +140,14 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
     }
   }
 
+  const handleToggleFullscreen = () => {
+    if (!projectId) return
+
+    // Toggle between BROWSER_FULL and DEFAULT
+    const targetState = layoutState === 'BROWSER_FULL' ? 'DEFAULT' : 'BROWSER_FULL'
+    window.electronAPI?.layout.setState(targetState, projectId)
+  }
+
   // Hide the frame UI in STATUS_EXPANDED state (only thumbnail shows in StatusSheet)
   if (layoutState === 'STATUS_EXPANDED') {
     return null
@@ -215,6 +223,21 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
               title="Open in Browser"
             >
               <ExternalLink size={13} className="text-gray-400 group-hover:text-gray-200 transition-colors" />
+            </button>
+
+            {/* Fullscreen Toggle */}
+            <button
+              onClick={handleToggleFullscreen}
+              className={`w-7 h-7 rounded flex items-center justify-center transition-colors group ${
+                isFullscreen ? 'bg-primary/20' : 'hover:bg-gray-700'
+              }`}
+              title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+            >
+              {isFullscreen ? (
+                <Minimize2 size={13} className="text-primary transition-colors" />
+              ) : (
+                <Maximize2 size={13} className="text-gray-400 group-hover:text-gray-200 transition-colors" />
+              )}
             </button>
           </div>
         </div>

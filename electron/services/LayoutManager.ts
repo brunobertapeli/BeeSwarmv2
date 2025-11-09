@@ -127,7 +127,8 @@ class LayoutManager extends EventEmitter {
 
   /**
    * Cycle to next state (for Tab key)
-   * DEFAULT → STATUS_EXPANDED → BROWSER_FULL → DEFAULT
+   * DEFAULT ↔ STATUS_EXPANDED (toggle between default and thumbnail)
+   * Note: BROWSER_FULL is only accessible via fullscreen icon, not Tab cycling
    */
   async cycleState(projectId: string): Promise<void> {
     let nextState: LayoutState;
@@ -137,9 +138,10 @@ class LayoutManager extends EventEmitter {
         nextState = 'STATUS_EXPANDED';
         break;
       case 'STATUS_EXPANDED':
-        nextState = 'BROWSER_FULL';
+        nextState = 'DEFAULT';
         break;
       case 'BROWSER_FULL':
+        // If somehow in BROWSER_FULL, go back to DEFAULT
         nextState = 'DEFAULT';
         break;
       default:
