@@ -509,11 +509,9 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     }
 
     try {
-      console.log(`🔄 Restoring to checkpoint ${block.commitHash}...`)
       const result = await window.electronAPI.git.restoreCheckpoint(projectId, block.commitHash)
 
       if (result.success) {
-        console.log(`✅ Successfully restored to checkpoint ${block.commitHash}`)
       } else {
         console.error(`❌ Failed to restore checkpoint: ${result.error}`)
       }
@@ -530,7 +528,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     window.electronAPI.keywords.getAll().then((result) => {
       if (result.success && result.keywords) {
         setKeywords(result.keywords)
-        console.log(`📚 Loaded ${Object.keys(result.keywords).length} keywords for tooltips`)
       }
     })
   }, [])

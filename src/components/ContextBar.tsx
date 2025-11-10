@@ -146,7 +146,6 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
       // Save addendum to CLAUDE.md
       const result = await window.electronAPI?.claudeMd.saveAddendum(activeProjectId, addendumText)
       if (result?.success) {
-        console.log('✅ Addendum saved to CLAUDE.md')
       } else {
         console.error('Failed to save addendum:', result?.error)
       }

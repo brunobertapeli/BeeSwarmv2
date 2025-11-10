@@ -30,7 +30,6 @@ function UserProfile() {
       if (isDropdownOpen && currentProjectId) {
         // If in STATUS_EXPANDED, use the existing thumbnail (BrowserView is already hidden)
         if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
-          console.log('📸 Using existing thumbnail for modal freeze (STATUS_EXPANDED)')
           setModalFreezeImage(thumbnailData)
           setModalFreezeActive(true)
         } else {

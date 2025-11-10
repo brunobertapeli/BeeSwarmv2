@@ -87,7 +87,6 @@ function ProjectView() {
   // Handle device emulation based on viewMode
   useEffect(() => {
     if (!currentProjectId) {
-      console.log('⚠️ No project ID for device emulation')
       return
     }
 
@@ -96,13 +95,9 @@ function ProjectView() {
       await window.electronAPI?.layout.setViewMode(viewMode)
 
       if (viewMode === 'mobile' && selectedDevice) {
-        console.log('📱 Enabling device emulation:', selectedDevice)
-        const result = await window.electronAPI?.preview.enableDeviceEmulation(currentProjectId, selectedDevice.name)
-        console.log('📱 Device emulation result:', result)
+        await window.electronAPI?.preview.enableDeviceEmulation(currentProjectId, selectedDevice.name)
       } else if (viewMode === 'desktop') {
-        console.log('🖥️ Disabling device emulation')
-        const result = await window.electronAPI?.preview.disableDeviceEmulation(currentProjectId)
-        console.log('🖥️ Device emulation disable result:', result)
+        await window.electronAPI?.preview.disableDeviceEmulation(currentProjectId)
       }
     }
 
@@ -114,9 +109,6 @@ function ProjectView() {
     // Only run when we detect a first-time website import
     // The .migration-completed flag (checked via isFirstOpen) ensures this only runs once
     if (websiteImport.isWebsiteImport && websiteImport.isFirstOpen && currentProjectId) {
-      console.log('⭐ [WEBSITE IMPORT] Detected first-time website import project:', currentProjectId)
-      console.log('⭐ [WEBSITE IMPORT] Import Type:', websiteImport.importType)
-
       // Generate the appropriate prompt based on import type
       let prompt = ''
       const manifestPath = '/website-import/manifest.json'
@@ -152,7 +144,6 @@ Please read the manifest to understand what my website is about, then create an 
           break
       }
 
-      console.log('⭐ [WEBSITE IMPORT] Generated prompt:', prompt)
       setWebsiteImportPrompt(prompt)
     }
 
@@ -164,11 +155,9 @@ Please read the manifest to understand what my website is about, then create an 
 
   // Handle marking migration as complete when auto-message is sent
   const handleWebsiteImportPromptSent = useCallback(async () => {
-    console.log('⭐ [WEBSITE IMPORT] Auto-message sent, marking migration as complete for:', currentProjectId)
     try {
       await websiteImport.markMigrationComplete()
       setWebsiteImportPrompt(undefined) // Clear the prompt so it doesn't send again
-      console.log('⭐ [WEBSITE IMPORT] Migration complete! Auto-prompt will not trigger again.')
     } catch (error) {
       console.error('⭐ [WEBSITE IMPORT] Failed to mark migration complete:', error)
     }
@@ -276,10 +265,6 @@ Please read the manifest to understand what my website is about, then create an 
     const unsubConsole = window.electronAPI?.preview.onConsole?.((projectId, message) => {
       if (projectId === currentProject.id) {
         // Log frontend console messages to our console
-        const levelMap = ['log', 'warn', 'error']
-        const level = levelMap[message.level] || 'log'
-        console.log(`[Preview ${level.toUpperCase()}]`, message.message, `(${message.sourceId}:${message.line})`)
-
         // TODO: Feed to Claude for debugging loop
         // You can add logic here to automatically send errors to Claude
         // if (message.level === 2) { // Error level
@@ -313,7 +298,6 @@ Please read the manifest to understand what my website is about, then create an 
     if (!currentProject?.id) return
 
     const unsubscribe = window.electronAPI?.layout.onCycleRequested?.(() => {
-      console.log('⌨️  Tab pressed - cycling layout state')
       window.electronAPI?.layout.cycleState(currentProject.id)
     })
 
@@ -323,16 +307,11 @@ Please read the manifest to understand what my website is about, then create an 
   // NEW: Listen for layout state changes from Electron
   useEffect(() => {
     const unsubscribe = window.electronAPI?.layout.onStateChanged?.((newState, previousState, thumbnail) => {
-      console.log(`🎨 Layout state changed: ${previousState} → ${newState}`)
-      console.log('📸 Thumbnail received:', thumbnail ? `YES (${thumbnail.length} chars)` : 'NO')
       useLayoutStore.getState().setLayoutState(newState)
 
       // If thumbnail data is provided, update the store
       if (thumbnail) {
-        console.log('📸 Setting thumbnail data in store')
         useLayoutStore.getState().setThumbnailData(thumbnail)
-      } else {
-        console.log('⚠️ No thumbnail data received')
       }
     })
 
@@ -413,7 +392,6 @@ Please read the manifest to understand what my website is about, then create an 
 
     // If we received the new project ID, switch to it immediately
     if (newProjectId) {
-      console.log('✅ [PROJECT CREATION] Switching to new project:', newProjectId)
       setCurrentProject(newProjectId)
     }
   }

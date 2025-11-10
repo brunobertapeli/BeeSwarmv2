@@ -130,7 +130,6 @@ function ActionBar({
     if (autoPinned) {
       setIsLocked(true)
       setIsHidden(false) // Show the ActionBar when auto-pinned
-      console.log('⭐ [WEBSITE IMPORT] ActionBar auto-pinned and shown')
     }
   }, [autoOpen, autoPinned])
 
@@ -165,7 +164,6 @@ function ActionBar({
         // Migration is now marked complete immediately when message is sent (see sendAutoMessage)
         // No need to mark it again here - just reset the ref for cleanup
         if (autoMessage && autoMessageSentRef.current) {
-          console.log('⭐ [WEBSITE IMPORT] Claude completed (migration already marked complete)')
           autoMessageSentRef.current = false
         }
       }
@@ -194,7 +192,6 @@ function ActionBar({
 
     const unsubQuestions = window.electronAPI.claude.onQuestions((id, questions) => {
       if (id === projectId) {
-        console.log('📋 [FRONTEND] Questions received from Claude:', questions)
         // TODO: Show questions in UI
       }
     })
@@ -276,7 +273,6 @@ function ActionBar({
   useEffect(() => {
     if (layoutState !== 'STATUS_EXPANDED' && kanbanEnabled) {
       setKanbanEnabled(false)
-      console.log('Kanban board hidden (layout state changed)')
     }
   }, [layoutState, kanbanEnabled])
 
@@ -324,7 +320,6 @@ function ActionBar({
     const unsubQuestions = window.electronAPI.claude.onQuestions((id, questionsData) => {
       if (id !== projectId) return
 
-      console.log('📋 [ACTION BAR] Questions received:', questionsData)
       setQuestions(questionsData)
       setQuestionAnswers({}) // Reset answers
       setCustomInputs({}) // Reset custom inputs
@@ -455,15 +450,6 @@ function ActionBar({
             }
           }
 
-          console.log('📎 [FRONTEND] Converting attachment:', {
-            name: att.name,
-            type: att.type,
-            claudeType,
-            mediaType,
-            detectedMediaType: dataUrlMatch?.[1],
-            base64Length: base64Data.length
-          })
-
           // Validation: catch type mismatches
           if (att.type === 'image' && claudeType !== 'image') {
             console.error('❌ [FRONTEND] BUG: Image typed as document!', { att, claudeType })
@@ -480,12 +466,6 @@ function ActionBar({
           }
         })
 
-        if (claudeAttachments.length > 0) {
-          console.log(`📎 [FRONTEND] Sending ${claudeAttachments.length} attachment(s) to Claude:`,
-            claudeAttachments.map(a => ({ name: a.name, type: a.type, mediaType: a.mediaType, dataLength: a.data.length }))
-          )
-        }
-
         // Create chat block first
         const blockResult = await window.electronAPI?.chat.createBlock(projectId, prompt)
 
@@ -495,16 +475,11 @@ function ActionBar({
           return
         }
 
-        console.log('✅ Chat block created:', blockResult.block.id)
-
         // Check if Claude session exists, if not start it with the prompt
         const statusResult = await window.electronAPI?.claude.getStatus(projectId)
 
         if (statusResult?.status === 'idle') {
           // Start session with the prompt and selected model (lazy initialization)
-          console.log('🔍 Starting new session with model:', selectedModel)
-          console.log('🧠 Thinking enabled:', thinkingEnabled)
-          console.log('📋 Plan mode enabled:', usePlanMode)
           const result = await window.electronAPI?.claude.startSession(
             projectId,
             prompt,
@@ -520,9 +495,6 @@ function ActionBar({
           }
         } else {
           // Send prompt to existing session with current selected model
-          console.log('🔍 Sending to existing session with model:', selectedModel)
-          console.log('🧠 Thinking enabled:', thinkingEnabled)
-          console.log('📋 Plan mode enabled:', usePlanMode)
           const result = await window.electronAPI?.claude.sendPrompt(
             projectId,
             prompt,
@@ -549,17 +521,12 @@ function ActionBar({
     // For website import, send when ready (idle or completed - both mean Claude is not currently working)
     const isClaudeReady = claudeStatus === 'idle' || claudeStatus === 'completed'
     if (autoMessage && projectId && !autoMessageSentRef.current && isClaudeReady && !isInputBlocked) {
-      console.log('⭐ [WEBSITE IMPORT] Ready to auto-send!')
-      console.log('⭐ [WEBSITE IMPORT] Message:', autoMessage)
-      console.log('⭐ [WEBSITE IMPORT] isInputBlocked:', isInputBlocked, 'claudeStatus:', claudeStatus)
-
       // Mark as sent to prevent re-sending
       autoMessageSentRef.current = true
 
       // Send directly without setting message in UI
       const sendAutoMessage = async () => {
         try {
-          console.log('⭐ [WEBSITE IMPORT] Creating chat block...')
           // Create chat block first
           const blockResult = await window.electronAPI?.chat.createBlock(projectId, autoMessage)
 
@@ -569,10 +536,7 @@ function ActionBar({
             return
           }
 
-          console.log('✅ Chat block created:', blockResult.block.id)
-
           // Start session with the prompt (always starts fresh for website import)
-          console.log('⭐ [WEBSITE IMPORT] Starting Claude session with model:', selectedModel)
           const result = await window.electronAPI?.claude.startSession(
             projectId,
             autoMessage,
@@ -582,22 +546,17 @@ function ActionBar({
             false // Not plan mode
           )
 
-          console.log('⭐ [WEBSITE IMPORT] Claude startSession result:', result)
-
           if (!result?.success) {
             console.error('⭐ [WEBSITE IMPORT] Failed to start Claude:', result?.error)
             toast.error('Failed to start Claude', result?.error || 'Unknown error')
             return
           }
 
-          console.log('⭐ [WEBSITE IMPORT] Auto-message sent successfully')
-
           // Mark migration as complete immediately after sending
           // This prevents race conditions where the user refreshes/switches projects
           // before Claude finishes (which could take 5+ minutes)
           // IMPORTANT: Await this to ensure the file is written before allowing any state changes
           if (onAutoMessageSent) {
-            console.log('⭐ [WEBSITE IMPORT] Marking migration as complete immediately after send')
             await onAutoMessageSent()
           }
         } catch (error) {
@@ -608,29 +567,22 @@ function ActionBar({
 
       // Only set timer if we don't already have one
       if (!autoMessageTimerRef.current) {
-        console.log('⭐ [WEBSITE IMPORT] Setting up auto-send timer (1.5s) for project:', projectId)
         const currentProjectId = projectId // Capture current project ID
         const currentAutoMessage = autoMessage // Capture current auto message
         autoMessageTimerRef.current = setTimeout(() => {
           // Verify we're still on the same project AND have the same auto message
           // This prevents sending if the user switched projects or if autoMessage was cleared
           if (currentProjectId === projectId && currentAutoMessage === autoMessage && autoMessage) {
-            console.log('⭐ [WEBSITE IMPORT] Timer triggered, calling sendAutoMessage for project:', projectId)
             sendAutoMessage()
-          } else {
-            console.log('⭐ [WEBSITE IMPORT] Context changed, skipping auto-send. Current:', { projectId, autoMessage }, 'Captured:', { currentProjectId, currentAutoMessage })
           }
           autoMessageTimerRef.current = null
         }, 1500)
       }
-    } else if (autoMessage && projectId && !autoMessageSentRef.current) {
-      console.log('⭐ [WEBSITE IMPORT] Waiting for ready state...', { claudeStatus, isInputBlocked })
     }
 
     // Cleanup: only clear timer if autoMessage is removed (project changed)
     return () => {
       if (!autoMessage && autoMessageTimerRef.current) {
-        console.log('⭐ [WEBSITE IMPORT] Project changed, clearing timer')
         clearTimeout(autoMessageTimerRef.current)
         autoMessageTimerRef.current = null
       }
@@ -652,7 +604,6 @@ function ActionBar({
         clearTimeout(autoMessageTimerRef.current)
         autoMessageTimerRef.current = null
       }
-      console.log('⭐ [WEBSITE IMPORT] Reset auto-send refs for project:', projectId)
     }
 
     // Update refs for next comparison
@@ -746,7 +697,6 @@ function ActionBar({
     if (layoutState !== 'STATUS_EXPANDED') return
 
     // TODO: Implement sticky note creation
-    console.log('Sticky note added')
     toast.info('Sticky Note Added', 'New sticky note created')
   }
 
@@ -756,7 +706,6 @@ function ActionBar({
 
     const newState = !kanbanEnabled
     setKanbanEnabled(newState)
-    console.log(newState ? 'Kanban board shown' : 'Kanban board hidden')
     toast.info(
       newState ? 'Kanban Enabled' : 'Kanban Disabled',
       newState ? 'Kanban board shown' : 'Kanban board hidden'
@@ -898,8 +847,6 @@ function ActionBar({
           onApprovePlan={async () => {
             if (!projectId) return
 
-            console.log('✅ User approved plan, proceeding with implementation')
-
             // Clear questions state
             setQuestions(null)
             setQuestionAnswers({})
@@ -917,8 +864,6 @@ function ActionBar({
                 return
               }
 
-              console.log('✅ Chat block created for plan approval:', blockResult.block.id)
-
               // Send approval to Claude with planMode=false to enable execution
               await window.electronAPI?.claude.sendPrompt(
                 projectId,
@@ -928,7 +873,6 @@ function ActionBar({
                 undefined, // thinking disabled
                 false // planMode=false - tells Claude to execute the plan
               )
-              console.log('📤 Sent plan approval to Claude - execution enabled')
             } catch (error) {
               console.error('Failed to send plan approval to Claude:', error)
             }
@@ -936,8 +880,6 @@ function ActionBar({
           onAnswerQuestions={async (answers, customData) => {
             if (isProcessingAnswers || !projectId) return
             setIsProcessingAnswers(true)
-
-            console.log('✅ User answered questions:', answers)
 
             // Format answers for Claude
             const questionsData = questions
@@ -975,8 +917,6 @@ function ActionBar({
                 return
               }
 
-              console.log('✅ Chat block created for answers:', blockResult.block.id)
-
               // Send answers to Claude (keep plan mode if toggle is active)
               await window.electronAPI?.claude.sendPrompt(
                 projectId,
@@ -986,7 +926,6 @@ function ActionBar({
                 undefined, // thinking disabled
                 planModeToggle // Keep plan mode if still active
               )
-              console.log('📤 Sent answers to Claude')
 
               // Clear questions
               setQuestions(null)

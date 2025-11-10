@@ -23,7 +23,6 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
     const createOrUpdatePreview = async () => {
       const rect = contentAreaRef.current?.getBoundingClientRect()
       if (!rect) {
-        console.log('📐 [DesktopPreviewFrame] No contentAreaRef rect available')
         return
       }
 
@@ -33,9 +32,6 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
         width: Math.round(rect.width),
         height: Math.round(rect.height)
       }
-
-      console.log('📐 [DesktopPreviewFrame] Creating BrowserView with bounds:', bounds)
-      console.log('📐 [DesktopPreviewFrame] layoutState:', layoutState)
 
       try {
         await window.electronAPI?.preview.create(
@@ -64,7 +60,6 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
 
     // Don't update bounds in STATUS_EXPANDED - LayoutManager handles thumbnail
     if (layoutState === 'STATUS_EXPANDED') {
-      console.log('📐 [DesktopPreviewFrame] Skipping bounds update - LayoutManager controls thumbnail in', layoutState)
       return
     }
 
@@ -78,9 +73,6 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
         width: Math.round(rect.width),
         height: Math.round(rect.height)
       }
-
-      console.log('📐 [DesktopPreviewFrame] Updating BrowserView bounds:', bounds)
-      console.log('📐 [DesktopPreviewFrame] Current layoutState:', layoutState)
 
       window.electronAPI?.preview.updateBounds(projectId, bounds)
     }
@@ -266,7 +258,6 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
         try {
           await window.electronAPI?.preview.injectCSS(projectId, css)
           await window.electronAPI?.preview.executeJavaScript(projectId, jsCode)
-          console.log('✅ Edit mode CSS and JS injected for desktop preview')
         } catch (error) {
           console.error('❌ Failed to inject edit mode CSS/JS:', error)
         }
@@ -281,7 +272,6 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
               delete window._editModeCleanup;
             }
           `)
-          console.log('✅ Edit mode CSS and JS removed for desktop preview')
         } catch (error) {
           // Silently ignore - preview might not exist yet during project switch
           if (!error.message?.includes('Preview not found')) {

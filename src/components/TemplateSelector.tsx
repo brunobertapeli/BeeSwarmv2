@@ -216,8 +216,6 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
               }
             }
           }
-
-          console.log('✅ Refreshed user session, plan:', result.user.plan)
         }
       } catch (err) {
         console.error('Error refreshing user session:', err)

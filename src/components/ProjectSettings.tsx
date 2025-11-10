@@ -123,7 +123,6 @@ function ProjectSettings({
   }
 
   const handleOpenInFinder = () => {
-    console.log('Open in Finder:', projectPath)
     // Will implement with Electron
   }
 
@@ -135,12 +134,10 @@ function ProjectSettings({
       setNetlifyConnected(true)
       toast.success('Netlify connected!', 'You can now deploy your project')
     }
-    console.log('Netlify OAuth toggle')
   }
 
   const handleDeleteProject = () => {
     if (deleteConfirmation === projectId) {
-      console.log('Deleting project:', projectId)
       toast.error('Project deleted', `${projectName} has been permanently removed`)
       setShowDeleteModal(false)
       onClose()
@@ -522,7 +519,6 @@ function ProjectSettings({
                   }
                 } else {
                   toast.success('Settings saved', 'Your changes have been applied')
-                  console.log('Save settings:', { projectName: editedName })
                   onClose()
                 }
               }}

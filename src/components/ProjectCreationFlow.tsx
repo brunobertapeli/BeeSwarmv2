@@ -409,7 +409,6 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
   // Cleanup handler - cleans up temp data and closes wizard
   const handleCancel = async () => {
     if (tempImportProjectId) {
-      console.log('🗑️ [WEBSITE IMPORT] Cleaning up on cancel:', tempImportProjectId)
       await window.electronAPI?.websiteImport.cleanup(tempImportProjectId)
     }
     onCancel()
@@ -483,7 +482,6 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
         // Step 5: Clean up temp folder if this was a website import
         if (tempImportProjectId) {
-          console.log('🗑️ [WEBSITE IMPORT] Cleaning up temp folder after success:', tempImportProjectId)
           await window.electronAPI?.websiteImport.cleanup(tempImportProjectId)
           setTempImportProjectId(null)
         }
@@ -614,8 +612,6 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     setFetchComplete(false)
 
     try {
-      console.log('🌐 [WEBSITE IMPORT] Starting analysis for:', normalizedUrl)
-
       // Stage 1: Fetching website (0-30%)
       setFetchProgress({ stage: 'fetching', message: 'Launching browser...', progress: 5 })
       await new Promise(resolve => setTimeout(resolve, 500))
@@ -658,10 +654,6 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
       const result = await analysisPromise
 
       if (result.success && result.tempProjectId) {
-        console.log('✅ [WEBSITE IMPORT] Analysis complete!')
-        console.log('📊 [WEBSITE IMPORT] Stats:', result.stats)
-        console.log('🆔 [WEBSITE IMPORT] Temp Project ID:', result.tempProjectId)
-
         // Store temp project ID for later use
         setTempImportProjectId(result.tempProjectId)
 
@@ -699,7 +691,6 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
     // Set flag to check user plan on next focus
     pendingUpgradeCheckRef.current = true
-    console.log('🔄 Upgrade initiated - will check plan on next focus')
 
     // Don't close the modal - user will stay on the page
   }
@@ -1778,25 +1769,15 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 {currentStep === 'import-design' && (
                   <button
                     onClick={async () => {
-                      console.log('🔙 [WEBSITE IMPORT] Back button clicked from import-design step')
-                      console.log('🔍 [WEBSITE IMPORT] tempImportProjectId:', tempImportProjectId)
-
                       // Clean up temp data when going back
                       if (tempImportProjectId) {
-                        console.log('🗑️ [WEBSITE IMPORT] Calling cleanup for:', tempImportProjectId)
-                        const result = await window.electronAPI?.websiteImport.cleanup(tempImportProjectId)
-                        console.log('✅ [WEBSITE IMPORT] Cleanup result:', result)
+                        await window.electronAPI?.websiteImport.cleanup(tempImportProjectId)
                         setTempImportProjectId(null)
-                        console.log('🧹 [WEBSITE IMPORT] Cleared tempImportProjectId state')
-                      } else {
-                        console.log('⚠️ [WEBSITE IMPORT] No tempImportProjectId found, skipping cleanup')
                       }
 
-                      console.log('🔄 [WEBSITE IMPORT] Resetting states...')
                       setFetchComplete(false)
                       setIsFetchingWebsite(false)
                       setCurrentStep('import-url')
-                      console.log('✅ [WEBSITE IMPORT] States reset, navigating back to import-url')
                     }}
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                   >

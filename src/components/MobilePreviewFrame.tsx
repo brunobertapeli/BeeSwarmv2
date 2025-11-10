@@ -23,7 +23,6 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
     const createOrUpdatePreview = async () => {
       const rect = contentAreaRef.current?.getBoundingClientRect()
       if (!rect) {
-        console.log('📐 [MobilePreviewFrame] No contentAreaRef rect available')
         return
       }
 
@@ -33,9 +32,6 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
         width: Math.round(rect.width),
         height: Math.round(rect.height)
       }
-
-      console.log('📐 [MobilePreviewFrame] Creating BrowserView with bounds:', bounds)
-      console.log('📐 [MobilePreviewFrame] layoutState:', layoutState)
 
       try {
         await window.electronAPI?.preview.create(
@@ -64,7 +60,6 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
 
     // Don't update bounds in STATUS_EXPANDED - LayoutManager handles thumbnail
     if (layoutState === 'STATUS_EXPANDED') {
-      console.log('📐 [MobilePreviewFrame] Skipping bounds update - LayoutManager controls thumbnail in', layoutState)
       return
     }
 
@@ -78,9 +73,6 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
         width: Math.round(rect.width),
         height: Math.round(rect.height)
       }
-
-      console.log('📐 [MobilePreviewFrame] Updating BrowserView bounds:', bounds)
-      console.log('📐 [MobilePreviewFrame] Current layoutState:', layoutState)
 
       window.electronAPI?.preview.updateBounds(projectId, bounds)
 
@@ -270,7 +262,6 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
         try {
           await window.electronAPI?.preview.injectCSS(projectId, css)
           await window.electronAPI?.preview.executeJavaScript(projectId, jsCode)
-          console.log('✅ Edit mode CSS and JS injected for mobile preview')
         } catch (error) {
           console.error('❌ Failed to inject edit mode CSS/JS:', error)
         }
@@ -285,7 +276,6 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
               delete window._editModeCleanup;
             }
           `)
-          console.log('✅ Edit mode CSS and JS removed for mobile preview')
         } catch (error) {
           // Silently ignore - preview might not exist yet during project switch
           if (!error.message?.includes('Preview not found')) {
