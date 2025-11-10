@@ -130,6 +130,59 @@ export function registerProcessHandlers(): void {
     }
   });
 
+  // Get health status
+  ipcMain.handle('process:get-health-status', async (_event, projectId: string) => {
+    try {
+      const healthStatus = processManager.getHealthStatus(projectId);
+
+      return {
+        success: true,
+        healthStatus: healthStatus || null,
+      };
+    } catch (error) {
+      console.error('❌ Error getting health status:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get health status',
+      };
+    }
+  });
+
+  // Trigger manual health check
+  ipcMain.handle('process:trigger-health-check', async (_event, projectId: string) => {
+    try {
+      const healthStatus = await processManager.triggerHealthCheck(projectId);
+
+      return {
+        success: true,
+        healthStatus: healthStatus || null,
+      };
+    } catch (error) {
+      console.error('❌ Error triggering health check:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to trigger health check',
+      };
+    }
+  });
+
+  // Set current project (to prevent stopping active project)
+  ipcMain.handle('process:set-current-project', async (_event, projectId: string | null) => {
+    try {
+      processManager.setCurrentProject(projectId);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error setting current project:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to set current project',
+      };
+    }
+  });
+
   // Setup event listeners to forward to renderer
   setupProcessEventForwarding();
 }
@@ -205,6 +258,20 @@ function setupProcessEventForwarding(): void {
   processManager.on('process-crashed', (projectId: string, details: any) => {
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
       mainWindowContents.send('process-crashed', projectId, details);
+    }
+  });
+
+  // Health check status changed
+  processManager.on('process-health-changed', (projectId: string, healthStatus: any) => {
+    if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+      mainWindowContents.send('process-health-changed', projectId, healthStatus);
+    }
+  });
+
+  // Health check critical (multiple failures)
+  processManager.on('process-health-critical', (projectId: string, healthStatus: any) => {
+    if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+      mainWindowContents.send('process-health-critical', projectId, healthStatus);
     }
   });
 }

@@ -24,6 +24,7 @@ import { registerWebsiteImportHandlers} from './handlers/websiteImportHandlers.j
 import { registerClaudeMdHandlers } from './handlers/claudeMdHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { layoutManager } from './services/LayoutManager.js'
+import { mongoService } from './services/MongoService.js'
 
 // Global state for current user
 let currentUserId: string | null = null
@@ -345,7 +346,13 @@ async function initializeApp() {
     // This must run before anything else to free ports and kill zombie processes
     await processPersistence.cleanupStaleProcesses()
 
-    // Note: Database will be initialized after user login
+    // Initialize MongoDB connection early to prevent race conditions
+    // This runs in background - failures are handled gracefully
+    mongoService.connect().catch(error => {
+      console.error('⚠️  MongoDB pre-connection failed (will retry on first use):', error)
+    })
+
+    // Note: Local database will be initialized after user login
     // See authHandlers.ts which calls setCurrentUser()
 
     // Initialize chat history manager (tracks Claude events)

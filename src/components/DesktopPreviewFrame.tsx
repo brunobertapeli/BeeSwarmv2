@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { RotateCw, ExternalLink, Code2, Maximize2, Minimize2 } from 'lucide-react'
+import { RotateCw, ExternalLink, Code2, Maximize2, Minimize2, Activity } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import FrozenBackground from './FrozenBackground'
+import HealthStatusModal from './HealthStatusModal'
+import { HealthCheckStatus } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 
 interface DesktopPreviewFrameProps {
@@ -13,7 +15,11 @@ interface DesktopPreviewFrameProps {
 
 function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true }: DesktopPreviewFrameProps) {
   const [devToolsOpen, setDevToolsOpen] = useState(false)
+  const [healthStatus, setHealthStatus] = useState<HealthCheckStatus | null>(null)
+  const [showHealthModal, setShowHealthModal] = useState(false)
+  const [previewFailed, setPreviewFailed] = useState(false)
   const contentAreaRef = useRef<HTMLDivElement>(null)
+  const healthButtonRef = useRef<HTMLButtonElement>(null)
   const { layoutState, editModeEnabled } = useLayoutStore()
 
   // Create/Update BrowserView when using BrowserView mode
@@ -21,27 +27,45 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
     if (!useBrowserView || !projectId || !port) return
 
     const createOrUpdatePreview = async () => {
-      const rect = contentAreaRef.current?.getBoundingClientRect()
-      if (!rect) {
-        return
+      const maxRetries = 3
+      const retryDelay = 100
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const rect = contentAreaRef.current?.getBoundingClientRect()
+
+        if (rect) {
+          // Bounds available - create preview
+          const bounds = {
+            x: Math.round(rect.left),
+            y: Math.round(rect.top),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height)
+          }
+
+          try {
+            await window.electronAPI?.preview.create(
+              projectId,
+              `http://localhost:${port}`,
+              bounds
+            )
+            setPreviewFailed(false)
+            return // Success!
+          } catch (error) {
+            console.error('Failed to create desktop preview:', error)
+            setPreviewFailed(true)
+            return
+          }
+        }
+
+        // Bounds not ready - wait and retry
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay * (attempt + 1)))
+        }
       }
 
-      const bounds = {
-        x: Math.round(rect.left),
-        y: Math.round(rect.top),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height)
-      }
-
-      try {
-        await window.electronAPI?.preview.create(
-          projectId,
-          `http://localhost:${port}`,
-          bounds
-        )
-      } catch (error) {
-        console.error('Failed to create desktop preview:', error)
-      }
+      // All retries failed - bounds never became available
+      console.error('Failed to get DOM bounds after 3 retries')
+      setPreviewFailed(true)
     }
 
     const timer = setTimeout(createOrUpdatePreview, 100)
@@ -108,6 +132,90 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
 
     return unsubscribe
   }, [useBrowserView, projectId])
+
+  // Listen for health check events and fetch initial status
+  useEffect(() => {
+    if (!projectId) return
+
+    // Fetch initial health status
+    const fetchHealthStatus = async () => {
+      try {
+        const result = await window.electronAPI?.process.getHealthStatus(projectId)
+        if (result?.success && result.healthStatus) {
+          setHealthStatus(result.healthStatus)
+        }
+      } catch (error) {
+        console.error('Failed to fetch health status:', error)
+      }
+    }
+
+    fetchHealthStatus()
+
+    // Listen for health status updates
+    const unsubscribeHealthChanged = window.electronAPI?.process.onHealthChanged?.((pid, status) => {
+      if (pid === projectId) {
+        setHealthStatus(status)
+      }
+    })
+
+    const unsubscribeHealthCritical = window.electronAPI?.process.onHealthCritical?.((pid, status) => {
+      if (pid === projectId) {
+        setHealthStatus(status)
+      }
+    })
+
+    return () => {
+      unsubscribeHealthChanged?.()
+      unsubscribeHealthCritical?.()
+    }
+  }, [projectId])
+
+  // Close health modal when clicking outside
+  useEffect(() => {
+    if (!showHealthModal) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        healthButtonRef.current &&
+        !healthButtonRef.current.contains(event.target as Node) &&
+        !(event.target as HTMLElement).closest('.health-modal')
+      ) {
+        setShowHealthModal(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showHealthModal])
+
+  // Freeze browser when health modal opens
+  useEffect(() => {
+    const handleFreeze = async () => {
+      if (showHealthModal && projectId) {
+        // Capture and freeze the browser
+        const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
+        if (result?.success && result.freezeImage) {
+          useLayoutStore.setState({
+            modalFreezeImage: result.freezeImage,
+            modalFreezeActive: true
+          })
+          // Hide BrowserView to prevent z-index issues
+          await window.electronAPI?.preview.hide(projectId)
+        }
+      } else {
+        // Unfreeze when modal closes
+        useLayoutStore.setState({ modalFreezeActive: false })
+        // Show BrowserView again (unless in STATUS_EXPANDED state)
+        if (projectId && layoutState !== 'STATUS_EXPANDED') {
+          await window.electronAPI?.preview.show(projectId)
+        }
+      }
+    }
+
+    handleFreeze()
+  }, [showHealthModal, projectId, layoutState])
 
   // Inject CSS for edit mode highlighting
   useEffect(() => {
@@ -256,6 +364,14 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
         `
 
         try {
+          // Wait for preview to be created before injecting (max 5 seconds)
+          const previewExists = await window.electronAPI?.preview.waitForPreview(projectId, 5000)
+
+          if (!previewExists?.exists) {
+            console.warn('⚠️ Preview not ready for edit mode injection, skipping')
+            return
+          }
+
           await window.electronAPI?.preview.injectCSS(projectId, css)
           await window.electronAPI?.preview.executeJavaScript(projectId, jsCode)
         } catch (error) {
@@ -265,6 +381,13 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
         // Remove CSS and event listeners when edit mode is disabled
         // Only if preview exists (avoid race condition during project switch)
         try {
+          // Check if preview exists before attempting removal
+          const hasPreview = await window.electronAPI?.preview.hasPreview(projectId)
+
+          if (!hasPreview?.exists) {
+            return // Preview doesn't exist, nothing to remove
+          }
+
           await window.electronAPI?.preview.removeCSS(projectId)
           await window.electronAPI?.preview.executeJavaScript(projectId, `
             if (window._editModeCleanup) {
@@ -315,6 +438,55 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
     window.electronAPI?.layout.setState(targetState, projectId)
   }
 
+  const handleHealthIndicatorClick = () => {
+    setShowHealthModal(!showHealthModal)
+  }
+
+  const handleRestartServer = async () => {
+    if (!projectId) return
+
+    setShowHealthModal(false)
+
+    try {
+      await window.electronAPI?.process.restartDevServer(projectId)
+    } catch (error) {
+      console.error('Failed to restart server:', error)
+    }
+  }
+
+  const handleRetryPreview = async () => {
+    if (!projectId || !port) return
+
+    setPreviewFailed(false)
+
+    // Retry preview creation
+    const rect = contentAreaRef.current?.getBoundingClientRect()
+    if (!rect) {
+      console.error('Cannot retry - DOM bounds still unavailable')
+      setPreviewFailed(true)
+      return
+    }
+
+    const bounds = {
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    }
+
+    try {
+      await window.electronAPI?.preview.create(
+        projectId,
+        `http://localhost:${port}`,
+        bounds
+      )
+      setPreviewFailed(false)
+    } catch (error) {
+      console.error('Failed to retry preview creation:', error)
+      setPreviewFailed(true)
+    }
+  }
+
   // Hide the frame UI in STATUS_EXPANDED state (only thumbnail shows in StatusSheet)
   if (layoutState === 'STATUS_EXPANDED') {
     return null
@@ -324,15 +496,16 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
   const isFullscreen = layoutState === 'BROWSER_FULL'
 
   return (
-    <div className={`w-full h-full ${
-      isFullscreen ? '' : 'pb-40 flex items-center justify-center p-8 pt-0'
-    }`}>
-      {/* Scaled container in DEFAULT, fullscreen in BROWSER_FULL */}
-      <div className={`flex flex-col ${
-        isFullscreen
-          ? 'w-full h-full'
-          : 'w-[90%] h-[90%] rounded-lg overflow-hidden shadow-2xl'
-      }`} style={!isFullscreen ? { boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)' } : {}}>
+    <>
+      <div className={`w-full h-full ${
+        isFullscreen ? '' : 'pb-40 flex items-center justify-center p-8 pt-0'
+      }`}>
+        {/* Scaled container in DEFAULT, fullscreen in BROWSER_FULL */}
+        <div className={`flex flex-col ${
+          isFullscreen
+            ? 'w-full h-full'
+            : 'w-[90%] h-[90%] rounded-lg overflow-hidden shadow-2xl'
+        }`} style={!isFullscreen ? { boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)' } : {}}>
         {/* Minimal top bar with controls */}
         <div className="h-10 bg-gray-800/50 border-b border-gray-700/50 flex items-center px-3 gap-2 flex-shrink-0 relative overflow-hidden">
           {/* Background image with low opacity */}
@@ -392,6 +565,27 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
               <ExternalLink size={13} className="text-gray-400 group-hover:text-gray-200 transition-colors" />
             </button>
 
+            {/* Health Status Indicator */}
+            {useBrowserView && projectId && (
+              <button
+                ref={healthButtonRef}
+                onClick={handleHealthIndicatorClick}
+                className={`w-7 h-7 rounded flex items-center justify-center transition-colors group ${
+                  healthStatus?.healthy === false ? 'bg-red-500/20' : 'hover:bg-gray-700'
+                }`}
+                title={healthStatus?.healthy === false ? 'Server Unhealthy' : 'Server Healthy'}
+              >
+                <Activity
+                  size={13}
+                  className={`transition-colors ${
+                    healthStatus?.healthy === false
+                      ? 'text-red-400'
+                      : 'text-green-400 group-hover:text-green-300'
+                  }`}
+                />
+              </button>
+            )}
+
             {/* Fullscreen Toggle */}
             <button
               onClick={handleToggleFullscreen}
@@ -417,12 +611,39 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
           {/* Frozen background overlay - positioned exactly where BrowserView appears */}
           <FrozenBackground />
 
+          {/* Preview failed - show reload button */}
+          {previewFailed && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 z-[95]">
+              <div className="text-center">
+                <div className="text-gray-300 text-sm mb-4">Preview failed to load</div>
+                <button
+                  onClick={handleRetryPreview}
+                  className="px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                >
+                  <RotateCw size={14} />
+                  Reload Preview
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* BrowserView will be positioned here when useBrowserView=true */}
           {/* Iframe fallback (use useBrowserView=false to enable) */}
           {!useBrowserView && children}
         </div>
       </div>
     </div>
+
+      {/* Health Status Modal */}
+      <HealthStatusModal
+        isOpen={showHealthModal}
+        onClose={() => setShowHealthModal(false)}
+        healthStatus={healthStatus}
+        projectId={projectId || ''}
+        onRestart={handleRestartServer}
+        buttonRef={healthButtonRef}
+      />
+    </>
   )
 }
 

@@ -29,6 +29,20 @@ export interface ProcessOutput {
 }
 
 /**
+ * Health check status
+ */
+export interface HealthCheckStatus {
+  healthy: boolean;
+  checks: {
+    httpResponding: { status: 'pass' | 'fail' | 'pending'; message: string };
+    processAlive: { status: 'pass' | 'fail'; message: string };
+    portListening: { status: 'pass' | 'fail'; message: string };
+  };
+  lastChecked: Date;
+  consecutiveFailures: number;
+}
+
+/**
  * Process info interface
  */
 interface ProcessInfo {
@@ -38,6 +52,7 @@ interface ProcessInfo {
   output: ProcessOutput[];
   crashCount: number;
   lastCrashTime?: Date;
+  healthStatus?: HealthCheckStatus;
 }
 
 /**
@@ -48,9 +63,15 @@ interface ProcessInfo {
  */
 class ProcessManager extends EventEmitter {
   private processes: Map<string, ProcessInfo> = new Map();
+  private pendingStarts: Map<string, Promise<number>> = new Map();
+  private healthCheckIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private currentProjectId: string | null = null; // Track currently active project
   private readonly MAX_OUTPUT_LINES = 500; // Keep last 500 lines
   private readonly MAX_CRASHES = 3;
   private readonly CRASH_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
+  private readonly HEALTH_CHECK_TIMEOUT = 5000; // 5 second timeout
+  private readonly MAX_HEALTH_FAILURES = 3; // 3 consecutive failures = unhealthy
 
   /**
    * Start netlify dev server for a project
@@ -60,14 +81,38 @@ class ProcessManager extends EventEmitter {
    * @returns Port number where server is running
    */
   async startDevServer(projectId: string, projectPath: string): Promise<number> {
-    // CRITICAL FIX: Check if already running OR starting
-    // Prevents race condition where rapid clicks trigger multiple starts
+    // CRITICAL FIX: Prevent race conditions from multiple simultaneous start calls
+    // If already starting, wait for that operation to complete
+    const pendingStart = this.pendingStarts.get(projectId);
+    if (pendingStart) {
+      return pendingStart;
+    }
+
+    // Check if already running OR starting
     const existing = this.processes.get(projectId);
     if (existing && (existing.state === ProcessState.RUNNING || existing.state === ProcessState.STARTING)) {
       return existing.port;
     }
 
+    // Create a promise for this start operation
+    const startPromise = this.performStart(projectId, projectPath);
+    this.pendingStarts.set(projectId, startPromise);
+
+    try {
+      const port = await startPromise;
+      return port;
+    } finally {
+      this.pendingStarts.delete(projectId);
+    }
+  }
+
+  /**
+   * Internal method that performs the actual start operation
+   * Separated to allow proper promise tracking
+   */
+  private async performStart(projectId: string, projectPath: string): Promise<number> {
     // Stop existing process if any (crashed or error state)
+    const existing = this.processes.get(projectId);
     if (existing) {
       await this.stopDevServer(projectId);
     }
@@ -229,6 +274,12 @@ class ProcessManager extends EventEmitter {
    * @param projectId - Unique project identifier
    */
   async stopDevServer(projectId: string): Promise<void> {
+    // Guard: Never stop the currently active project's server
+    if (this.currentProjectId === projectId) {
+      console.warn('⚠️  Prevented stopping server for active project:', projectId);
+      return;
+    }
+
     const processInfo = this.processes.get(projectId);
     if (!processInfo || processInfo.state === ProcessState.STOPPED) {
       return;
@@ -251,6 +302,10 @@ class ProcessManager extends EventEmitter {
         clearTimeout(killTimeout);
         processInfo.state = ProcessState.STOPPED;
         this.emit('process-status-changed', projectId, ProcessState.STOPPED);
+
+        // Stop health check when process stops
+        this.stopHealthCheck(projectId);
+
         portService.releasePort(projectId);
         processPersistence.removePID(projectId);
         this.processes.delete(projectId);
@@ -420,6 +475,9 @@ class ProcessManager extends EventEmitter {
             currentProcessInfo.state = ProcessState.RUNNING;
             this.emit('process-status-changed', projectId, ProcessState.RUNNING);
             this.emit('process-ready', projectId, port);
+
+            // Start periodic health check now that server is confirmed running
+            this.startHealthCheck(projectId, port);
           }
           return;
         }
@@ -524,6 +582,171 @@ class ProcessManager extends EventEmitter {
     processInfo.state = ProcessState.ERROR;
     this.emit('process-status-changed', projectId, ProcessState.ERROR);
     this.emit('process-error', projectId, error.message);
+  }
+
+  /**
+   * Start periodic health check for a running project
+   * @param projectId - Project identifier
+   * @param port - Port number to check
+   */
+  private startHealthCheck(projectId: string, port: number): void {
+    // Stop any existing health check for this project
+    this.stopHealthCheck(projectId);
+
+    // Initialize health status
+    const processInfo = this.processes.get(projectId);
+    if (!processInfo) return;
+
+    processInfo.healthStatus = {
+      healthy: true,
+      checks: {
+        httpResponding: { status: 'pass', message: 'Server responding' },
+        processAlive: { status: 'pass', message: 'Process running' },
+        portListening: { status: 'pass', message: 'Port listening' },
+      },
+      lastChecked: new Date(),
+      consecutiveFailures: 0,
+    };
+
+    // Emit initial health status
+    this.emit('process-health-changed', projectId, processInfo.healthStatus);
+
+    // Start periodic check
+    const interval = setInterval(async () => {
+      await this.performHealthCheck(projectId, port);
+    }, this.HEALTH_CHECK_INTERVAL);
+
+    this.healthCheckIntervals.set(projectId, interval);
+  }
+
+  /**
+   * Stop health check for a project
+   * @param projectId - Project identifier
+   */
+  private stopHealthCheck(projectId: string): void {
+    const interval = this.healthCheckIntervals.get(projectId);
+    if (interval) {
+      clearInterval(interval);
+      this.healthCheckIntervals.delete(projectId);
+    }
+  }
+
+  /**
+   * Perform a single health check
+   * @param projectId - Project identifier
+   * @param port - Port number to check
+   */
+  private async performHealthCheck(projectId: string, port: number): Promise<void> {
+    const processInfo = this.processes.get(projectId);
+    if (!processInfo || !processInfo.healthStatus) return;
+
+    const checks = processInfo.healthStatus.checks;
+    let allHealthy = true;
+
+    // Check 1: Process still alive
+    try {
+      if (processInfo.process && !processInfo.process.killed) {
+        // Try to check if process is still alive (sending signal 0 doesn't kill it)
+        process.kill(processInfo.process.pid!, 0);
+        checks.processAlive = { status: 'pass', message: 'Process running' };
+      } else {
+        checks.processAlive = { status: 'fail', message: 'Process not running' };
+        allHealthy = false;
+      }
+    } catch (error) {
+      checks.processAlive = { status: 'fail', message: 'Process terminated' };
+      allHealthy = false;
+    }
+
+    // Check 2: Port listening (simple TCP check would go here, but HTTP check covers this)
+    checks.portListening = { status: 'pass', message: `Port ${port} allocated` };
+
+    // Check 3: HTTP responding
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.HEALTH_CHECK_TIMEOUT);
+
+      const response = await fetch(`http://localhost:${port}`, {
+        signal: controller.signal,
+        method: 'HEAD', // Lightweight request
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response) {
+        checks.httpResponding = { status: 'pass', message: `Server responding (${response.status})` };
+      } else {
+        checks.httpResponding = { status: 'fail', message: 'No response from server' };
+        allHealthy = false;
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        checks.httpResponding = { status: 'fail', message: 'Request timeout (5s)' };
+      } else {
+        checks.httpResponding = { status: 'fail', message: `Connection failed: ${error.message}` };
+      }
+      allHealthy = false;
+    }
+
+    // Update health status
+    processInfo.healthStatus.lastChecked = new Date();
+
+    if (!allHealthy) {
+      processInfo.healthStatus.consecutiveFailures++;
+
+      // After MAX_HEALTH_FAILURES consecutive failures, mark as unhealthy
+      if (processInfo.healthStatus.consecutiveFailures >= this.MAX_HEALTH_FAILURES) {
+        processInfo.healthStatus.healthy = false;
+
+        // Emit error and transition to ERROR state
+        this.emit('process-health-critical', projectId, processInfo.healthStatus);
+        processInfo.state = ProcessState.ERROR;
+        this.emit('process-status-changed', projectId, ProcessState.ERROR);
+
+        // Stop health check since we're in ERROR state
+        this.stopHealthCheck(projectId);
+      }
+    } else {
+      // Reset failure count on success
+      processInfo.healthStatus.consecutiveFailures = 0;
+      processInfo.healthStatus.healthy = true;
+    }
+
+    // Emit health status update
+    this.emit('process-health-changed', projectId, processInfo.healthStatus);
+  }
+
+  /**
+   * Get current health status for a project
+   * @param projectId - Project identifier
+   * @returns Health status or undefined if not available
+   */
+  getHealthStatus(projectId: string): HealthCheckStatus | undefined {
+    const processInfo = this.processes.get(projectId);
+    return processInfo?.healthStatus;
+  }
+
+  /**
+   * Manually trigger a health check for a project
+   * @param projectId - Project identifier
+   */
+  async triggerHealthCheck(projectId: string): Promise<HealthCheckStatus | undefined> {
+    const processInfo = this.processes.get(projectId);
+    if (!processInfo || processInfo.state !== ProcessState.RUNNING) {
+      return undefined;
+    }
+
+    await this.performHealthCheck(projectId, processInfo.port);
+    return processInfo.healthStatus;
+  }
+
+  /**
+   * Set the currently active project
+   * Used to prevent accidental stopping of the active project's server
+   * @param projectId - The project ID that is now active (or null if none)
+   */
+  setCurrentProject(projectId: string | null): void {
+    this.currentProjectId = projectId;
   }
 }
 

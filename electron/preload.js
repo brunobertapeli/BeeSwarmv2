@@ -80,6 +80,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     restartDevServer: (projectId) => ipcRenderer.invoke('process:restart-dev-server', projectId),
     getStatus: (projectId) => ipcRenderer.invoke('process:get-status', projectId),
     getOutput: (projectId, limit) => ipcRenderer.invoke('process:get-output', projectId, limit),
+    getHealthStatus: (projectId) => ipcRenderer.invoke('process:get-health-status', projectId),
+    triggerHealthCheck: (projectId) => ipcRenderer.invoke('process:trigger-health-check', projectId),
+    setCurrentProject: (projectId) => ipcRenderer.invoke('process:set-current-project', projectId),
 
     // Process event listeners
     onStatusChanged: (callback) => {
@@ -106,6 +109,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const listener = (_event, projectId, details) => callback(projectId, details)
       ipcRenderer.on('process-crashed', listener)
       return () => ipcRenderer.removeListener('process-crashed', listener)
+    },
+    onHealthChanged: (callback) => {
+      const listener = (_event, projectId, healthStatus) => callback(projectId, healthStatus)
+      ipcRenderer.on('process-health-changed', listener)
+      return () => ipcRenderer.removeListener('process-health-changed', listener)
+    },
+    onHealthCritical: (callback) => {
+      const listener = (_event, projectId, healthStatus) => callback(projectId, healthStatus)
+      ipcRenderer.on('process-health-critical', listener)
+      return () => ipcRenderer.removeListener('process-health-critical', listener)
     }
   },
 
@@ -124,6 +137,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     injectCSS: (projectId, css) => ipcRenderer.invoke('preview:inject-css', projectId, css),
     removeCSS: (projectId) => ipcRenderer.invoke('preview:remove-css', projectId),
     executeJavaScript: (projectId, code) => ipcRenderer.invoke('preview:execute-javascript', projectId, code),
+    hasPreview: (projectId) => ipcRenderer.invoke('preview:has-preview', projectId),
+    waitForPreview: (projectId, timeoutMs) => ipcRenderer.invoke('preview:wait-for-preview', projectId, timeoutMs),
 
     // Preview event listeners
     onCreated: (callback) => {

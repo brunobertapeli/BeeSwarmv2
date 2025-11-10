@@ -533,6 +533,25 @@ class PreviewService extends EventEmitter {
   }
 
   /**
+   * Wait for preview to be created (with timeout)
+   * @param projectId - Unique project identifier
+   * @param timeoutMs - Maximum time to wait in milliseconds
+   */
+  async waitForPreview(projectId: string, timeoutMs: number = 5000): Promise<boolean> {
+    const startTime = Date.now();
+    const pollInterval = 100;
+
+    while (Date.now() - startTime < timeoutMs) {
+      if (this.hasPreview(projectId)) {
+        return true;
+      }
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    return false;
+  }
+
+  /**
    * Execute JavaScript in the preview BrowserView
    * @param projectId - Unique project identifier
    * @param code - JavaScript code to execute

@@ -69,6 +69,7 @@ function ProjectView() {
           // Auto-open the last project (most recent lastOpenedAt)
           if (result.projects.length > 0 && !currentProjectId) {
             const lastProject = result.projects[0] // Already sorted by lastOpenedAt DESC
+            await window.electronAPI?.process.setCurrentProject(lastProject.id)
             setCurrentProject(lastProject.id)
           }
         }
@@ -168,25 +169,28 @@ Please read the manifest to understand what my website is about, then create an 
     if (!currentProject) return
 
     try {
-      // Reset state when switching projects
-      setServerPort(null)
-      setServerStatus('starting')
-      setPreviewReady(false)
-      setTerminalOutput([])
-
       // Create terminal session for this project
       await window.electronAPI?.terminal.createSession(currentProject.id)
 
       // NOTE: Claude session will be started on first message (lazy initialization)
       // This prevents blocking the input field on project load
 
-      // Check if server is already running for this project
+      // Check if server is already running for this project FIRST
+      // This prevents unnecessary "Starting server..." flash when switching back
       const statusResult = await window.electronAPI?.process.getStatus(currentProject.id)
       if (statusResult?.success && statusResult.status === 'running' && statusResult.port) {
+        // Server already running - preserve existing state
         setServerPort(statusResult.port)
         setServerStatus('running')
+        setPreviewReady(false) // Preview needs to be recreated
         return
       }
+
+      // Server not running - reset state for fresh start
+      setServerPort(null)
+      setServerStatus('starting')
+      setPreviewReady(false)
+      setTerminalOutput([])
 
       // Check if dependencies are installed
       if (!currentProject.dependenciesInstalled) {
@@ -373,6 +377,9 @@ Please read the manifest to understand what my website is about, then create an 
     // Update lastOpenedAt in database
     await window.electronAPI?.projects.updateLastOpened(projectId)
 
+    // Set as current project in ProcessManager to prevent accidental server stops
+    await window.electronAPI?.process.setCurrentProject(projectId)
+
     setCurrentProject(projectId)
     setShowProjectSelector(false)
     if (project) {
@@ -392,6 +399,7 @@ Please read the manifest to understand what my website is about, then create an 
 
     // If we received the new project ID, switch to it immediately
     if (newProjectId) {
+      await window.electronAPI?.process.setCurrentProject(newProjectId)
       setCurrentProject(newProjectId)
     }
   }

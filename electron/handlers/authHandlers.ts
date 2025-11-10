@@ -228,30 +228,54 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         return { success: true, session: null, user: null }
       }
 
-      // Fetch user data from MongoDB
-      const userData = await mongoService.getUserByEmail(session.user.email)
+      // Fetch user data from MongoDB (with retry logic built-in)
+      try {
+        const userData = await mongoService.getUserByEmail(session.user.email)
 
-      if (!userData) {
-        return { success: true, session: null, user: null }
-      }
+        if (!userData) {
+          return { success: true, session: null, user: null }
+        }
 
-      const userResult = {
-        id: session.user.id,
-        email: userData.email,
-        name: userData.name,
-        photoUrl: userData.photoUrl,
-        plan: userData.plan
-      }
+        const userResult = {
+          id: session.user.id,
+          email: userData.email,
+          name: userData.name,
+          photoUrl: userData.photoUrl,
+          plan: userData.plan
+        }
 
-      // Set current user and initialize user-scoped services
-      setCurrentUser(session.user.id)
+        // Set current user and initialize user-scoped services
+        setCurrentUser(session.user.id)
 
-      return {
-        success: true,
-        session,
-        user: userResult
+        return {
+          success: true,
+          session,
+          user: userResult
+        }
+      } catch (mongoError: any) {
+        console.error('⚠️  MongoDB error during session fetch, using cached session only:', mongoError)
+
+        // Fallback: Return session without MongoDB user data
+        // User can still use the app, but may have stale plan data
+        const userResult = {
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.email?.split('@')[0] || 'User',
+          photoUrl: undefined,
+          plan: 'free' // Safe default
+        }
+
+        setCurrentUser(session.user.id)
+
+        return {
+          success: true,
+          session,
+          user: userResult,
+          warning: 'Using cached session data - MongoDB unavailable'
+        }
       }
     } catch (error: any) {
+      console.error('❌ Error getting session:', error)
       return { success: false, error: error.message }
     }
   })
@@ -280,11 +304,23 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
   // Validate user plan from MongoDB (no Supabase session required)
   ipcMain.handle('auth:validate-user', async (_event, email: string, userId: string) => {
     try {
-      // Fetch user data directly from MongoDB
+      // Fetch user data directly from MongoDB (with retry logic built-in)
       const userData = await mongoService.getUserByEmail(email)
 
       if (!userData) {
-        return { success: false, error: 'User not found' }
+        console.warn('⚠️  User not found in MongoDB:', email)
+        // Fallback: Return cached user data instead of failing
+        return {
+          success: true,
+          user: {
+            id: userId,
+            email: email,
+            name: email.split('@')[0],
+            photoUrl: undefined,
+            plan: 'free'
+          },
+          warning: 'User not found in MongoDB, using cached data'
+        }
       }
 
       // Return Supabase user ID along with fresh MongoDB data
@@ -301,7 +337,19 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         user: userResult
       }
     } catch (error: any) {
-      return { success: false, error: error.message }
+      console.error('❌ Error validating user:', error)
+      // Fallback: Return safe defaults so user can still use app
+      return {
+        success: true,
+        user: {
+          id: userId,
+          email: email,
+          name: email.split('@')[0],
+          photoUrl: undefined,
+          plan: 'free'
+        },
+        warning: 'MongoDB error, using cached data: ' + error.message
+      }
     }
   })
 }

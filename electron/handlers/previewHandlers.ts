@@ -242,6 +242,44 @@ export function registerPreviewHandlers(): void {
     }
   });
 
+  // Check if preview exists
+  ipcMain.handle('preview:has-preview', async (_event, projectId: string) => {
+    try {
+      const exists = previewService.hasPreview(projectId);
+
+      return {
+        success: true,
+        exists,
+      };
+    } catch (error) {
+      console.error('❌ Error checking preview existence:', error);
+      return {
+        success: false,
+        exists: false,
+        error: error instanceof Error ? error.message : 'Failed to check preview',
+      };
+    }
+  });
+
+  // Wait for preview to be created
+  ipcMain.handle('preview:wait-for-preview', async (_event, projectId: string, timeoutMs?: number) => {
+    try {
+      const exists = await previewService.waitForPreview(projectId, timeoutMs);
+
+      return {
+        success: true,
+        exists,
+      };
+    } catch (error) {
+      console.error('❌ Error waiting for preview:', error);
+      return {
+        success: false,
+        exists: false,
+        error: error instanceof Error ? error.message : 'Failed to wait for preview',
+      };
+    }
+  });
+
   // Setup event listeners to forward to renderer
   setupPreviewEventForwarding();
 }

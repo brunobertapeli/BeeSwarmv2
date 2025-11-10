@@ -36,6 +36,17 @@ export interface Project {
 
 export type ProcessState = 'stopped' | 'starting' | 'running' | 'stopping' | 'crashed' | 'error'
 
+export interface HealthCheckStatus {
+  healthy: boolean
+  checks: {
+    httpResponding: { status: 'pass' | 'fail' | 'pending'; message: string }
+    processAlive: { status: 'pass' | 'fail'; message: string }
+    portListening: { status: 'pass' | 'fail'; message: string }
+  }
+  lastChecked: Date
+  consecutiveFailures: number
+}
+
 export type ClaudeStatus = 'idle' | 'starting' | 'running' | 'completed' | 'error'
 
 export type LayoutState = 'DEFAULT' | 'STATUS_EXPANDED' | 'BROWSER_FULL'
@@ -355,11 +366,27 @@ export interface ElectronAPI {
       output?: ProcessOutput[]
       error?: string
     }>
+    getHealthStatus: (projectId: string) => Promise<{
+      success: boolean
+      healthStatus?: HealthCheckStatus | null
+      error?: string
+    }>
+    triggerHealthCheck: (projectId: string) => Promise<{
+      success: boolean
+      healthStatus?: HealthCheckStatus | null
+      error?: string
+    }>
+    setCurrentProject: (projectId: string | null) => Promise<{
+      success: boolean
+      error?: string
+    }>
     onStatusChanged: (callback: (projectId: string, status: ProcessState) => void) => () => void
     onOutput: (callback: (projectId: string, output: ProcessOutput) => void) => () => void
     onReady: (callback: (projectId: string, port: number) => void) => () => void
     onError: (callback: (projectId: string, error: any) => void) => () => void
     onCrashed: (callback: (projectId: string, details: any) => void) => () => void
+    onHealthChanged: (callback: (projectId: string, healthStatus: HealthCheckStatus) => void) => () => void
+    onHealthCritical: (callback: (projectId: string, healthStatus: HealthCheckStatus) => void) => () => void
   }
 
   preview: {
@@ -414,6 +441,16 @@ export interface ElectronAPI {
     executeJavaScript: (projectId: string, code: string) => Promise<{
       success: boolean
       result?: any
+      error?: string
+    }>
+    hasPreview: (projectId: string) => Promise<{
+      success: boolean
+      exists: boolean
+      error?: string
+    }>
+    waitForPreview: (projectId: string, timeoutMs?: number) => Promise<{
+      success: boolean
+      exists: boolean
       error?: string
     }>
     onCreated: (callback: (projectId: string) => void) => () => void

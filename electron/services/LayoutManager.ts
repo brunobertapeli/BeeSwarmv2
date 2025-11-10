@@ -34,6 +34,7 @@ class LayoutManager extends EventEmitter {
   private thumbnailCache: Map<string, string> = new Map(); // Cache thumbnails per project
   private modalFreezeCache: Map<string, string> = new Map(); // Cache full-size captures for modal freeze
   private currentViewMode: 'desktop' | 'mobile' = 'desktop'; // Track current view mode
+  private isTransitioning: boolean = false; // Guard against rapid state changes
 
   /**
    * Set the main window reference
@@ -66,9 +67,16 @@ class LayoutManager extends EventEmitter {
    * Set layout state and update BrowserView bounds
    */
   async setState(state: LayoutState, projectId: string): Promise<void> {
+    // Guard against overlapping transitions
+    if (this.isTransitioning) {
+      return;
+    }
 
-    const previousState = this.currentState;
-    this.currentState = state;
+    this.isTransitioning = true;
+
+    try {
+      const previousState = this.currentState;
+      this.currentState = state;
 
     // Calculate and apply bounds for new state
     const bounds = this.calculateBounds(state);
@@ -115,6 +123,10 @@ class LayoutManager extends EventEmitter {
       // Show BrowserView - bounds will be set by DesktopPreviewFrame
       previewService.show(projectId);
     }
+    } finally {
+      // Always clear the transition flag
+      this.isTransitioning = false;
+    }
   }
 
   /**
@@ -123,6 +135,11 @@ class LayoutManager extends EventEmitter {
    * Note: BROWSER_FULL is only accessible via fullscreen icon, not Tab cycling
    */
   async cycleState(projectId: string): Promise<void> {
+    // Guard against rapid Tab presses (setState also has guard, this provides early exit)
+    if (this.isTransitioning) {
+      return;
+    }
+
     let nextState: LayoutState;
 
     switch (this.currentState) {

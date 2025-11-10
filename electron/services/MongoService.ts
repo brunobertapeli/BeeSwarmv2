@@ -36,6 +36,7 @@ class MongoService {
   private uri: string = ''
   private dbName: string = 'codedeck'
   private initialized: boolean = false
+  private connecting: Promise<void> | null = null
 
   /**
    * SECURITY: Sanitize user input to prevent MongoDB injection attacks
@@ -73,18 +74,67 @@ class MongoService {
   async connect(): Promise<void> {
     this.init()
 
-    try {
-      if (this.client) {
-        return // Already connected
-      }
-
-      this.client = new MongoClient(this.uri)
-      await this.client.connect()
-      this.db = this.client.db(this.dbName)
-    } catch (error) {
-      console.error('❌ MongoDB connection error:', error)
-      throw error
+    // If already connected, return immediately
+    if (this.client && this.db) {
+      return
     }
+
+    // If already connecting, wait for that connection to complete
+    if (this.connecting) {
+      return this.connecting
+    }
+
+    // Start new connection with retry logic
+    this.connecting = this.connectWithRetry()
+
+    try {
+      await this.connecting
+    } finally {
+      this.connecting = null
+    }
+  }
+
+  private async connectWithRetry(maxRetries: number = 3, retryDelay: number = 1000): Promise<void> {
+    let lastError: Error | null = null
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (this.client && this.db) {
+          return // Already connected (race condition check)
+        }
+
+        this.client = new MongoClient(this.uri, {
+          serverSelectionTimeoutMS: 5000, // 5 second timeout
+          connectTimeoutMS: 10000 // 10 second connect timeout
+        })
+
+        await this.client.connect()
+        this.db = this.client.db(this.dbName)
+        console.log('✓ MongoDB connected successfully')
+        return
+      } catch (error) {
+        lastError = error as Error
+        console.error(`❌ MongoDB connection attempt ${attempt}/${maxRetries} failed:`, error)
+
+        // Clean up failed connection
+        if (this.client) {
+          try {
+            await this.client.close()
+          } catch (closeError) {
+            // Ignore close errors
+          }
+          this.client = null
+          this.db = null
+        }
+
+        // Wait before retrying (except on last attempt)
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay * attempt))
+        }
+      }
+    }
+
+    throw new Error(`MongoDB connection failed after ${maxRetries} attempts: ${lastError?.message}`)
   }
 
   async getUserByEmail(email: string): Promise<UserData | null> {

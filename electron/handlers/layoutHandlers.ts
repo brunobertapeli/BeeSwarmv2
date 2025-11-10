@@ -19,7 +19,7 @@ export function registerLayoutHandlers(): void {
     'layout:set-state',
     async (_event, state: LayoutState, projectId: string) => {
       try {
-        layoutManager.setState(state, projectId);
+        await layoutManager.setState(state, projectId);
 
         return {
           success: true,
@@ -37,7 +37,7 @@ export function registerLayoutHandlers(): void {
   // Cycle layout state (for Tab key)
   ipcMain.handle('layout:cycle-state', async (_event, projectId: string) => {
     try {
-      layoutManager.cycleState(projectId);
+      await layoutManager.cycleState(projectId);
 
       return {
         success: true,
