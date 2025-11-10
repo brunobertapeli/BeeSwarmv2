@@ -21,6 +21,10 @@ interface LayoutStoreState {
   setModalFreezeActive: (active: boolean) => void;
   setModalFreezeImage: (image: string | null) => void;
 
+  // Edit mode state (for image editing)
+  editModeEnabled: boolean;
+  setEditModeEnabled: (enabled: boolean) => void;
+
   // Helper to check if in specific state
   isState: (state: LayoutState) => boolean;
 
@@ -44,6 +48,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   actionBarHeight: 110, // Default ActionBar height
   modalFreezeActive: false,
   modalFreezeImage: null,
+  editModeEnabled: false,
 
   // Setters
   setLayoutState: (state) => set({ layoutState: state }),
@@ -55,6 +60,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   },
   setModalFreezeActive: (active) => set({ modalFreezeActive: active }),
   setModalFreezeImage: (image) => set({ modalFreezeImage: image }),
+  setEditModeEnabled: (enabled) => set({ editModeEnabled: enabled }),
 
   // Helpers
   isState: (state) => get().layoutState === state,

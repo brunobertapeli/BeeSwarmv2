@@ -199,6 +199,61 @@ export function registerPreviewHandlers(): void {
     }
   });
 
+  // Inject CSS
+  ipcMain.handle('preview:inject-css', async (_event, projectId: string, css: string) => {
+    try {
+      console.log(`💉 Injecting CSS for project: ${projectId}`);
+      await previewService.injectCSS(projectId, css);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error injecting CSS:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to inject CSS',
+      };
+    }
+  });
+
+  // Remove CSS
+  ipcMain.handle('preview:remove-css', async (_event, projectId: string) => {
+    try {
+      console.log(`🗑️  Removing CSS for project: ${projectId}`);
+      await previewService.removeCSS(projectId);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error removing CSS:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to remove CSS',
+      };
+    }
+  });
+
+  // Execute JavaScript
+  ipcMain.handle('preview:execute-javascript', async (_event, projectId: string, code: string) => {
+    try {
+      console.log(`⚡ Executing JavaScript for project: ${projectId}`);
+      const result = await previewService.executeJavaScript(projectId, code);
+
+      return {
+        success: true,
+        result,
+      };
+    } catch (error) {
+      console.error('❌ Error executing JavaScript:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to execute JavaScript',
+      };
+    }
+  });
+
   // Setup event listeners to forward to renderer
   setupPreviewEventForwarding();
 }

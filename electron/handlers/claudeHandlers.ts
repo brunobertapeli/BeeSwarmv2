@@ -80,7 +80,8 @@ export function registerClaudeHandlers(): void {
       terminalAggregator.addUserLine(projectId, '\n');
 
       // Start Claude session with optional model, attachments, thinking, and plan mode
-      await claudeService.startSession(projectId, project.path, prompt, model, attachments, thinkingEnabled, planMode);
+      // Don't await - let it run in background and return immediately
+      claudeService.startSession(projectId, project.path, prompt, model, attachments, thinkingEnabled, planMode);
 
       return {
         success: true,

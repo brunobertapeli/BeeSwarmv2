@@ -31,14 +31,8 @@ export const useToastStore = create<ToastState>((set) => ({
       duration: toast.duration || 4000, // Default 4 seconds (20% faster)
     }
 
-    set((state) => {
-      // Limit to 5 toasts max, remove oldest if needed
-      const toasts = [...state.toasts, newToast]
-      if (toasts.length > 5) {
-        toasts.shift()
-      }
-      return { toasts }
-    })
+    // Replace all previous toasts with just the new one
+    set({ toasts: [newToast] })
 
     // Auto-remove after duration
     if (newToast.duration > 0) {

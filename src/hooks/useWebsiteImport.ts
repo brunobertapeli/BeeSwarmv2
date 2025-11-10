@@ -87,14 +87,19 @@ export function useWebsiteImport(projectId: string | null): UseWebsiteImportRetu
   }, [projectId])
 
   const markMigrationComplete = async () => {
-    if (!projectId) return
+    if (!projectId) {
+      console.warn('⭐ [WEBSITE IMPORT] Cannot mark complete - no projectId')
+      return
+    }
 
     try {
-      await window.electronAPI?.websiteImport?.markMigrationComplete?.(projectId)
+      console.log('⭐ [WEBSITE IMPORT] Calling IPC to mark migration complete for:', projectId)
+      const result = await window.electronAPI?.websiteImport?.markMigrationComplete?.(projectId)
+      console.log('⭐ [WEBSITE IMPORT] IPC result:', result)
       setIsFirstOpen(false)
-      console.log('✅ [WEBSITE IMPORT] Migration marked as complete')
+      console.log('⭐ [WEBSITE IMPORT] Migration marked as complete in React state')
     } catch (error) {
-      console.error('Error marking migration complete:', error)
+      console.error('⭐ [WEBSITE IMPORT] Error marking migration complete:', error)
     }
   }
 

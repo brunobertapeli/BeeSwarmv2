@@ -13,7 +13,7 @@ interface MobilePreviewFrameProps {
 function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   const [devToolsOpen, setDevToolsOpen] = useState(false)
   const contentAreaRef = useRef<HTMLDivElement>(null)
-  const { layoutState } = useLayoutStore()
+  const { layoutState, editModeEnabled } = useLayoutStore()
   const { selectedDevice } = useAppStore()
 
   // Create/Update BrowserView when using BrowserView mode
@@ -120,6 +120,183 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
 
     return unsubscribe
   }, [projectId])
+
+  // Inject CSS for edit mode highlighting
+  useEffect(() => {
+    if (!projectId) return
+
+    const manageEditModeCSS = async () => {
+      if (editModeEnabled) {
+        const css = `
+          @keyframes imagePopAnimation {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+            100% { transform: scale(1); }
+          }
+
+          /* Wrapper for images */
+          .edit-mode-wrapper {
+            display: inline-block;
+            position: relative;
+            border: 1px solid rgba(100, 100, 100, 0.3);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: 2px;
+          }
+
+          .edit-mode-wrapper:hover {
+            border-color: rgba(100, 100, 100, 0.5);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          }
+
+          /* Subtle overlay tint */
+          .edit-mode-wrapper::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.02);
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+          }
+
+          .edit-mode-wrapper:hover::before {
+            opacity: 1;
+          }
+
+          /* Corner badge */
+          .edit-mode-wrapper::after {
+            content: '✏️';
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 18px;
+            height: 18px;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+            font-size: 10px;
+            line-height: 18px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+            transition: all 0.2s ease;
+            z-index: 2;
+            pointer-events: none;
+            opacity: 0.7;
+          }
+
+          .edit-mode-wrapper:hover::after {
+            opacity: 1;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+          }
+
+          .edit-mode-wrapper img {
+            display: block;
+            animation: imagePopAnimation 0.3s ease-out;
+            position: relative;
+            z-index: 0;
+          }
+        `
+
+        const jsCode = `
+          (function() {
+            // Remove existing wrappers and listeners
+            if (window._editModeCleanup) {
+              window._editModeCleanup();
+            }
+
+            // Wrap all images with edit mode wrapper
+            const images = document.querySelectorAll('img:not(.edit-mode-wrapped)');
+            const wrappers = [];
+
+            images.forEach(img => {
+              // Skip if already wrapped
+              if (img.classList.contains('edit-mode-wrapped')) return;
+
+              // Create wrapper
+              const wrapper = document.createElement('div');
+              wrapper.className = 'edit-mode-wrapper';
+
+              // Insert wrapper before image
+              img.parentNode.insertBefore(wrapper, img);
+
+              // Move image into wrapper
+              wrapper.appendChild(img);
+
+              // Mark as wrapped
+              img.classList.add('edit-mode-wrapped');
+
+              wrappers.push(wrapper);
+            });
+
+            // Add click listener
+            const clickHandler = function(e) {
+              const wrapper = e.target.closest('.edit-mode-wrapper');
+              if (wrapper) {
+                const img = wrapper.querySelector('img');
+                if (img) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('Image clicked:', img.src);
+                  alert('Image clicked: ' + img.src + '\\n\\nMenu will be implemented here.');
+                }
+              }
+            };
+
+            document.addEventListener('click', clickHandler, true);
+
+            // Cleanup function
+            window._editModeCleanup = function() {
+              // Remove click listener
+              document.removeEventListener('click', clickHandler, true);
+
+              // Unwrap images
+              document.querySelectorAll('.edit-mode-wrapper').forEach(wrapper => {
+                const img = wrapper.querySelector('img');
+                if (img) {
+                  img.classList.remove('edit-mode-wrapped');
+                  wrapper.parentNode.insertBefore(img, wrapper);
+                  wrapper.remove();
+                }
+              });
+            };
+          })();
+        `
+
+        try {
+          await window.electronAPI?.preview.injectCSS(projectId, css)
+          await window.electronAPI?.preview.executeJavaScript(projectId, jsCode)
+          console.log('✅ Edit mode CSS and JS injected for mobile preview')
+        } catch (error) {
+          console.error('❌ Failed to inject edit mode CSS/JS:', error)
+        }
+      } else {
+        // Remove CSS and event listeners when edit mode is disabled
+        // Only if preview exists (avoid race condition during project switch)
+        try {
+          await window.electronAPI?.preview.removeCSS(projectId)
+          await window.electronAPI?.preview.executeJavaScript(projectId, `
+            if (window._editModeCleanup) {
+              window._editModeCleanup();
+              delete window._editModeCleanup;
+            }
+          `)
+          console.log('✅ Edit mode CSS and JS removed for mobile preview')
+        } catch (error) {
+          // Silently ignore - preview might not exist yet during project switch
+          if (!error.message?.includes('Preview not found')) {
+            console.error('❌ Failed to remove edit mode CSS/JS:', error)
+          }
+        }
+      }
+    }
+
+    manageEditModeCSS()
+  }, [projectId, editModeEnabled])
 
   const handleRefresh = () => {
     if (projectId) {

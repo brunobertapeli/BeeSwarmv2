@@ -12,7 +12,6 @@ import TerminalModal from './TerminalModal'
 import DesktopPreviewFrame from './DesktopPreviewFrame'
 import MobilePreviewFrame from './MobilePreviewFrame'
 import HelpChat from './HelpChat'
-import WebsiteImportPreparingModal from './WebsiteImportPreparingModal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
 
 function ProjectView() {
@@ -55,9 +54,7 @@ function ProjectView() {
 
   // Website import state
   const websiteImport = useWebsiteImport(currentProjectId)
-  const [showPreparingModal, setShowPreparingModal] = useState(false)
   const [websiteImportPrompt, setWebsiteImportPrompt] = useState<string | undefined>(undefined)
-  const [claudeStatusForModal, setClaudeStatusForModal] = useState<string>('idle')
 
   // Fetch projects and auto-open last project
   useEffect(() => {
@@ -112,16 +109,13 @@ function ProjectView() {
     applyDeviceEmulation()
   }, [viewMode, selectedDevice, currentProjectId])
 
-  // Handle website import - show modal and auto-send prompt
+  // Handle website import - auto-send prompt
   useEffect(() => {
     // Only run when we detect a first-time website import
     // The .migration-completed flag (checked via isFirstOpen) ensures this only runs once
     if (websiteImport.isWebsiteImport && websiteImport.isFirstOpen && currentProjectId) {
-      console.log('🌐 [WEBSITE IMPORT] Detected first-time website import project:', currentProjectId)
-      console.log('🌐 [WEBSITE IMPORT] Import Type:', websiteImport.importType)
-
-      // Show preparing modal
-      setShowPreparingModal(true)
+      console.log('⭐ [WEBSITE IMPORT] Detected first-time website import project:', currentProjectId)
+      console.log('⭐ [WEBSITE IMPORT] Import Type:', websiteImport.importType)
 
       // Generate the appropriate prompt based on import type
       let prompt = ''
@@ -158,60 +152,26 @@ Please read the manifest to understand what my website is about, then create an 
           break
       }
 
-      console.log('📝 [WEBSITE IMPORT] Generated prompt:', prompt)
+      console.log('⭐ [WEBSITE IMPORT] Generated prompt:', prompt)
       setWebsiteImportPrompt(prompt)
     }
 
     // Clean up state when switching projects
     return () => {
-      setShowPreparingModal(false)
       setWebsiteImportPrompt(undefined)
-      setClaudeStatusForModal('idle')
     }
   }, [websiteImport.isWebsiteImport, websiteImport.isFirstOpen, websiteImport.importType, currentProjectId])
 
-  // Listen for Claude status to hide modal when work starts
-  useEffect(() => {
-    if (!currentProjectId || !window.electronAPI?.claude) return
-
-    const unsubStatus = window.electronAPI.claude.onStatusChanged((id, status) => {
-      console.log('🔔 [WEBSITE IMPORT] Claude status changed:', { id, status, currentProjectId, showPreparingModal })
-
-      if (id === currentProjectId) {
-        setClaudeStatusForModal(status)
-
-        // Hide modal when Claude starts working
-        if (showPreparingModal && (status === 'starting' || status === 'running')) {
-          console.log('🎬 [WEBSITE IMPORT] Claude started, hiding modal')
-          setShowPreparingModal(false)
-        }
-      }
-    })
-
-    return () => {
-      unsubStatus()
-    }
-  }, [currentProjectId, showPreparingModal])
-
-  // Fallback: Hide modal after 5 seconds if Claude hasn't started
-  useEffect(() => {
-    if (showPreparingModal) {
-      console.log('⏱️ [WEBSITE IMPORT] Setting fallback timeout to hide modal')
-      const fallbackTimer = setTimeout(() => {
-        console.log('⚠️ [WEBSITE IMPORT] Fallback timeout reached, hiding modal')
-        setShowPreparingModal(false)
-      }, 5000)
-
-      return () => clearTimeout(fallbackTimer)
-    }
-  }, [showPreparingModal])
-
-  // Handle marking migration as complete when Claude finishes
+  // Handle marking migration as complete when auto-message is sent
   const handleWebsiteImportPromptSent = useCallback(async () => {
-    console.log('✅ [WEBSITE IMPORT] Claude completed auto-message, marking migration as complete for:', currentProjectId)
-    await websiteImport.markMigrationComplete()
-    setWebsiteImportPrompt(undefined) // Clear the prompt so it doesn't send again
-    console.log('🎉 [WEBSITE IMPORT] Migration complete! This project will no longer show the modal.')
+    console.log('⭐ [WEBSITE IMPORT] Auto-message sent, marking migration as complete for:', currentProjectId)
+    try {
+      await websiteImport.markMigrationComplete()
+      setWebsiteImportPrompt(undefined) // Clear the prompt so it doesn't send again
+      console.log('⭐ [WEBSITE IMPORT] Migration complete! Auto-prompt will not trigger again.')
+    } catch (error) {
+      console.error('⭐ [WEBSITE IMPORT] Failed to mark migration complete:', error)
+    }
   }, [websiteImport, currentProjectId])
 
   // Define startDevServer at component level so it's accessible throughout
@@ -343,11 +303,8 @@ Please read the manifest to understand what my website is about, then create an 
       unsubError?.()
       unsubConsole?.()
 
-      // Destroy terminal and Claude sessions when switching projects or unmounting
-      if (currentProject) {
-        window.electronAPI?.terminal.destroySession(currentProject.id)
-        window.electronAPI?.claude.destroySession(currentProject.id)
-      }
+      // Keep all background processes running (Claude, dev servers, terminals)
+      // Each project runs independently with isolated paths and ports
     }
   }, [currentProject?.id])
 
@@ -629,12 +586,6 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Help Chat */}
       <HelpChat projectId={currentProjectId || undefined} />
-
-      {/* Website Import Preparing Modal */}
-      <WebsiteImportPreparingModal
-        show={showPreparingModal}
-        importType={websiteImport.importType || 'template'}
-      />
 
       {/* Project Settings Modal */}
       <ProjectSettings

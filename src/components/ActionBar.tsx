@@ -15,7 +15,10 @@ import {
   Plus,
   Sliders,
   FileText,
-  X as CloseIcon
+  X as CloseIcon,
+  Edit2,
+  StickyNote,
+  Kanban
 } from 'lucide-react'
 import { useAppStore, type DeploymentStatus } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
@@ -68,7 +71,7 @@ function ActionBar({
   onAutoMessageSent
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [isHidden, setIsHidden] = useState(false) // Start visible (not hidden)
@@ -86,6 +89,7 @@ function ActionBar({
   const [showTweakMenu, setShowTweakMenu] = useState(false)
   const [thinkingEnabled, setThinkingEnabled] = useState(true)
   const [planModeToggle, setPlanModeToggle] = useState(false) // Only for next message, resets after send
+  const [kanbanEnabled, setKanbanEnabled] = useState(false) // Toggle for kanban view
   const [attachments, setAttachments] = useState<Array<{id: string, type: 'image' | 'file', name: string, preview?: string}>>([])
   const [questions, setQuestions] = useState<any>(null)
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string | string[]>>({})
@@ -126,7 +130,7 @@ function ActionBar({
     if (autoPinned) {
       setIsLocked(true)
       setIsHidden(false) // Show the ActionBar when auto-pinned
-      console.log('📌 [WEBSITE IMPORT] ActionBar auto-pinned and shown')
+      console.log('⭐ [WEBSITE IMPORT] ActionBar auto-pinned and shown')
     }
   }, [autoOpen, autoPinned])
 
@@ -158,12 +162,10 @@ function ActionBar({
         toast.success('Done!', 'Claude finished successfully')
         setClaudeStatus('completed')
 
-        // If this was a website import auto-message, mark migration as complete
-        // Only do this if we actually sent an auto-message (check the ref)
-        if (autoMessage && onAutoMessageSent && autoMessageSentRef.current) {
-          console.log('✅ [WEBSITE IMPORT] Claude completed, marking migration as complete')
-          onAutoMessageSent()
-          // Clear the auto-message to prevent triggering again
+        // Migration is now marked complete immediately when message is sent (see sendAutoMessage)
+        // No need to mark it again here - just reset the ref for cleanup
+        if (autoMessage && autoMessageSentRef.current) {
+          console.log('⭐ [WEBSITE IMPORT] Claude completed (migration already marked complete)')
           autoMessageSentRef.current = false
         }
       }
@@ -270,6 +272,51 @@ function ActionBar({
     }
   }, [showModelDropdown, showPlusMenu, showTweakMenu])
 
+  // Reset kanban state when leaving STATUS_EXPANDED mode
+  useEffect(() => {
+    if (layoutState !== 'STATUS_EXPANDED' && kanbanEnabled) {
+      setKanbanEnabled(false)
+      console.log('Kanban board hidden (layout state changed)')
+    }
+  }, [layoutState, kanbanEnabled])
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only trigger if not typing in an input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      // E - Toggle Edit Mode (only in DEFAULT mode)
+      if (e.key.toLowerCase() === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (layoutState === 'DEFAULT') {
+          e.preventDefault()
+          toggleEditMode()
+        }
+      }
+
+      // N - Add Sticky Note (only in STATUS_EXPANDED mode)
+      if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (layoutState === 'STATUS_EXPANDED') {
+          e.preventDefault()
+          handleAddStickyNote()
+        }
+      }
+
+      // K - Toggle Kanban Board (only in STATUS_EXPANDED mode)
+      if (e.key.toLowerCase() === 'k' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (layoutState === 'STATUS_EXPANDED') {
+          e.preventDefault()
+          toggleKanban()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [layoutState, kanbanEnabled, editModeEnabled]) // Re-run when layout state or kanban state changes
+
   // Listen for questions from Claude (plan mode)
   useEffect(() => {
     if (!projectId || !window.electronAPI?.claude) return
@@ -375,6 +422,11 @@ function ActionBar({
       setMessage('')
       setAttachments([]) // Clear attachments from UI
       setPlanModeToggle(false) // Reset toggle for next message
+
+      // Disable edit mode when sending a message to Claude
+      if (editModeEnabled) {
+        setEditModeEnabled(false)
+      }
 
       try {
         // Convert attachments to Claude format
@@ -497,9 +549,9 @@ function ActionBar({
     // For website import, send when ready (idle or completed - both mean Claude is not currently working)
     const isClaudeReady = claudeStatus === 'idle' || claudeStatus === 'completed'
     if (autoMessage && projectId && !autoMessageSentRef.current && isClaudeReady && !isInputBlocked) {
-      console.log('🤖 [WEBSITE IMPORT] Ready to auto-send!')
-      console.log('🤖 [WEBSITE IMPORT] Message:', autoMessage)
-      console.log('🤖 [WEBSITE IMPORT] isInputBlocked:', isInputBlocked, 'claudeStatus:', claudeStatus)
+      console.log('⭐ [WEBSITE IMPORT] Ready to auto-send!')
+      console.log('⭐ [WEBSITE IMPORT] Message:', autoMessage)
+      console.log('⭐ [WEBSITE IMPORT] isInputBlocked:', isInputBlocked, 'claudeStatus:', claudeStatus)
 
       // Mark as sent to prevent re-sending
       autoMessageSentRef.current = true
@@ -507,7 +559,7 @@ function ActionBar({
       // Send directly without setting message in UI
       const sendAutoMessage = async () => {
         try {
-          console.log('📝 [WEBSITE IMPORT] Creating chat block...')
+          console.log('⭐ [WEBSITE IMPORT] Creating chat block...')
           // Create chat block first
           const blockResult = await window.electronAPI?.chat.createBlock(projectId, autoMessage)
 
@@ -520,7 +572,7 @@ function ActionBar({
           console.log('✅ Chat block created:', blockResult.block.id)
 
           // Start session with the prompt (always starts fresh for website import)
-          console.log('🔍 Starting website import session with model:', selectedModel)
+          console.log('⭐ [WEBSITE IMPORT] Starting Claude session with model:', selectedModel)
           const result = await window.electronAPI?.claude.startSession(
             projectId,
             autoMessage,
@@ -530,61 +582,82 @@ function ActionBar({
             false // Not plan mode
           )
 
+          console.log('⭐ [WEBSITE IMPORT] Claude startSession result:', result)
+
           if (!result?.success) {
+            console.error('⭐ [WEBSITE IMPORT] Failed to start Claude:', result?.error)
             toast.error('Failed to start Claude', result?.error || 'Unknown error')
-            console.error('Failed to start Claude:', result?.error)
             return
           }
 
-          console.log('✅ [WEBSITE IMPORT] Auto-message sent successfully')
+          console.log('⭐ [WEBSITE IMPORT] Auto-message sent successfully')
 
-          // DON'T call onAutoMessageSent here - we'll call it when Claude completes
+          // Mark migration as complete immediately after sending
+          // This prevents race conditions where the user refreshes/switches projects
+          // before Claude finishes (which could take 5+ minutes)
+          // IMPORTANT: Await this to ensure the file is written before allowing any state changes
+          if (onAutoMessageSent) {
+            console.log('⭐ [WEBSITE IMPORT] Marking migration as complete immediately after send')
+            await onAutoMessageSent()
+          }
         } catch (error) {
-          console.error('❌ [WEBSITE IMPORT] Error sending auto message:', error)
+          console.error('⭐ [WEBSITE IMPORT] Error sending auto message:', error)
           toast.error('Failed to send message', error instanceof Error ? error.message : 'Unknown error')
         }
       }
 
       // Only set timer if we don't already have one
       if (!autoMessageTimerRef.current) {
-        console.log('⏱️ [WEBSITE IMPORT] Setting up auto-send timer (1.5s) for project:', projectId)
+        console.log('⭐ [WEBSITE IMPORT] Setting up auto-send timer (1.5s) for project:', projectId)
         const currentProjectId = projectId // Capture current project ID
         const currentAutoMessage = autoMessage // Capture current auto message
         autoMessageTimerRef.current = setTimeout(() => {
           // Verify we're still on the same project AND have the same auto message
           // This prevents sending if the user switched projects or if autoMessage was cleared
           if (currentProjectId === projectId && currentAutoMessage === autoMessage && autoMessage) {
-            console.log('⏰ [WEBSITE IMPORT] Timer triggered, calling sendAutoMessage for project:', projectId)
+            console.log('⭐ [WEBSITE IMPORT] Timer triggered, calling sendAutoMessage for project:', projectId)
             sendAutoMessage()
           } else {
-            console.log('⚠️ [WEBSITE IMPORT] Context changed, skipping auto-send. Current:', { projectId, autoMessage }, 'Captured:', { currentProjectId, currentAutoMessage })
+            console.log('⭐ [WEBSITE IMPORT] Context changed, skipping auto-send. Current:', { projectId, autoMessage }, 'Captured:', { currentProjectId, currentAutoMessage })
           }
           autoMessageTimerRef.current = null
         }, 1500)
       }
     } else if (autoMessage && projectId && !autoMessageSentRef.current) {
-      console.log('⏳ [WEBSITE IMPORT] Waiting for ready state...', { claudeStatus, isInputBlocked })
+      console.log('⭐ [WEBSITE IMPORT] Waiting for ready state...', { claudeStatus, isInputBlocked })
     }
 
     // Cleanup: only clear timer if autoMessage is removed (project changed)
     return () => {
       if (!autoMessage && autoMessageTimerRef.current) {
-        console.log('🧹 [WEBSITE IMPORT] Project changed, clearing timer')
+        console.log('⭐ [WEBSITE IMPORT] Project changed, clearing timer')
         clearTimeout(autoMessageTimerRef.current)
         autoMessageTimerRef.current = null
       }
     }
   }, [autoMessage, projectId, selectedModel, thinkingEnabled, toast, claudeStatus, isInputBlocked])
 
-  // Reset auto-message sent flag when autoMessage changes or projectId changes
+  // Reset auto-message sent flag only when autoMessage is cleared or project changes
+  const prevAutoMessageRef = useRef(autoMessage)
+  const prevProjectIdRef = useRef(projectId)
+
   useEffect(() => {
-    // Reset when autoMessage is cleared OR when projectId changes
-    autoMessageSentRef.current = false
-    if (autoMessageTimerRef.current) {
-      clearTimeout(autoMessageTimerRef.current)
-      autoMessageTimerRef.current = null
+    const autoMessageCleared = prevAutoMessageRef.current && !autoMessage
+    const projectChanged = prevProjectIdRef.current !== projectId
+
+    // Only reset if autoMessage was cleared OR project actually changed
+    if (autoMessageCleared || projectChanged) {
+      autoMessageSentRef.current = false
+      if (autoMessageTimerRef.current) {
+        clearTimeout(autoMessageTimerRef.current)
+        autoMessageTimerRef.current = null
+      }
+      console.log('⭐ [WEBSITE IMPORT] Reset auto-send refs for project:', projectId)
     }
-    console.log('🔄 [WEBSITE IMPORT] Reset auto-send refs for project:', projectId)
+
+    // Update refs for next comparison
+    prevAutoMessageRef.current = autoMessage
+    prevProjectIdRef.current = projectId
   }, [autoMessage, projectId])
 
   const handleDeploy = () => {
@@ -657,6 +730,36 @@ function ActionBar({
     toast.info(
       `Switched to ${newMode} view`,
       'Preview mode updated'
+    )
+  }
+
+  const toggleEditMode = () => {
+    setEditModeEnabled(!editModeEnabled)
+    toast.info(
+      editModeEnabled ? 'Edit mode disabled' : 'Edit mode enabled',
+      editModeEnabled ? 'Images are no longer highlighted' : 'Click on images to edit'
+    )
+  }
+
+  const handleAddStickyNote = () => {
+    // Only allow in STATUS_EXPANDED mode
+    if (layoutState !== 'STATUS_EXPANDED') return
+
+    // TODO: Implement sticky note creation
+    console.log('Sticky note added')
+    toast.info('Sticky Note Added', 'New sticky note created')
+  }
+
+  const toggleKanban = () => {
+    // Only allow in STATUS_EXPANDED mode
+    if (layoutState !== 'STATUS_EXPANDED') return
+
+    const newState = !kanbanEnabled
+    setKanbanEnabled(newState)
+    console.log(newState ? 'Kanban board shown' : 'Kanban board hidden')
+    toast.info(
+      newState ? 'Kanban Enabled' : 'Kanban Disabled',
+      newState ? 'Kanban board shown' : 'Kanban board hidden'
     )
   }
 
@@ -1315,6 +1418,74 @@ function ActionBar({
               <ImageIcon size={15} className="text-gray-400 hover:text-primary transition-colors" />
               <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
                 Images
+              </span>
+            </button>
+
+            <button
+              onClick={toggleEditMode}
+              disabled={layoutState !== 'DEFAULT'}
+              className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
+                layoutState !== 'DEFAULT'
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:bg-dark-bg/50'
+              }`}
+            >
+              <Edit2
+                size={15}
+                className={`transition-colors ${
+                  editModeEnabled
+                    ? 'text-purple-500'
+                    : 'text-gray-400'
+                } ${layoutState === 'DEFAULT' && !editModeEnabled ? 'hover:text-gray-200' : ''}`}
+              />
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                {editModeEnabled ? 'Disable Edit Mode (E)' : 'Enable Edit Mode (E)'}
+              </span>
+            </button>
+
+            <button
+              onClick={handleAddStickyNote}
+              disabled={layoutState !== 'STATUS_EXPANDED'}
+              className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
+                layoutState !== 'STATUS_EXPANDED'
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:bg-dark-bg/50'
+              }`}
+            >
+              <StickyNote
+                size={15}
+                className={`transition-colors ${
+                  layoutState === 'STATUS_EXPANDED'
+                    ? 'text-gray-400 hover:text-gray-200'
+                    : 'text-gray-400'
+                }`}
+              />
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                Add Sticky Note (N)
+              </span>
+            </button>
+
+            <button
+              onClick={toggleKanban}
+              disabled={layoutState !== 'STATUS_EXPANDED'}
+              className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
+                layoutState !== 'STATUS_EXPANDED'
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:bg-dark-bg/50'
+              }`}
+            >
+              <Kanban
+                size={15}
+                className={`transition-colors ${
+                  kanbanEnabled
+                    ? 'text-blue-500'
+                    : layoutState === 'STATUS_EXPANDED'
+                    ? 'text-gray-400 hover:text-gray-200'
+                    : 'text-gray-400'
+                }`}
+              />
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                {kanbanEnabled ? 'Close Kanban Board (K)' : 'Open Kanban Board (K)'}
               </span>
             </button>
 

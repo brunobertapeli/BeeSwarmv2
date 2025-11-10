@@ -24,6 +24,7 @@ class PreviewService extends EventEmitter {
   private mainWindow: BrowserWindow | null = null;
   private hiddenBounds: Map<string, PreviewBounds> = new Map(); // Store bounds when hidden
   private isHidden: Map<string, boolean> = new Map(); // Track visibility state
+  private injectedCSSKeys: Map<string, string> = new Map(); // Track injected CSS keys for removal
 
   /**
    * Set the main window reference
@@ -504,6 +505,74 @@ class PreviewService extends EventEmitter {
 
     view.webContents.disableDeviceEmulation();
     console.log(`🖥️  Device emulation disabled (desktop view)`);
+  }
+
+  /**
+   * Inject CSS into the preview BrowserView
+   * @param projectId - Unique project identifier
+   * @param css - CSS string to inject
+   */
+  async injectCSS(projectId: string, css: string): Promise<void> {
+    const view = this.browserViews.get(projectId);
+    if (!view) {
+      throw new Error(`Preview not found for project: ${projectId}`);
+    }
+
+    try {
+      // Remove previously injected CSS if exists
+      await this.removeCSS(projectId);
+
+      // Insert new CSS and store the key
+      const key = await view.webContents.insertCSS(css);
+      this.injectedCSSKeys.set(projectId, key);
+      console.log(`💉 [PreviewService] CSS injected for ${projectId}, key: ${key}`);
+    } catch (error) {
+      console.error(`❌ [PreviewService] Failed to inject CSS:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove injected CSS from the preview BrowserView
+   * @param projectId - Unique project identifier
+   */
+  async removeCSS(projectId: string): Promise<void> {
+    const view = this.browserViews.get(projectId);
+    const cssKey = this.injectedCSSKeys.get(projectId);
+
+    if (!view || !cssKey) {
+      return; // Nothing to remove
+    }
+
+    try {
+      await view.webContents.removeInsertedCSS(cssKey);
+      this.injectedCSSKeys.delete(projectId);
+      console.log(`🗑️  [PreviewService] CSS removed for ${projectId}`);
+    } catch (error) {
+      console.error(`❌ [PreviewService] Failed to remove CSS:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute JavaScript in the preview BrowserView
+   * @param projectId - Unique project identifier
+   * @param code - JavaScript code to execute
+   */
+  async executeJavaScript(projectId: string, code: string): Promise<any> {
+    const view = this.browserViews.get(projectId);
+    if (!view) {
+      throw new Error(`Preview not found for project: ${projectId}`);
+    }
+
+    try {
+      const result = await view.webContents.executeJavaScript(code);
+      console.log(`⚡ [PreviewService] JavaScript executed for ${projectId}`);
+      return result;
+    } catch (error) {
+      console.error(`❌ [PreviewService] Failed to execute JavaScript:`, error);
+      throw error;
+    }
   }
 }
 

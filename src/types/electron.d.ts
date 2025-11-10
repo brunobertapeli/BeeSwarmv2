@@ -401,6 +401,19 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
+    injectCSS: (projectId: string, css: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    removeCSS: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    executeJavaScript: (projectId: string, code: string) => Promise<{
+      success: boolean
+      result?: any
+      error?: string
+    }>
     onCreated: (callback: (projectId: string) => void) => () => void
     onLoaded: (callback: (projectId: string) => void) => () => void
     onError: (callback: (projectId: string, error: any) => void) => () => void

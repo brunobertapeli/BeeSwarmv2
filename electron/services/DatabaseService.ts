@@ -17,6 +17,7 @@ export interface Project {
   dependenciesInstalled: boolean
   claudeSessionId: string | null // Claude session ID for resume
   claudeContext: string | null // Claude context (JSON string with tokens, cost, etc.)
+  websiteImportAutoPromptSent: number | null // Timestamp when auto-prompt was sent for website imports
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -249,6 +250,14 @@ class DatabaseService {
         }
       } catch (e) {
         // chat_history table might not exist yet - that's ok
+      }
+
+      // Migration 12: Add websiteImportAutoPromptSent column if it doesn't exist
+      const hasWebsiteImportAutoPromptSent = tableInfo.some(col => col.name === 'websiteImportAutoPromptSent')
+      if (!hasWebsiteImportAutoPromptSent) {
+        console.log('📦 Running migration: Adding websiteImportAutoPromptSent column...')
+        this.db.exec('ALTER TABLE projects ADD COLUMN websiteImportAutoPromptSent INTEGER')
+        console.log('✅ Migration complete: websiteImportAutoPromptSent column added')
       }
 
       // Future migrations can be added here
@@ -588,6 +597,27 @@ class DatabaseService {
     } catch (error) {
       console.error('❌ Failed to parse Claude context:', error)
       return null
+    }
+  }
+
+  /**
+   * Mark website import auto-prompt as sent
+   */
+  markWebsiteImportAutoPromptSent(projectId: string): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to mark website import prompt after database closed - ignoring')
+      return
+    }
+
+    const timestamp = Date.now()
+    const sql = 'UPDATE projects SET websiteImportAutoPromptSent = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(timestamp, projectId)
+      console.log(`⭐ Website import auto-prompt marked as sent for project: ${projectId}`)
+    } catch (error) {
+      console.error('⭐ Failed to mark website import auto-prompt:', error)
+      throw error
     }
   }
 

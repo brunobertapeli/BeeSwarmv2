@@ -65,7 +65,6 @@ export function registerWebsiteImportHandlers(): void {
       }
 
       const manifestPath = path.join(project.path, 'website-import', 'manifest.json');
-      const migrationCompletePath = path.join(project.path, 'website-import', '.migration-completed');
 
       // Check if manifest exists
       if (!fs.existsSync(manifestPath)) {
@@ -79,19 +78,19 @@ export function registerWebsiteImportHandlers(): void {
       const manifestContent = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
       const importType = manifestContent.config?.importType || null;
 
-      // Check if migration is completed
-      const migrationCompleted = fs.existsSync(migrationCompletePath);
+      // Check if auto-prompt was sent (from database, not file)
+      const autoPromptSent = project.websiteImportAutoPromptSent !== null;
 
-      console.log(`📦 [WEBSITE IMPORT] Status check for ${projectId}:`);
+      console.log(`⭐ [WEBSITE IMPORT] Status check for ${projectId}:`);
       console.log(`   - Is Import: true`);
       console.log(`   - Import Type: ${importType}`);
-      console.log(`   - Migration Completed: ${migrationCompleted}`);
+      console.log(`   - Auto-prompt sent: ${autoPromptSent}${autoPromptSent ? ` (at ${new Date(project.websiteImportAutoPromptSent!).toISOString()})` : ''}`);
 
       return {
         success: true,
         isImport: true,
         importType,
-        migrationCompleted,
+        migrationCompleted: autoPromptSent, // Keep same property name for compatibility
         manifest: manifestContent
       };
     } catch (error) {
@@ -116,12 +115,8 @@ export function registerWebsiteImportHandlers(): void {
         };
       }
 
-      const migrationCompletePath = path.join(project.path, 'website-import', '.migration-completed');
-
-      // Create the flag file
-      fs.writeFileSync(migrationCompletePath, new Date().toISOString());
-
-      console.log('✅ [WEBSITE IMPORT] Migration marked as complete for:', projectId);
+      // Mark in database (atomic, no race conditions)
+      databaseService.markWebsiteImportAutoPromptSent(projectId);
 
       return {
         success: true

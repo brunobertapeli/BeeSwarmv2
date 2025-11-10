@@ -121,6 +121,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     show: (projectId) => ipcRenderer.invoke('preview:show', projectId),
     enableDeviceEmulation: (projectId, device) => ipcRenderer.invoke('preview:enable-device-emulation', projectId, device),
     disableDeviceEmulation: (projectId) => ipcRenderer.invoke('preview:disable-device-emulation', projectId),
+    injectCSS: (projectId, css) => ipcRenderer.invoke('preview:inject-css', projectId, css),
+    removeCSS: (projectId) => ipcRenderer.invoke('preview:remove-css', projectId),
+    executeJavaScript: (projectId, code) => ipcRenderer.invoke('preview:execute-javascript', projectId, code),
 
     // Preview event listeners
     onCreated: (callback) => {
