@@ -63,7 +63,6 @@ class PathValidator {
       )
     }
 
-    console.log(`✅ Path validation passed: ${resolvedPath}`)
     return resolvedPath
   }
 

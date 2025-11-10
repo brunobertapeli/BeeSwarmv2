@@ -19,7 +19,6 @@ export function registerLayoutHandlers(): void {
     'layout:set-state',
     async (_event, state: LayoutState, projectId: string) => {
       try {
-        console.log(`🎨 Setting layout state: ${state}`);
         layoutManager.setState(state, projectId);
 
         return {
@@ -38,7 +37,6 @@ export function registerLayoutHandlers(): void {
   // Cycle layout state (for Tab key)
   ipcMain.handle('layout:cycle-state', async (_event, projectId: string) => {
     try {
-      console.log(`🔄 Cycling layout state`);
       layoutManager.cycleState(projectId);
 
       return {
@@ -73,7 +71,6 @@ export function registerLayoutHandlers(): void {
   // Capture thumbnail
   ipcMain.handle('layout:capture-thumbnail', async (_event, projectId: string) => {
     try {
-      console.log(`📸 Capturing thumbnail for project: ${projectId}`);
       const thumbnail = await layoutManager.captureThumbnail(projectId);
 
       return {
@@ -126,7 +123,6 @@ export function registerLayoutHandlers(): void {
   // Capture for modal freeze
   ipcMain.handle('layout:capture-modal-freeze', async (_event, projectId: string) => {
     try {
-      console.log(`📸 Capturing modal freeze for project: ${projectId}`);
       const freezeImage = await layoutManager.captureForModalFreeze(projectId);
 
       return {

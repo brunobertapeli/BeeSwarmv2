@@ -32,8 +32,6 @@ export function registerChatHandlers(): void {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId);
 
-      console.log(`💬 Creating chat block for project: ${projectId}`);
-
       // Infer interaction type from prompt if not provided
       let type = interactionType;
       if (!type) {
@@ -90,8 +88,6 @@ export function registerChatHandlers(): void {
       }
       validateProjectOwnership(existingBlock.projectId);
 
-      console.log(`💬 Updating chat block: ${blockId}`);
-
       databaseService.updateChatBlock(blockId, updates);
 
       // Get updated block
@@ -136,8 +132,6 @@ export function registerChatHandlers(): void {
       }
       validateProjectOwnership(existingBlock.projectId);
 
-      console.log(`💬 Completing chat block: ${blockId}`);
-
       databaseService.completeChatBlock(blockId);
 
       // Get completed block
@@ -179,7 +173,6 @@ export function registerChatHandlers(): void {
       } catch (error) {
         if (error instanceof UnauthorizedError) {
           // Project not found or unauthorized - return empty history (graceful degradation)
-          console.log(`ℹ️ Project ${projectId} not found, returning empty chat history`);
           return {
             success: true,
             blocks: [],
@@ -243,8 +236,6 @@ export function registerChatHandlers(): void {
     try {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId);
-
-      console.log(`💬 Deleting chat history for project: ${projectId}`);
 
       databaseService.deleteChatHistory(projectId);
 

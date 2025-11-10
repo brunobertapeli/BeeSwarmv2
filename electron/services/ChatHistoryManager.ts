@@ -57,19 +57,16 @@ class ChatHistoryManager extends EventEmitter {
    * Initialize the chat history manager
    */
   init(): void {
-    console.log('💬 Initializing ChatHistoryManager...');
 
     // Listen to Claude events
     claudeService.on('claude-event', this.handleClaudeEvent.bind(this));
 
-    console.log('✅ ChatHistoryManager initialized');
   }
 
   /**
    * Start tracking a new chat block
    */
   startBlock(projectId: string, blockId: string): void {
-    console.log(`💬 Starting block tracking: ${blockId} for project ${projectId}`);
 
     // Clear any previous interrupted flag for this project
     this.interruptedBlocks.delete(projectId);
@@ -115,7 +112,6 @@ class ChatHistoryManager extends EventEmitter {
               const duration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
               activeThinking.thinkingDuration = parseInt(duration);
               activeBlock.thinkingStartTime = null; // Reset timer
-              console.log(`🧠 Thinking completed by text block: ${duration}s`);
             }
           }
 
@@ -143,7 +139,6 @@ class ChatHistoryManager extends EventEmitter {
               if (previousThinking && !previousThinking.thinkingDuration) {
                 const duration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
                 previousThinking.thinkingDuration = parseInt(duration);
-                console.log(`🧠 Previous thinking completed: ${duration}s`);
               }
             }
 
@@ -154,7 +149,6 @@ class ChatHistoryManager extends EventEmitter {
               content: block.thinking,
               timestamp: Date.now(),
             });
-            console.log(`🧠 Thinking started for block ${activeBlock.blockId}`);
           }
         }
 
@@ -167,17 +161,8 @@ class ChatHistoryManager extends EventEmitter {
           const isExitPlanMode = toolName === 'ExitPlanMode';
 
           if (isExitPlanMode) {
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('📋 [EXIT PLAN MODE] Claude called ExitPlanMode tool');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('✅ Plan is ready for user approval');
-            console.log('⏸️  Claude should STOP here and wait for user approval');
-            console.log('❌ NO execution tools (Edit/Write/Bash) should follow');
           } else if (isExecutionTool) {
-            console.log('⚠️  [TOOL EXECUTION] Claude using EXECUTION tool: ' + toolName);
-            console.log('   ⚠️  This should ONLY happen when NOT in plan mode!');
           } else {
-            console.log(`🔧 [TOOL USE] Claude using ${toolName}`);
           }
 
           const toolExecution: ToolExecution = {
@@ -224,13 +209,11 @@ class ChatHistoryManager extends EventEmitter {
     if (event.type === 'result') {
       // Check if block was interrupted by user
       if (activeBlock.isInterrupted) {
-        console.log(`⚠️ Block ${activeBlock.blockId} was interrupted - skipping normal completion`);
         // Just clean up and exit - cancelBlock() already handled everything
         this.activeBlocks.delete(projectId);
         return;
       }
 
-      console.log(`💬 Completing block: ${activeBlock.blockId}`);
 
       const timeSeconds = ((Date.now() - activeBlock.operationStartTime) / 1000).toFixed(1);
 
@@ -243,7 +226,6 @@ class ChatHistoryManager extends EventEmitter {
           thinkingMsg.thinkingDuration = parseInt(thinkingDuration);
         }
         if (unfinishedThinking.length > 0) {
-          console.log(`🧠 Thinking completed: ${thinkingDuration}s (${unfinishedThinking.length} session(s))`);
         }
       }
 
@@ -269,7 +251,6 @@ class ChatHistoryManager extends EventEmitter {
       const hasExitPlanMode = activeBlock.toolExecutions.some(t => t.toolName === 'ExitPlanMode');
       if (hasExitPlanMode) {
         interactionType = 'plan_ready';
-        console.log('📋 Detected interaction type: plan_ready (ExitPlanMode tool used)');
       }
 
       // Check for questions in Claude's messages
@@ -278,7 +259,6 @@ class ChatHistoryManager extends EventEmitter {
       );
       if (hasQuestions) {
         interactionType = 'questions';
-        console.log('❓ Detected interaction type: questions (<QUESTIONS> tag found)');
       }
 
       // If no special type detected, it's a regular Claude response
@@ -332,7 +312,6 @@ class ChatHistoryManager extends EventEmitter {
       return;
     }
 
-    console.log(`💬 Updating commit info for block ${blockId}: ${commitHash}`);
 
     // Update database
     databaseService.updateChatBlock(blockId, {
@@ -376,7 +355,6 @@ class ChatHistoryManager extends EventEmitter {
       return;
     }
 
-    console.log(`💬 Adding action to block ${blockId}: ${action.type} (${action.status})`);
 
     // Add action to database
     databaseService.addAction(blockId, {
@@ -505,14 +483,12 @@ class ChatHistoryManager extends EventEmitter {
       return;
     }
 
-    console.log(`💬 Canceling block: ${activeBlock.blockId}`);
 
     // Mark as interrupted BEFORE any completion logic
     activeBlock.isInterrupted = true;
 
     // Track this project as interrupted so claude-complete handler can check it
     this.interruptedBlocks.add(projectId);
-    console.log(`🔴 Marked project ${projectId} as interrupted`);
 
     // Add interrupted message to the block
     const interruptedMessage = '⚠️ Stopped by user';

@@ -71,7 +71,6 @@ class ProcessPersistence {
       timestamp: Date.now(),
     };
     this.save(data);
-    console.log(`💾 Saved PID ${pid} for project ${projectId} on port ${port}`);
   }
 
   /**
@@ -82,7 +81,6 @@ class ProcessPersistence {
     if (data[projectId]) {
       delete data[projectId];
       this.save(data);
-      console.log(`🗑️ Removed PID for project ${projectId}`);
     }
   }
 
@@ -104,13 +102,11 @@ class ProcessPersistence {
    * Called on app startup
    */
   async cleanupStaleProcesses(): Promise<void> {
-    console.log('🧹 Cleaning up stale processes...');
 
     const data = this.load();
     const entries = Object.values(data);
 
     if (entries.length === 0) {
-      console.log('✨ No stale processes found');
       return;
     }
 
@@ -121,7 +117,6 @@ class ProcessPersistence {
       const { projectId, pid, port } = entry;
 
       if (this.isProcessRunning(pid)) {
-        console.log(`🔪 Killing orphaned process PID ${pid} (project: ${projectId}, port: ${port})`);
 
         try {
           // Try graceful shutdown first
@@ -140,7 +135,6 @@ class ProcessPersistence {
           console.error(`Failed to kill process ${pid}:`, error);
         }
       } else {
-        console.log(`👻 Process PID ${pid} already dead (project: ${projectId})`);
         staleCount++;
       }
     }
@@ -148,7 +142,6 @@ class ProcessPersistence {
     // Clear all persisted processes
     this.save({});
 
-    console.log(`✅ Cleanup complete: ${killedCount} killed, ${staleCount} already dead`);
   }
 
   /**

@@ -22,7 +22,6 @@ export function registerGitHandlers(): void {
   // Restore to checkpoint (commit hash)
   ipcMain.handle('git:restore-checkpoint', async (_event, projectId: string, commitHash: string) => {
     try {
-      console.log(`🔄 Restoring ${projectId} to checkpoint ${commitHash}`);
 
       // Get project details
       const project = databaseService.getProjectById(projectId);
@@ -153,7 +152,6 @@ export function registerGitHandlers(): void {
         emitChatEvent('chat:block-completed', projectId, completedBlock);
       }
 
-      console.log(`✅ Checkpoint restored for ${projectId}`);
 
       return {
         success: true,
@@ -230,7 +228,6 @@ async function restartDevServer(projectId: string, projectPath: string): Promise
   if (processState === 'running') {
     const devServerStartTime = Date.now();
 
-    console.log(`🔄 Restarting dev server for ${projectId}`);
 
     // Add dev server action (in progress)
     chatHistoryManager.addAction(projectId, {
@@ -317,6 +314,5 @@ async function restartDevServer(projectId: string, projectPath: string): Promise
       });
     }
   } else {
-    console.log(`ℹ️ Dev server not running for ${projectId}, skipping restart`);
   }
 }

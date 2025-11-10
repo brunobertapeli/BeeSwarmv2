@@ -22,7 +22,6 @@ class KeywordService {
         ? path.join(process.cwd(), 'keywords.json')
         : path.join(process.resourcesPath, 'keywords.json');
 
-      console.log('📚 Loading keywords from:', keywordsPath);
 
       // Check if file exists
       if (!fs.existsSync(keywordsPath)) {
@@ -40,7 +39,6 @@ class KeywordService {
         this.keywords.set(keyword.toLowerCase(), description as string);
       }
 
-      console.log(`✅ Loaded ${this.keywords.size} keywords`);
     } catch (error) {
       console.error('❌ Failed to load keywords:', error);
     }

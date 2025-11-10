@@ -5,7 +5,6 @@ export function registerTemplateHandlers() {
   // Fetch all templates
   ipcMain.handle('templates:fetch', async () => {
     try {
-      console.log('📋 Fetching templates from MongoDB...')
       const templates = await mongoService.getTemplates()
 
       return {
@@ -24,7 +23,6 @@ export function registerTemplateHandlers() {
   // Get template by ID
   ipcMain.handle('templates:get-by-id', async (_event, templateId: string) => {
     try {
-      console.log(`📋 Fetching template by ID: ${templateId}`)
       const template = await mongoService.getTemplateById(templateId)
 
       if (!template) {

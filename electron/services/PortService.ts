@@ -54,10 +54,8 @@ class PortService {
         if (availableVitePort === vitePort) {
           // Both ports are available
           this.assignedPorts.set(projectId, port);
-          console.log(`✅ Allocated ports for ${projectId}: Netlify ${port}, Vite ${vitePort}`);
           return port;
         } else {
-          console.log(`⚠️ Port ${port} available but Vite port ${vitePort} in use, trying next...`);
           port++;
           continue;
         }

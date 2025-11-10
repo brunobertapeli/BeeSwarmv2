@@ -112,7 +112,6 @@ class ClaudeMdService {
       // Write to file
       fs.writeFileSync(filePath, content, 'utf-8')
 
-      console.log('✅ Updated CLAUDE.md addendum')
     } catch (error) {
       console.error('❌ Failed to write CLAUDE.md addendum:', error)
       throw error

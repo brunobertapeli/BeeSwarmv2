@@ -19,7 +19,6 @@ export function registerTerminalHandlers(): void {
   // Create terminal session
   ipcMain.handle('terminal:create-session', async (_event, projectId: string) => {
     try {
-      console.log(`📟 Creating terminal session for project: ${projectId}`);
 
       // Get project details
       const project = databaseService.getProjectById(projectId);
@@ -124,7 +123,6 @@ export function registerTerminalHandlers(): void {
   // Destroy terminal session (when project closes)
   ipcMain.handle('terminal:destroy-session', async (_event, projectId: string) => {
     try {
-      console.log(`🗑️ Destroying terminal session for project: ${projectId}`);
 
       terminalService.destroySession(projectId);
       terminalAggregator.deleteBuffer(projectId);
@@ -134,7 +132,6 @@ export function registerTerminalHandlers(): void {
       };
     } catch (error) {
       // Terminal destroy should always succeed - sessions may not exist
-      console.log(`ℹ️ Terminal destroy for ${projectId}:`, error instanceof Error ? error.message : 'Unknown error');
       return {
         success: true,
       };

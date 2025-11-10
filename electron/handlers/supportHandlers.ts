@@ -109,5 +109,4 @@ export function registerSupportHandlers() {
     }
   })
 
-  console.log('✅ Support handlers registered')
 }

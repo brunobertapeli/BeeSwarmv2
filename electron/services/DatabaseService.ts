@@ -56,8 +56,6 @@ class DatabaseService {
       const userDataDir = path.join(homeDir, 'Documents', 'CodeDeck', userId)
       this.dbPath = path.join(userDataDir, 'database.db')
 
-      console.log('📊 Database path:', this.dbPath)
-
       // Ensure directory exists
       if (!fs.existsSync(userDataDir)) {
         fs.mkdirSync(userDataDir, { recursive: true })
@@ -65,12 +63,10 @@ class DatabaseService {
 
       // Open database
       this.db = new Database(this.dbPath)
-      console.log('✅ SQLite database connected')
 
       // Enable WAL mode for better concurrency
       this.db.pragma('journal_mode = WAL')
       this.db.pragma('busy_timeout = 5000')
-      console.log('✅ WAL mode enabled')
 
       // Create projects table
       this.createProjectsTable()
@@ -107,7 +103,6 @@ class DatabaseService {
     `
 
     this.db!.exec(sql)
-    console.log('✅ Projects table ready')
   }
 
   /**
@@ -139,8 +134,6 @@ class DatabaseService {
     // Create index for faster queries by projectId
     this.db!.exec('CREATE INDEX IF NOT EXISTS idx_chat_history_projectId ON chat_history(projectId)')
     this.db!.exec('CREATE INDEX IF NOT EXISTS idx_chat_history_blockIndex ON chat_history(projectId, blockIndex)')
-
-    console.log('✅ Chat history table ready')
   }
 
   /**
@@ -155,59 +148,45 @@ class DatabaseService {
       // Migration 1: Add isFavorite column if it doesn't exist
       const hasIsFavorite = tableInfo.some(col => col.name === 'isFavorite')
       if (!hasIsFavorite) {
-        console.log('📦 Running migration: Adding isFavorite column...')
         this.db.exec('ALTER TABLE projects ADD COLUMN isFavorite INTEGER NOT NULL DEFAULT 0')
-        console.log('✅ Migration complete: isFavorite column added')
       }
 
       // Migration 2: Add configCompleted column if it doesn't exist
       const hasConfigCompleted = tableInfo.some(col => col.name === 'configCompleted')
       if (!hasConfigCompleted) {
-        console.log('📦 Running migration: Adding configCompleted column...')
         this.db.exec('ALTER TABLE projects ADD COLUMN configCompleted INTEGER NOT NULL DEFAULT 0')
-        console.log('✅ Migration complete: configCompleted column added')
       }
 
       // Migration 3: Add envVars column if it doesn't exist
       const hasEnvVars = tableInfo.some(col => col.name === 'envVars')
       if (!hasEnvVars) {
-        console.log('📦 Running migration: Adding envVars column...')
         this.db.exec('ALTER TABLE projects ADD COLUMN envVars TEXT')
-        console.log('✅ Migration complete: envVars column added')
       }
 
       // Migration 4: Add dependenciesInstalled column if it doesn't exist
       const hasDependenciesInstalled = tableInfo.some(col => col.name === 'dependenciesInstalled')
       if (!hasDependenciesInstalled) {
-        console.log('📦 Running migration: Adding dependenciesInstalled column...')
         this.db.exec('ALTER TABLE projects ADD COLUMN dependenciesInstalled INTEGER NOT NULL DEFAULT 0')
-        console.log('✅ Migration complete: dependenciesInstalled column added')
       }
 
       // Migration 5: Add claudeSessionId column if it doesn't exist
       const hasClaudeSessionId = tableInfo.some(col => col.name === 'claudeSessionId')
       if (!hasClaudeSessionId) {
-        console.log('📦 Running migration: Adding claudeSessionId column...')
         this.db.exec('ALTER TABLE projects ADD COLUMN claudeSessionId TEXT')
-        console.log('✅ Migration complete: claudeSessionId column added')
       }
 
       // Migration 6: Add claudeContext column if it doesn't exist
       const hasClaudeContext = tableInfo.some(col => col.name === 'claudeContext')
       if (!hasClaudeContext) {
-        console.log('📦 Running migration: Adding claudeContext column...')
         this.db.exec('ALTER TABLE projects ADD COLUMN claudeContext TEXT')
-        console.log('✅ Migration complete: claudeContext column added')
       }
 
       // Migration 7: Add userId column if it doesn't exist (SECURITY FIX)
       const hasUserId = tableInfo.some(col => col.name === 'userId')
       if (!hasUserId) {
-        console.log('📦 Running migration: Adding userId column...')
         // Add column with default empty string for existing projects
         // NOTE: In production, you'd need to populate this with actual user IDs
         this.db.exec('ALTER TABLE projects ADD COLUMN userId TEXT NOT NULL DEFAULT \'\'')
-        console.log('✅ Migration complete: userId column added')
       }
 
       // Migration 8-11: Add chat_history table columns if they don't exist
@@ -216,37 +195,27 @@ class DatabaseService {
 
         const hasClaudeMessages = chatTableInfo.some(col => col.name === 'claudeMessages')
         if (!hasClaudeMessages) {
-          console.log('📦 Running migration: Adding claudeMessages column to chat_history...')
           this.db.exec('ALTER TABLE chat_history ADD COLUMN claudeMessages TEXT')
-          console.log('✅ Migration complete: claudeMessages column added')
         }
 
         const hasCompletionStats = chatTableInfo.some(col => col.name === 'completionStats')
         if (!hasCompletionStats) {
-          console.log('📦 Running migration: Adding completionStats column to chat_history...')
           this.db.exec('ALTER TABLE chat_history ADD COLUMN completionStats TEXT')
-          console.log('✅ Migration complete: completionStats column added')
         }
 
         const hasSummary = chatTableInfo.some(col => col.name === 'summary')
         if (!hasSummary) {
-          console.log('📦 Running migration: Adding summary column to chat_history...')
           this.db.exec('ALTER TABLE chat_history ADD COLUMN summary TEXT')
-          console.log('✅ Migration complete: summary column added')
         }
 
         const hasActions = chatTableInfo.some(col => col.name === 'actions')
         if (!hasActions) {
-          console.log('📦 Running migration: Adding actions column to chat_history...')
           this.db.exec('ALTER TABLE chat_history ADD COLUMN actions TEXT')
-          console.log('✅ Migration complete: actions column added')
         }
 
         const hasInteractionType = chatTableInfo.some(col => col.name === 'interactionType')
         if (!hasInteractionType) {
-          console.log('📦 Running migration: Adding interactionType column to chat_history...')
           this.db.exec('ALTER TABLE chat_history ADD COLUMN interactionType TEXT')
-          console.log('✅ Migration complete: interactionType column added')
         }
       } catch (e) {
         // chat_history table might not exist yet - that's ok
@@ -255,9 +224,7 @@ class DatabaseService {
       // Migration 12: Add websiteImportAutoPromptSent column if it doesn't exist
       const hasWebsiteImportAutoPromptSent = tableInfo.some(col => col.name === 'websiteImportAutoPromptSent')
       if (!hasWebsiteImportAutoPromptSent) {
-        console.log('📦 Running migration: Adding websiteImportAutoPromptSent column...')
         this.db.exec('ALTER TABLE projects ADD COLUMN websiteImportAutoPromptSent INTEGER')
-        console.log('✅ Migration complete: websiteImportAutoPromptSent column added')
       }
 
       // Future migrations can be added here
@@ -311,7 +278,6 @@ class DatabaseService {
         newProject.lastOpenedAt
       )
 
-      console.log('✅ Project created in database:', newProject.name)
       return newProject
     } catch (error) {
       console.error('❌ Failed to create project:', error)
@@ -338,7 +304,6 @@ class DatabaseService {
         dependenciesInstalled: row.dependenciesInstalled === 1
       })) as Project[]
 
-      console.log(`✅ Fetched ${projects.length} projects from database`)
       return projects
     } catch (error) {
       console.error('❌ Failed to fetch projects:', error)
@@ -411,7 +376,6 @@ class DatabaseService {
     try {
       const envVarsJson = JSON.stringify(envVars)
       this.db.prepare(sql).run(envVarsJson, id)
-      console.log(`✅ Environment configuration saved for project: ${id}`)
     } catch (error) {
       console.error('❌ Failed to save env config:', error)
       throw error
@@ -451,7 +415,6 @@ class DatabaseService {
 
     try {
       this.db.prepare(sql).run(id)
-      console.log(`✅ Dependencies marked as installed for project: ${id}`)
     } catch (error) {
       console.error('❌ Failed to mark dependencies as installed:', error)
       throw error
@@ -477,7 +440,6 @@ class DatabaseService {
       const sql = 'UPDATE projects SET isFavorite = ? WHERE id = ?'
 
       this.db.prepare(sql).run(newStatus ? 1 : 0, id)
-      console.log(`✅ Project favorite toggled: ${id} → ${newStatus}`)
 
       return newStatus
     } catch (error) {
@@ -498,7 +460,6 @@ class DatabaseService {
 
     try {
       this.db.prepare(sql).run(status, id)
-      console.log(`✅ Project status updated: ${id} → ${status}`)
     } catch (error) {
       console.error('❌ Failed to update project status:', error)
       throw error
@@ -517,7 +478,6 @@ class DatabaseService {
 
     try {
       this.db.prepare(sql).run(Date.now(), id)
-      console.log(`✅ Project last opened updated: ${id}`)
     } catch (error) {
       console.error('❌ Failed to update last opened:', error)
       throw error
@@ -538,7 +498,6 @@ class DatabaseService {
 
     try {
       this.db.prepare(sql).run(sessionId, projectId)
-      console.log(`✅ Claude session ID saved for project: ${projectId}`)
     } catch (error) {
       console.error('❌ Failed to save Claude session ID:', error)
       throw error
@@ -572,7 +531,6 @@ class DatabaseService {
 
     try {
       this.db.prepare(sql).run(contextJson, projectId)
-      console.log(`✅ Claude context saved for project: ${projectId}`)
     } catch (error) {
       console.error('❌ Failed to save Claude context:', error)
       throw error
@@ -614,7 +572,6 @@ class DatabaseService {
 
     try {
       this.db.prepare(sql).run(timestamp, projectId)
-      console.log(`⭐ Website import auto-prompt marked as sent for project: ${projectId}`)
     } catch (error) {
       console.error('⭐ Failed to mark website import auto-prompt:', error)
       throw error
@@ -633,7 +590,6 @@ class DatabaseService {
 
     try {
       this.db.prepare(sql).run(id)
-      console.log(`✅ Project deleted from database: ${id}`)
     } catch (error) {
       console.error('❌ Failed to delete project:', error)
       throw error
@@ -652,7 +608,6 @@ class DatabaseService {
 
     try {
       this.db.prepare(sql).run(newName, newPath, id)
-      console.log(`✅ Project renamed in database: ${id} → ${newName}`)
 
       const project = this.getProjectById(id)
       if (!project) {
@@ -737,7 +692,6 @@ class DatabaseService {
         newBlock.createdAt
       )
 
-      console.log(`✅ Chat block created: ${newBlock.id} for project ${projectId}${interactionType ? ` (type: ${interactionType})` : ''}`)
       return newBlock
     } catch (error) {
       console.error('❌ Failed to create chat block:', error)
@@ -812,7 +766,6 @@ class DatabaseService {
 
     try {
       this.db.prepare(sql).run(...values)
-      console.log(`✅ Chat block updated: ${blockId}`)
     } catch (error) {
       console.error('❌ Failed to update chat block:', error)
       throw error
@@ -1050,7 +1003,6 @@ class DatabaseService {
 
     try {
       this.db.prepare(sql).run(projectId)
-      console.log(`✅ Chat history deleted for project: ${projectId}`)
     } catch (error) {
       console.error('❌ Failed to delete chat history:', error)
       throw error
@@ -1064,7 +1016,6 @@ class DatabaseService {
     if (this.db) {
       this.db.close()
       this.db = null // Mark as closed so future operations are safely ignored
-      console.log('📊 Database connection closed')
     }
   }
 }

@@ -39,7 +39,6 @@ class DependencyService {
           return
         }
 
-        console.log(`📦 Installing dependencies in: ${projectPath}`)
 
         if (projectId) {
           terminalAggregator.addNpmLine(projectId, `Installing dependencies in ${path.basename(projectPath)}...\n`)
@@ -93,7 +92,6 @@ class DependencyService {
         // Handle process completion
         npmProcess.on('close', (code) => {
           if (code === 0) {
-            console.log('✅ Dependencies installed successfully')
             if (projectId) {
               terminalAggregator.addNpmLine(projectId, `✓ Dependencies installed successfully\n`)
             }

@@ -27,7 +27,6 @@ class EnvService {
       // Write to file
       fs.writeFileSync(envFilePath, content + '\n', 'utf-8')
 
-      console.log(`✅ Wrote ${Object.keys(envVars).length} environment variables to ${fileName}`)
     } catch (error) {
       console.error('❌ Failed to write .env file:', error)
       throw error
@@ -64,7 +63,6 @@ class EnvService {
         }
       })
 
-      console.log(`✅ Read ${Object.keys(envVars).length} environment variables from ${fileName}`)
       return envVars
     } catch (error) {
       console.error('❌ Failed to read .env file:', error)
@@ -93,7 +91,6 @@ class EnvService {
 
       if (fs.existsSync(envFilePath)) {
         fs.unlinkSync(envFilePath)
-        console.log(`✅ Deleted ${fileName}`)
       }
     } catch (error) {
       console.error('❌ Failed to delete .env file:', error)

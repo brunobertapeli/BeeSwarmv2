@@ -64,13 +64,11 @@ class ProcessManager extends EventEmitter {
     // Prevents race condition where rapid clicks trigger multiple starts
     const existing = this.processes.get(projectId);
     if (existing && (existing.state === ProcessState.RUNNING || existing.state === ProcessState.STARTING)) {
-      console.log(`⚠️ Dev server for ${projectId} is already ${existing.state}, returning existing port`);
       return existing.port;
     }
 
     // Stop existing process if any (crashed or error state)
     if (existing) {
-      console.log(`🔄 Cleaning up previous dev server (state: ${existing.state})`);
       await this.stopDevServer(projectId);
     }
 
@@ -106,7 +104,6 @@ class ProcessManager extends EventEmitter {
           throw new Error('Failed to start server');
         }
 
-        console.log(`✅ Server start initiated successfully on port ${port}`);
         return port;
       } catch (error) {
         lastError = error;

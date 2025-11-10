@@ -91,5 +91,4 @@ export function registerClaudeMdHandlers() {
     }
   })
 
-  console.log('✅ Registered CLAUDE.md IPC handlers')
 }

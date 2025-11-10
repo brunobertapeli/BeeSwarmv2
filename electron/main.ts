@@ -32,7 +32,6 @@ let currentUserId: string | null = null
  * Set current user and reinitialize user-scoped services
  */
 export function setCurrentUser(userId: string) {
-  console.log(`👤 Setting current user: ${userId}`)
   currentUserId = userId
 
   // Reinitialize database for this user
@@ -68,7 +67,6 @@ export function getCurrentUserId(): string | null {
  * Clear current user (on logout)
  */
 export function clearCurrentUser() {
-  console.log(`👤 Clearing current user`)
   currentUserId = null
 }
 import { previewService } from './services/PreviewService.js'
@@ -91,13 +89,6 @@ if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 }
 
-console.log('\n🔧 CodeDeck Starting...')
-console.log('🔧 Development mode:', isDev)
-console.log('📁 CWD:', process.cwd())
-console.log('📁 __dirname:', __dirname)
-console.log('✅ VITE_SUPABASE_URL:', !!process.env.VITE_SUPABASE_URL)
-console.log('✅ MONGODB_URI:', !!process.env.MONGODB_URI)
-console.log('')
 
 
 let mainWindow: BrowserWindow | null = null
@@ -119,7 +110,6 @@ function createMenu() {
         {
           label: 'Check for Updates',
           click: () => {
-            console.log('Checking for updates...')
             mainWindow?.webContents.send('check-updates')
           }
         },
@@ -286,7 +276,6 @@ User: ${currentUserId || 'not logged in'}
 
   // Renderer became responsive again
   mainWindow.on('responsive', () => {
-    console.log('✅ Window became responsive again')
   })
 
   // Set Content Security Policy
@@ -354,7 +343,6 @@ async function initializeApp() {
   if (!handlersRegistered) {
     // CRITICAL: Clean up orphaned processes from previous session
     // This must run before anything else to free ports and kill zombie processes
-    console.log('🧹 Cleaning up orphaned processes from previous session...')
     await processPersistence.cleanupStaleProcesses()
 
     // Note: Database will be initialized after user login
@@ -513,7 +501,6 @@ User: ${currentUserId || 'not logged in'}
 
 // Log when app is ready and register global shortcuts
 app.on('ready', () => {
-  console.log('✅ Electron app ready')
 
   // Register global Tab shortcut for layout cycling
   const tabRegistered = globalShortcut.register('Tab', () => {
@@ -524,9 +511,7 @@ app.on('ready', () => {
   })
 
   if (tabRegistered) {
-    console.log('⌨️  Global Tab shortcut registered')
   } else {
-    console.log('⚠️  Failed to register Tab shortcut')
   }
 })
 
@@ -559,7 +544,6 @@ ipcMain.handle('app:clear-crash-logs', async () => {
   try {
     if (fs.existsSync(crashLogPath)) {
       fs.unlinkSync(crashLogPath)
-      console.log('✅ Crash logs cleared')
     }
     return { success: true }
   } catch (error) {
@@ -613,33 +597,26 @@ app.on('before-quit', async (event) => {
   event.preventDefault()
   isQuitting = true
 
-  console.log('🛑 Gracefully shutting down...')
 
   try {
     // 1. Destroy Claude sessions first (abort any running operations)
-    console.log('🤖 Stopping Claude sessions...')
     claudeService.destroyAllSessions()
 
     // 2. Wait a moment for Claude operations to abort
     await new Promise(resolve => setTimeout(resolve, 500))
 
     // 3. Stop all dev servers
-    console.log('🔌 Stopping dev servers...')
     await processManager.stopAll()
 
     // 4. Destroy terminal sessions
-    console.log('💻 Closing terminals...')
     terminalService.destroyAllSessions()
 
     // 5. Destroy all previews
-    console.log('🖼️ Closing previews...')
     previewService.destroyAll()
 
     // 6. Close database last (after all operations complete)
-    console.log('📊 Closing database...')
     databaseService.close()
 
-    console.log('✅ Cleanup complete')
   } catch (error) {
     console.error('❌ Error during cleanup:', error)
   } finally {

@@ -27,7 +27,6 @@ class TemplateService {
     const baseDir = this.getProjectsBaseDir(userId)
     if (!fs.existsSync(baseDir)) {
       fs.mkdirSync(baseDir, { recursive: true })
-      console.log('✅ Created projects directory:', baseDir)
     }
   }
 
@@ -57,9 +56,6 @@ class TemplateService {
         throw new Error(`Project directory already exists: ${dirName}`)
       }
 
-      console.log('📦 Cloning template...')
-      console.log('   GitHub URL:', githubUrl)
-      console.log('   Destination:', projectPath)
 
       // Send to terminal if projectId provided
       if (projectId) {
@@ -71,7 +67,6 @@ class TemplateService {
         '--depth': 1 // Shallow clone for faster cloning
       })
 
-      console.log('✅ Template cloned successfully')
 
       if (projectId) {
         terminalAggregator.addGitLine(projectId, `✓ Template cloned successfully to ${projectPath}\n`)
@@ -81,7 +76,6 @@ class TemplateService {
       const gitDir = path.join(projectPath, '.git')
       if (fs.existsSync(gitDir)) {
         fs.rmSync(gitDir, { recursive: true, force: true })
-        console.log('✅ Removed .git directory')
 
         if (projectId) {
           terminalAggregator.addGitLine(projectId, `✓ Removed template .git directory\n`)
@@ -91,7 +85,6 @@ class TemplateService {
       // Initialize new git repository
       const projectGit = simpleGit(projectPath)
       await projectGit.init()
-      console.log('✅ Initialized new git repository')
 
       if (projectId) {
         terminalAggregator.addGitLine(projectId, `✓ Initialized new git repository\n`)
@@ -164,7 +157,6 @@ class TemplateService {
       )
 
       fs.writeFileSync(viteConfigPath, config, 'utf-8')
-      console.log(`✅ Updated vite.config.ts with port ${vitePort}`)
     } catch (error) {
       console.error('❌ Failed to update vite.config.ts:', error)
       throw error
@@ -195,7 +187,6 @@ class TemplateService {
       )
 
       fs.writeFileSync(netlifyTomlPath, config, 'utf-8')
-      console.log(`✅ Updated netlify.toml with targetPort ${vitePort}`)
     } catch (error) {
       console.error('❌ Failed to update netlify.toml:', error)
       throw error

@@ -65,7 +65,6 @@ class MongoService {
       console.error('  - MONGODB_URI')
       console.error('  - MONGODB_DATABASE (optional, defaults to "codedeck")')
     } else {
-      console.log('✅ MongoDB configuration loaded successfully')
     }
 
     this.initialized = true
@@ -82,7 +81,6 @@ class MongoService {
       this.client = new MongoClient(this.uri)
       await this.client.connect()
       this.db = this.client.db(this.dbName)
-      console.log('✅ Connected to MongoDB')
     } catch (error) {
       console.error('❌ MongoDB connection error:', error)
       throw error
@@ -104,7 +102,6 @@ class MongoService {
       const user = await usersCollection.findOne({ email: sanitizedEmail })
 
       if (!user) {
-        console.log('User not found:', email)
         return null
       }
 
@@ -145,7 +142,6 @@ class MongoService {
       }
 
       await usersCollection.insertOne(newUser)
-      console.log('✅ User created in MongoDB:', newUser.email)
 
       return newUser as UserData
     } catch (error) {
@@ -165,7 +161,6 @@ class MongoService {
       const templatesCollection = this.db!.collection('templates')
       const templates = await templatesCollection.find({}).toArray()
 
-      console.log(`✅ Fetched ${templates.length} templates from MongoDB`)
 
       return templates.map(template => ({
         _id: template._id.toString(),
@@ -203,11 +198,9 @@ class MongoService {
       const template = await templatesCollection.findOne({ id: sanitizedTemplateId })
 
       if (!template) {
-        console.log('Template not found:', templateId)
         return null
       }
 
-      console.log('✅ Fetched template from MongoDB:', template.name)
 
       return {
         _id: template._id.toString(),
@@ -236,7 +229,6 @@ class MongoService {
         await this.client.close()
         this.client = null
         this.db = null
-        console.log('MongoDB connection closed')
       }
     } catch (error) {
       console.error('Error closing MongoDB connection:', error)

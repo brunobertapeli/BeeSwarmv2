@@ -83,7 +83,6 @@ class SupportService {
     if (!this.uri) {
       console.error('⚠️  MongoDB URI not found in environment variables')
     } else {
-      console.log('✅ SupportService MongoDB configuration loaded')
     }
 
     this.initialized = true
@@ -100,7 +99,6 @@ class SupportService {
       this.client = new MongoClient(this.uri)
       await this.client.connect()
       this.db = this.client.db(this.dbName)
-      console.log('✅ SupportService connected to MongoDB')
     } catch (error) {
       console.error('❌ SupportService MongoDB connection error:', error)
       throw error
@@ -178,7 +176,6 @@ class SupportService {
         { upsert: true }
       )
 
-      console.log('✅ Support message saved:', message._id)
       return message
     } catch (error) {
       console.error('Error saving support message:', error)
@@ -241,7 +238,6 @@ class SupportService {
       const result = await queueCollection.insertOne(queueEntry)
       queueEntry._id = result.insertedId
 
-      console.log('✅ User added to support queue:', data.userName)
       return queueEntry
     } catch (error) {
       console.error('Error adding to support queue:', error)
@@ -282,7 +278,6 @@ class SupportService {
       const result = await messagesCollection.insertOne(offlineMessage)
       offlineMessage._id = result.insertedId
 
-      console.log('✅ Offline message sent:', data.subject)
       return offlineMessage
     } catch (error) {
       console.error('Error sending offline message:', error)
@@ -328,7 +323,6 @@ class SupportService {
       const result = await bugsCollection.insertOne(bugReport)
       bugReport._id = result.insertedId
 
-      console.log('✅ Bug report submitted:', report.title)
       return bugReport
     } catch (error) {
       console.error('Error submitting bug report:', error)
@@ -342,7 +336,6 @@ class SupportService {
         await this.client.close()
         this.client = null
         this.db = null
-        console.log('SupportService MongoDB connection closed')
       }
     } catch (error) {
       console.error('Error closing SupportService MongoDB connection:', error)

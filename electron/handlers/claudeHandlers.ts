@@ -30,42 +30,14 @@ export function registerClaudeHandlers(): void {
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId);
 
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('🚀 [CLAUDE START] Starting Claude session');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log(`📂 Project: ${projectId}`);
-      console.log(`📝 Prompt: ${prompt?.substring(0, 100)}...`);
-      console.log(`🎯 Model: ${model || 'default'}`);
-      console.log(`🧠 Thinking: ${thinkingEnabled ? 'ENABLED' : 'DISABLED'}`);
-      console.log(`📋 Plan Mode: ${planMode ? '✅ ENABLED (read-only exploration)' : '❌ DISABLED (full execution)'}`);
-
       // Only start if we have a prompt - prevents auto-start on project load
       if (!prompt) {
-        console.log('⏭️ Skipping Claude start - no prompt provided (lazy init)');
         return {
           success: true,
         };
       }
 
-      // Log attachments received from frontend
-      if (attachments && attachments.length > 0) {
-        console.log(`📎 [IPC HANDLER] Received ${attachments.length} attachment(s):`,
-          attachments.map(a => ({ name: a.name, type: a.type, mediaType: a.mediaType, dataLength: a.data.length }))
-        );
-      }
-
-      // Log thinking mode
-      if (thinkingEnabled) {
-        console.log(`🧠 [IPC HANDLER] Extended thinking enabled`);
-      }
-
-      // Log plan mode
-      if (planMode) {
-        console.log(`📋 [IPC HANDLER] Plan mode enabled`);
-      }
-
       // Add user message block to terminal
-      console.log('📝 Adding user prompt to terminal:', prompt);
       terminalAggregator.addUserLine(projectId, '\n\n');
       terminalAggregator.addUserLine(projectId, '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       terminalAggregator.addUserLine(projectId, '👤 USER REQUEST\n');
@@ -112,32 +84,6 @@ export function registerClaudeHandlers(): void {
         // SECURITY: Validate user owns this project
         const project = validateProjectOwnership(projectId);
 
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('📤 [CLAUDE SEND] Sending prompt to existing session');
-        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log(`📂 Project: ${projectId}`);
-        console.log(`📝 Prompt: ${prompt?.substring(0, 100)}...`);
-        console.log(`🎯 Model: ${model || 'default'}`);
-        console.log(`🧠 Thinking: ${thinkingEnabled ? 'ENABLED' : 'DISABLED'}`);
-        console.log(`📋 Plan Mode: ${planMode ? '✅ ENABLED (read-only exploration)' : '❌ DISABLED (full execution)'}`);
-        console.log(`🔄 Session: RESUME (continuing conversation)`);
-
-        // Log attachments received from frontend
-        if (attachments && attachments.length > 0) {
-          console.log(`📎 [IPC HANDLER] Received ${attachments.length} attachment(s):`,
-            attachments.map(a => ({ name: a.name, type: a.type, mediaType: a.mediaType, dataLength: a.data.length }))
-          );
-        }
-
-        // Log thinking mode
-        if (thinkingEnabled) {
-          console.log(`🧠 [IPC HANDLER] Extended thinking enabled`);
-        }
-
-        // Log plan mode
-        if (planMode) {
-          console.log(`📋 [IPC HANDLER] Plan mode enabled`);
-        }
 
         // CRITICAL FIX: Validate that any existing session's path matches current project
         // This prevents Claude from editing files in the wrong directory
@@ -234,7 +180,6 @@ export function registerClaudeHandlers(): void {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId);
 
-      console.log(`🗑️ Clearing Claude session for project: ${projectId}`);
 
       claudeService.clearSession(projectId);
 
@@ -267,7 +212,6 @@ export function registerClaudeHandlers(): void {
   // Destroy Claude session
   ipcMain.handle('claude:destroy-session', async (_event, projectId: string) => {
     try {
-      console.log(`🛑 Stopping Claude session for project: ${projectId}`);
 
       // Try to get project - if it doesn't exist, session cleanup is a no-op
       let project;
@@ -277,7 +221,6 @@ export function registerClaudeHandlers(): void {
       } catch (error) {
         if (error instanceof UnauthorizedError) {
           // Project not found or unauthorized - session already cleaned up or doesn't exist
-          console.log(`ℹ️ Project ${projectId} not found, skipping session cleanup`);
           return { success: true };
         }
         throw error;
@@ -292,11 +235,9 @@ export function registerClaudeHandlers(): void {
         (tool) => tool.toolName === 'Edit' || tool.toolName === 'Write'
       ) || false;
 
-      console.log(`📝 Had file edits: ${hadFileEdits}`);
 
       // 3. Cancel the active block and mark as interrupted
       if (activeBlock) {
-        console.log(`💬 Canceling active block: ${activeBlock.blockId}`);
         chatHistoryManager.cancelBlock(projectId);
       }
 
@@ -309,7 +250,6 @@ export function registerClaudeHandlers(): void {
         );
 
         if (lastValidBlock?.commitHash) {
-          console.log(`🔄 Reverting to last checkpoint: ${lastValidBlock.commitHash}`);
 
           // Import and call restore function directly (not via IPC)
           const gitHandlers = await import('./gitHandlers.js');
@@ -325,10 +265,8 @@ export function registerClaudeHandlers(): void {
             }
           }, 100);
         } else {
-          console.log(`⚠️ No valid checkpoint found to revert to`);
         }
       } else {
-        console.log(`✅ No file edits detected, skipping revert`);
       }
 
       return {
@@ -380,7 +318,6 @@ export function registerClaudeHandlers(): void {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId);
 
-      console.log(`🔄 Changing model for ${projectId} to ${modelName}`);
 
       await claudeService.changeModel(projectId, modelName);
 
@@ -642,18 +579,15 @@ function setupClaudeEventForwarding(): void {
   // Forward status changes to renderer
   claudeService.on('claude-status', ({ projectId, status }: { projectId: string; status: ClaudeStatus }) => {
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
-      console.log(`📡 Forwarding Claude status to renderer: ${projectId} -> ${status}`);
       mainWindowContents.send('claude:status-changed', projectId, status);
     }
   });
 
   // Handle Claude completion
   claudeService.on('claude-complete', async ({ projectId }: { projectId: string }) => {
-    console.log(`✅ Claude completed for project: ${projectId}`);
 
     // Check if project was interrupted - skip post-completion workflow
     if (chatHistoryManager.wasInterrupted(projectId)) {
-      console.log(`⚠️ Skipping post-completion workflow for interrupted project ${projectId}`);
       // Clear the interrupted flag now that we've handled it
       chatHistoryManager.clearInterrupted(projectId);
       return;
@@ -694,7 +628,6 @@ function setupClaudeEventForwarding(): void {
 
   // Handle Claude exit
   claudeService.on('claude-exit', ({ projectId, exitCode }: { projectId: string; exitCode: number }) => {
-    console.log(`🤖 Claude exited for ${projectId} with code ${exitCode}`);
 
     // Notify renderer
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
@@ -705,7 +638,6 @@ function setupClaudeEventForwarding(): void {
   // Forward context updates to renderer
   claudeService.on('claude-context-updated', ({ projectId, context }: { projectId: string; context: ClaudeContext }) => {
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
-      console.log(`📡 Forwarding context update to renderer: ${projectId}`);
       mainWindowContents.send('claude:context-updated', projectId, context);
     }
   });
@@ -713,14 +645,12 @@ function setupClaudeEventForwarding(): void {
   // Forward model changes to renderer
   claudeService.on('claude-model-changed', ({ projectId, model }: { projectId: string; model: string }) => {
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
-      console.log(`📡 Forwarding model change to renderer: ${projectId} -> ${model}`);
       mainWindowContents.send('claude:model-changed', projectId, model);
     }
   });
 
   // Handle questions from Claude (plan mode)
   claudeService.on('claude-questions', ({ projectId, questions }: { projectId: string; questions: any }) => {
-    console.log('📋 [PLAN MODE] Questions received from Claude:', JSON.stringify(questions, null, 2));
 
     // TODO: Forward to renderer for UI display
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
@@ -737,7 +667,6 @@ function setupClaudeEventForwarding(): void {
  */
 async function handleClaudeCompletion(projectId: string, projectPath: string): Promise<void> {
   try {
-    console.log(`🔄 Starting post-completion workflow for ${projectId}`);
 
     // Check if there were any file-modifying tools used
     const blocks = databaseService.getChatHistory(projectId, 1);
@@ -761,7 +690,6 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
       );
 
       if (!hasFileModifications) {
-        console.log(`ℹ️ No file modifications detected, skipping post-completion workflow for ${projectId}`);
         terminalAggregator.addSystemLine(projectId, '\n');
         terminalAggregator.addSystemLine(projectId, 'ℹ️  No file changes detected - skipping commit and restart\n');
         terminalAggregator.addSystemLine(projectId, '\n');
@@ -773,7 +701,6 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
     await gitCommitChanges(projectId, projectPath);
 
     // 2. Context update (placeholder for future implementation)
-    console.log(`📋 TODO: Update context for ${projectId} (placeholder)`);
     terminalAggregator.addSystemLine(
       projectId,
       '📋 Context update - TODO (placeholder)\n'
@@ -784,7 +711,6 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
     if (processState === 'running') {
       const devServerStartTime = Date.now();
 
-      console.log(`🔄 Restarting dev server for ${projectId}`);
 
       // Add dev server action (in progress)
       chatHistoryManager.addAction(projectId, {
@@ -871,10 +797,8 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
         });
       }
     } else {
-      console.log(`ℹ️ Dev server not running for ${projectId}, skipping restart`);
     }
 
-    console.log(`✅ Post-completion workflow finished for ${projectId}`);
   } catch (error) {
     console.error(`❌ Error in post-completion workflow for ${projectId}:`, error);
     terminalAggregator.addSystemLine(
@@ -889,7 +813,6 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
  */
 async function gitCommitChanges(projectId: string, projectPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    console.log(`📦 Committing changes for ${projectId}`);
 
     const gitStartTime = Date.now();
 
@@ -933,7 +856,6 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
 
       // No changes to commit
       if (statusOutput.trim().length === 0) {
-        console.log(`ℹ️ No changes to commit for ${projectId}`);
         terminalAggregator.addGitLine(projectId, 'ℹ️  No changes detected - working tree clean\n');
         terminalAggregator.addGitLine(projectId, '\n');
 
@@ -1005,7 +927,6 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
           }
 
           // Get commit hash reliably using git rev-parse
-          console.log(`🔍 DEBUG - Git commit output: ${commitOutput}`);
 
           // Use git rev-parse HEAD to get the actual commit hash (100% reliable)
           const revParseProcess = spawn('git', ['rev-parse', 'HEAD'], {
@@ -1028,11 +949,9 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
               commitHash = 'unknown';
             }
 
-            console.log(`🔍 DEBUG - Parsed commit hash: ${commitHash}`);
 
             const gitElapsed = ((Date.now() - gitStartTime) / 1000).toFixed(1);
 
-            console.log(`✅ Changes committed for ${projectId}`);
             terminalAggregator.addGitLine(projectId, `✅ Committed: ${commitHash} | ⏱️  ${gitElapsed}s\n`);
             terminalAggregator.addGitLine(projectId, '\n');
 
@@ -1063,7 +982,6 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
  */
 async function performRestore(projectId: string, commitHash: string, projectPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    console.log(`🔄 Performing restore to ${commitHash} for ${projectId}`);
 
     // Execute git checkout
     const checkoutProcess = spawn('git', ['checkout', commitHash], {
@@ -1082,18 +1000,15 @@ async function performRestore(projectId: string, commitHash: string, projectPath
         return;
       }
 
-      console.log(`✅ Code reverted to ${commitHash}`);
 
       // Restart dev server if running
       const processState = processManager.getProcessStatus(projectId);
       if (processState === 'running') {
-        console.log(`🔄 Restarting dev server for ${projectId}`);
 
         try {
           await processManager.stopDevServer(projectId);
           await new Promise((res) => setTimeout(res, 2000)); // Wait 2s
           await processManager.startDevServer(projectId, projectPath);
-          console.log(`✅ Dev server restarted`);
         } catch (error) {
           console.error(`❌ Failed to restart dev server:`, error);
         }

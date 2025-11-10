@@ -19,7 +19,6 @@ export function registerPreviewHandlers(): void {
     'preview:create',
     async (_event, projectId: string, url: string, bounds: PreviewBounds) => {
       try {
-        console.log(`🖼️  Creating preview for project: ${projectId} at ${url}`);
         previewService.createPreview(projectId, url, bounds);
 
         return {
@@ -58,7 +57,6 @@ export function registerPreviewHandlers(): void {
   // Refresh preview
   ipcMain.handle('preview:refresh', async (_event, projectId: string) => {
     try {
-      console.log(`🔄 Refreshing preview for project: ${projectId}`);
       previewService.refresh(projectId);
 
       return {
@@ -76,7 +74,6 @@ export function registerPreviewHandlers(): void {
   // Toggle DevTools
   ipcMain.handle('preview:toggle-devtools', async (_event, projectId: string, isMobile?: boolean, layoutState?: string) => {
     try {
-      console.log(`🔧 Toggling DevTools for project: ${projectId}, mobile: ${isMobile}, state: ${layoutState}`);
       previewService.toggleDevTools(projectId, isMobile, layoutState);
 
       return {
@@ -94,7 +91,6 @@ export function registerPreviewHandlers(): void {
   // Navigate to URL
   ipcMain.handle('preview:navigate', async (_event, projectId: string, url: string) => {
     try {
-      console.log(`🧭 Navigating preview to: ${url}`);
       previewService.navigateTo(projectId, url);
 
       return {
@@ -112,7 +108,6 @@ export function registerPreviewHandlers(): void {
   // Destroy preview
   ipcMain.handle('preview:destroy', async (_event, projectId: string) => {
     try {
-      console.log(`🗑️  Destroying preview for project: ${projectId}`);
       previewService.destroyPreview(projectId);
 
       return {
@@ -130,7 +125,6 @@ export function registerPreviewHandlers(): void {
   // Hide preview
   ipcMain.handle('preview:hide', async (_event, projectId: string) => {
     try {
-      console.log(`🙈 Hiding preview for project: ${projectId}`);
       previewService.hide(projectId);
 
       return {
@@ -148,7 +142,6 @@ export function registerPreviewHandlers(): void {
   // Show preview
   ipcMain.handle('preview:show', async (_event, projectId: string) => {
     try {
-      console.log(`👁️  Showing preview for project: ${projectId}`);
       previewService.show(projectId);
 
       return {
@@ -166,7 +159,6 @@ export function registerPreviewHandlers(): void {
   // Enable device emulation
   ipcMain.handle('preview:enable-device-emulation', async (_event, projectId: string, device: string) => {
     try {
-      console.log(`📱 Enabling device emulation for project: ${projectId}, device: ${device}`);
       previewService.enableDeviceEmulation(projectId, device as any);
 
       return {
@@ -184,7 +176,6 @@ export function registerPreviewHandlers(): void {
   // Disable device emulation
   ipcMain.handle('preview:disable-device-emulation', async (_event, projectId: string) => {
     try {
-      console.log(`🖥️  Disabling device emulation for project: ${projectId}`);
       previewService.disableDeviceEmulation(projectId);
 
       return {
@@ -202,7 +193,6 @@ export function registerPreviewHandlers(): void {
   // Inject CSS
   ipcMain.handle('preview:inject-css', async (_event, projectId: string, css: string) => {
     try {
-      console.log(`💉 Injecting CSS for project: ${projectId}`);
       await previewService.injectCSS(projectId, css);
 
       return {
@@ -220,7 +210,6 @@ export function registerPreviewHandlers(): void {
   // Remove CSS
   ipcMain.handle('preview:remove-css', async (_event, projectId: string) => {
     try {
-      console.log(`🗑️  Removing CSS for project: ${projectId}`);
       await previewService.removeCSS(projectId);
 
       return {
@@ -238,7 +227,6 @@ export function registerPreviewHandlers(): void {
   // Execute JavaScript
   ipcMain.handle('preview:execute-javascript', async (_event, projectId: string, code: string) => {
     try {
-      console.log(`⚡ Executing JavaScript for project: ${projectId}`);
       const result = await previewService.executeJavaScript(projectId, code);
 
       return {

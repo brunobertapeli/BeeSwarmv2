@@ -46,13 +46,11 @@ class LayoutManager extends EventEmitter {
    * Set current view mode (desktop/mobile)
    */
   setViewMode(viewMode: 'desktop' | 'mobile'): void {
-    console.log(`📱 View mode updated: ${this.currentViewMode} → ${viewMode}`);
     const wasChanged = this.currentViewMode !== viewMode;
     this.currentViewMode = viewMode;
 
     // Clear thumbnail cache when view mode changes to force re-capture with new size
     if (wasChanged) {
-      console.log(`🗑️ Clearing thumbnail cache due to view mode change`);
       this.thumbnailCache.clear();
     }
   }
@@ -68,7 +66,6 @@ class LayoutManager extends EventEmitter {
    * Set layout state and update BrowserView bounds
    */
   async setState(state: LayoutState, projectId: string): Promise<void> {
-    console.log(`🎨 Layout state: ${this.currentState} → ${state}`);
 
     const previousState = this.currentState;
     this.currentState = state;
@@ -80,7 +77,6 @@ class LayoutManager extends EventEmitter {
       // Ensure BrowserView is visible before capturing
       const wasHidden = previewService.isPreviewHidden(projectId);
       if (wasHidden) {
-        console.log('📸 BrowserView was hidden, showing temporarily for capture...');
         previewService.show(projectId);
         // Set to DEFAULT bounds temporarily for capture
         const defaultBounds = this.calculateBounds('DEFAULT');
@@ -90,15 +86,12 @@ class LayoutManager extends EventEmitter {
       }
 
       // Capture fresh thumbnail
-      console.log('📸 Capturing thumbnail...');
       const thumbnail = await this.captureThumbnail(projectId);
 
       if (thumbnail) {
-        console.log('✅ Thumbnail captured successfully, length:', thumbnail.length);
         // Cache it for subsequent fast transitions
         this.thumbnailCache.set(projectId, thumbnail);
       } else {
-        console.log('❌ Thumbnail capture failed, checking cache...');
       }
 
       // Hide BrowserView (we'll show the static screenshot instead)
@@ -106,7 +99,6 @@ class LayoutManager extends EventEmitter {
 
       // Use captured or cached thumbnail
       const finalThumbnail = thumbnail || this.thumbnailCache.get(projectId);
-      console.log('📤 Emitting state-changed with thumbnail:', finalThumbnail ? 'YES' : 'NO');
 
       // Emit with thumbnail data (use cached if capture failed)
       this.emit('state-changed', state, previousState, finalThumbnail);
@@ -177,7 +169,6 @@ class LayoutManager extends EventEmitter {
         const thumbnailSize = this.currentViewMode === 'mobile'
           ? this.mobileThumbnailSize
           : this.desktopThumbnailSize;
-        console.log(`📐 STATUS_EXPANDED bounds: ${thumbnailSize.width}x${thumbnailSize.height} (${this.currentViewMode} mode)`);
         return {
           x: this.thumbnailPosition.left,
           y: this.thumbnailPosition.top,
@@ -208,7 +199,6 @@ class LayoutManager extends EventEmitter {
    * Update ActionBar height (called when ActionBar size changes)
    */
   setActionBarHeight(height: number): void {
-    console.log(`📏 ActionBar height updated: ${this.actionBarHeight} → ${height}`);
     this.actionBarHeight = height;
 
     // Recalculate bounds if in DEFAULT state
@@ -226,12 +216,10 @@ class LayoutManager extends EventEmitter {
     if (!preview) return null;
 
     try {
-      console.log(`📸 Current view mode for thumbnail: ${this.currentViewMode}`);
       const image = await preview.webContents.capturePage();
       const thumbnailSize = this.currentViewMode === 'mobile'
         ? this.mobileThumbnailSize
         : this.desktopThumbnailSize;
-      console.log(`📸 Thumbnail size selected: ${thumbnailSize.width}x${thumbnailSize.height} (${this.currentViewMode} mode)`);
       const resized = image.resize({
         width: thumbnailSize.width,
         height: thumbnailSize.height,
@@ -264,17 +252,14 @@ class LayoutManager extends EventEmitter {
   async captureForModalFreeze(projectId: string): Promise<string | null> {
     const preview = previewService.getPreview(projectId);
     if (!preview) {
-      console.log('⚠️ No preview found for modal freeze capture');
       return null;
     }
 
     try {
-      console.log('📸 Capturing full-size screenshot for modal freeze...');
 
       // Ensure BrowserView is visible
       const wasHidden = previewService.isPreviewHidden(projectId);
       if (wasHidden) {
-        console.log('📸 BrowserView was hidden, showing temporarily for modal freeze capture...');
         previewService.show(projectId);
         await new Promise(resolve => setTimeout(resolve, 50));
       }
@@ -287,7 +272,6 @@ class LayoutManager extends EventEmitter {
       // Cache it for quick reuse
       this.modalFreezeCache.set(projectId, dataUrl);
 
-      console.log('✅ Modal freeze capture successful, length:', dataUrl.length);
       return dataUrl;
     } catch (error) {
       console.error('❌ Failed to capture for modal freeze:', error);

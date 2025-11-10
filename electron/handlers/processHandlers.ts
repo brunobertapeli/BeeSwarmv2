@@ -20,7 +20,6 @@ export function registerProcessHandlers(): void {
   // Start dev server
   ipcMain.handle('process:start-dev-server', async (_event, projectId: string) => {
     try {
-      console.log(`🚀 Starting dev server for project: ${projectId}`);
 
       // Get project details
       const project = databaseService.getProjectById(projectId);
@@ -50,7 +49,6 @@ export function registerProcessHandlers(): void {
   // Stop dev server
   ipcMain.handle('process:stop-dev-server', async (_event, projectId: string) => {
     try {
-      console.log(`🛑 Stopping dev server for project: ${projectId}`);
       await processManager.stopDevServer(projectId);
 
       return {
@@ -68,7 +66,6 @@ export function registerProcessHandlers(): void {
   // Restart dev server
   ipcMain.handle('process:restart-dev-server', async (_event, projectId: string) => {
     try {
-      console.log(`🔄 Restarting dev server for project: ${projectId}`);
 
       // Get project details
       const project = databaseService.getProjectById(projectId);

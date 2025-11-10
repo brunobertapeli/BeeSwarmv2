@@ -45,9 +45,6 @@ class PreviewService extends EventEmitter {
       throw new Error('Main window not set. Call setMainWindow first.');
     }
 
-    console.log(`🖼️  [PreviewService] Creating preview for ${projectId}`);
-    console.log(`🖼️  [PreviewService] Bounds:`, bounds);
-    console.log(`🖼️  [PreviewService] URL: ${url}`);
 
     // Destroy existing preview if any
     this.destroyPreview(projectId);
@@ -64,7 +61,6 @@ class PreviewService extends EventEmitter {
 
     // Set bounds
     view.setBounds(bounds);
-    console.log(`🖼️  [PreviewService] BrowserView bounds set to:`, view.getBounds());
 
     // Attach to main window
     this.mainWindow.setBrowserView(view);
@@ -162,20 +158,15 @@ class PreviewService extends EventEmitter {
   updateBounds(projectId: string, bounds: PreviewBounds): void {
     const view = this.browserViews.get(projectId);
     if (!view) {
-      console.log(`🖼️  [PreviewService] Cannot update bounds - no view found for ${projectId}`);
       return;
     }
 
     // Don't update bounds if view is hidden (off-screen)
     if (this.isHidden.get(projectId)) {
-      console.log(`🖼️  [PreviewService] Skipping bounds update - view ${projectId} is hidden`);
       return;
     }
 
-    console.log(`🖼️  [PreviewService] Updating bounds for ${projectId}:`, bounds);
-    console.log(`🖼️  [PreviewService] Current bounds before update:`, view.getBounds());
     view.setBounds(bounds);
-    console.log(`🖼️  [PreviewService] BrowserView bounds updated to:`, view.getBounds());
     this.emit('preview-bounds-updated', projectId, bounds);
   }
 
@@ -238,13 +229,9 @@ class PreviewService extends EventEmitter {
             const bounds = view.getBounds();
             const mainWindowBounds = this.mainWindow.getBounds();
 
-            console.log(`🔧 DevTools opened - Layout state: ${layoutState}`);
-            console.log(`🔧 Preview bounds:`, bounds);
-            console.log(`🔧 Main window bounds:`, mainWindowBounds);
 
             // Listen for when DevTools window is closed
             devToolsWindow.on('closed', () => {
-              console.log(`🔧 DevTools window closed for ${projectId}`);
               this.devToolsOpen.set(projectId, false);
               this.devToolsWindows.delete(projectId);
               this.emit('preview-devtools-toggled', projectId, false);
@@ -368,8 +355,6 @@ class PreviewService extends EventEmitter {
     const bounds = view.getBounds();
     const mainWindowBounds = this.mainWindow.getBounds();
 
-    console.log(`🔧 Repositioning DevTools for layout state: ${layoutState}`);
-    console.log(`🔧 New preview bounds:`, bounds);
 
     // TODO: Uncomment and adjust based on layoutState
     // if (layoutState === 'BROWSER_FULL') {
@@ -421,7 +406,6 @@ class PreviewService extends EventEmitter {
 
     // If already visible, nothing to do
     if (!this.isHidden.get(projectId)) {
-      console.log(`🖼️  [PreviewService] View ${projectId} already visible`);
       return;
     }
 
@@ -433,10 +417,8 @@ class PreviewService extends EventEmitter {
     this.hiddenBounds.delete(projectId);
 
     if (previousBounds) {
-      console.log(`🖼️  [PreviewService] Restoring view ${projectId} with previous bounds:`, previousBounds);
       view.setBounds(previousBounds);
     } else {
-      console.log(`🖼️  [PreviewService] Showing view ${projectId} (bounds will be set separately)`);
     }
 
     this.emit('preview-shown', projectId);
@@ -489,7 +471,6 @@ class PreviewService extends EventEmitter {
         deviceScaleFactor: metrics.deviceScaleFactor,
         scale: 1,
       });
-      console.log(`📱 Device emulation enabled: ${deviceName}`);
     } else {
       console.warn(`⚠️ Unknown device: ${deviceName}, device emulation not enabled`);
     }
@@ -504,7 +485,6 @@ class PreviewService extends EventEmitter {
     if (!view) return;
 
     view.webContents.disableDeviceEmulation();
-    console.log(`🖥️  Device emulation disabled (desktop view)`);
   }
 
   /**
@@ -525,7 +505,6 @@ class PreviewService extends EventEmitter {
       // Insert new CSS and store the key
       const key = await view.webContents.insertCSS(css);
       this.injectedCSSKeys.set(projectId, key);
-      console.log(`💉 [PreviewService] CSS injected for ${projectId}, key: ${key}`);
     } catch (error) {
       console.error(`❌ [PreviewService] Failed to inject CSS:`, error);
       throw error;
@@ -547,7 +526,6 @@ class PreviewService extends EventEmitter {
     try {
       await view.webContents.removeInsertedCSS(cssKey);
       this.injectedCSSKeys.delete(projectId);
-      console.log(`🗑️  [PreviewService] CSS removed for ${projectId}`);
     } catch (error) {
       console.error(`❌ [PreviewService] Failed to remove CSS:`, error);
       throw error;
@@ -567,7 +545,6 @@ class PreviewService extends EventEmitter {
 
     try {
       const result = await view.webContents.executeJavaScript(code);
-      console.log(`⚡ [PreviewService] JavaScript executed for ${projectId}`);
       return result;
     } catch (error) {
       console.error(`❌ [PreviewService] Failed to execute JavaScript:`, error);

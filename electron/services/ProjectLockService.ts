@@ -35,7 +35,6 @@ export class ProjectLockService {
     // Wait for any existing operation to complete
     const existingLock = this.locks.get(projectId);
     if (existingLock) {
-      console.log(`🔒 Project ${projectId} is locked, waiting for previous operation to complete...`);
       await existingLock;
     }
 
@@ -52,7 +51,6 @@ export class ProjectLockService {
     queue.push(operationName);
     this.operationQueue.set(projectId, queue);
 
-    console.log(`🔓 Lock acquired for project ${projectId} (operation: ${operationName})`);
 
     try {
       const result = await operation();
@@ -75,7 +73,6 @@ export class ProjectLockService {
         this.operationQueue.delete(projectId);
       }
 
-      console.log(`🔓 Lock released for project ${projectId} (operation: ${operationName})`);
     }
   }
 

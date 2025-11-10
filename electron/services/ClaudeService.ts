@@ -90,7 +90,6 @@ class ClaudeService extends EventEmitter {
     try {
       const promptPath = path.join(__dirname, '../prompts/system-prompt.txt');
       this.systemPrompt = readFileSync(promptPath, 'utf-8');
-      console.log('📝 Loaded system prompt from:', promptPath);
       return this.systemPrompt;
     } catch (error) {
       console.warn('⚠️ Failed to load system prompt, using empty prompt:', error);
@@ -139,17 +138,8 @@ class ClaudeService extends EventEmitter {
     // Priority: explicit model parameter > existing session model > default
     const effectiveModel = model || existingSession?.context?.model || 'claude-sonnet-4-5-20250929';
 
-    console.log('🔍 DEBUG - Model selection:');
-    console.log('  - Explicit model param:', model);
-    console.log('  - Existing session model:', existingSession?.context?.model);
-    console.log('  - Effective model:', effectiveModel);
 
-    console.log(`🤖 Starting Claude Code session for project: ${projectId}`);
-    console.log(`📁 Working directory: ${projectPath}`);
-    console.log(`🎯 Model: ${effectiveModel}${!model && existingSession?.context?.model ? ' (from preference)' : model ? '' : ' (default)'}`);
-    console.log(`📝 Prompt: ${prompt.substring(0, 100)}...`);
     if (planMode) {
-      console.log(`📋 Plan mode enabled - Claude will explore and ask questions first`);
     }
 
     // Get session ID from database OR existing session for resume
@@ -165,7 +155,6 @@ class ClaudeService extends EventEmitter {
       const project = databaseService.getProjectById(projectId);
       if (project && project.path === projectPath) {
         sessionId = savedSessionId;
-        console.log(`📦 Resuming Claude session from database: ${savedSessionId}`);
       } else {
         console.warn(`⚠️ Project path changed, clearing saved session ID`);
         databaseService.saveClaudeSessionId(projectId, null);
@@ -176,7 +165,6 @@ class ClaudeService extends EventEmitter {
     else if (existingSession?.sessionId) {
       if (existingSession.projectPath === projectPath) {
         sessionId = existingSession.sessionId;
-        console.log(`📦 Resuming Claude session from memory: ${sessionId}`);
       } else {
         console.warn(`⚠️ Session path mismatch, starting fresh session`);
         sessionId = null;
@@ -234,12 +222,6 @@ class ClaudeService extends EventEmitter {
     // Build SDK options
     const permissionMode = planMode ? ('plan' as const) : ('bypassPermissions' as const);
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('🔍 [PERMISSION MODE CHECK]');
-    console.log(`📋 planMode parameter: ${planMode}`);
-    console.log(`🔐 Computed permissionMode: ${permissionMode}`);
-    console.log(`🔄 Resuming session: ${sessionId ? 'YES' : 'NO'}`);
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     const options = {
       cwd: projectPath, // Current working directory
@@ -255,18 +237,8 @@ class ClaudeService extends EventEmitter {
       ...(thinkingEnabled && { maxThinkingTokens: 5000 }), // Enable extended thinking (5k tokens = ~3750 words)
     };
 
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('⚙️  [SDK OPTIONS] Configuring Claude Agent SDK');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`🔐 Permission Mode: ${permissionMode} ${planMode ? '(PLAN MODE - read-only tools only)' : '(BYPASS - full execution)'}`);
-    console.log(`📁 Working Directory: ${projectPath}`);
-    console.log(`🎯 Model: ${effectiveModel}`);
-    console.log(`🔄 Resume Session: ${sessionId ? `YES (${sessionId.substring(0, 12)}...)` : 'NO (new session)'}`);
-    console.log(`🔧 Max Turns: ${options.maxTurns}`);
     if (thinkingEnabled) {
-      console.log(`🧠 Extended Thinking: ENABLED (5000 tokens max)`);
     }
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     try {
       // Update status to running
@@ -278,7 +250,6 @@ class ClaudeService extends EventEmitter {
       // Add plan mode instructions to prompt if enabled
       let finalPrompt = prompt;
       if (planMode) {
-        console.log('📋 [PLAN MODE] Adding plan mode instructions to prompt');
         finalPrompt = `${prompt}
 
 IMPORTANT: You are in PLAN MODE. Follow these steps:
@@ -309,7 +280,6 @@ Examples:
       }
 
       if (attachments && attachments.length > 0) {
-        console.log(`📎 [CLAUDE SERVICE] Processing ${attachments.length} attachment(s)`);
 
         // Build content array with attachments + text
         const content: Array<any> = [];
@@ -326,11 +296,6 @@ Examples:
               }
             };
             content.push(imageContent);
-            console.log(`🖼️ [CLAUDE SERVICE] Added image to content array:`, {
-              name: attachment.name || 'unnamed',
-              mediaType: attachment.mediaType,
-              dataLength: attachment.data.length,
-              dataPreview: attachment.data.substring(0, 50) + '...'
             });
           } else if (attachment.type === 'document') {
             const docContent = {
@@ -342,10 +307,6 @@ Examples:
               }
             };
             content.push(docContent);
-            console.log(`📄 [CLAUDE SERVICE] Added document to content array:`, {
-              name: attachment.name || 'unnamed',
-              mediaType: attachment.mediaType,
-              dataLength: attachment.data.length
             });
           }
         }
@@ -356,8 +317,6 @@ Examples:
           text: finalPrompt
         });
 
-        console.log(`📎 [CLAUDE SERVICE] Final content array:`, {
-          totalItems: content.length,
           types: content.map(c => c.type)
         });
 
@@ -372,7 +331,6 @@ Examples:
             parent_tool_use_id: null
           } as SDKUserMessage;
 
-          console.log('📎 [CLAUDE SERVICE] Yielding user message with attachments (base64 data suppressed for readability)');
           yield userMessage;
         })();
       } else {
@@ -391,25 +349,20 @@ Examples:
 
       // If resuming and model changed, use setModel() to preserve context
       if (sessionId && existingSession?.context?.model && existingSession.context.model !== effectiveModel) {
-        console.log(`🔄 Model change detected: ${existingSession.context.model} → ${effectiveModel}`);
         try {
-          console.log('🔄 Attempting to change model via setModel()...');
           await claudeQuery.setModel(effectiveModel);
-          console.log('✅ Model changed successfully');
         } catch (error) {
           console.error(`❌ Failed to change model:`, error);
         }
       }
 
       for await (const msg of claudeQuery) {
-        console.log('🔍 DEBUG - Received message type:', msg.type, 'subtype:', msg.subtype);
 
         // Save session ID for future resumption (both memory and database)
         if (msg.session_id) {
           const session = this.sessions.get(projectId);
           if (session && session.sessionId !== msg.session_id) {
             session.sessionId = msg.session_id;
-            console.log(`💾 Saved Claude session ID: ${msg.session_id}`);
             // Persist to database for cross-restart resume
             databaseService.saveClaudeSessionId(projectId, msg.session_id);
           }
@@ -420,7 +373,6 @@ Examples:
           const session = this.sessions.get(projectId);
           if (session) {
             session.context.model = msg.model || session.context.model;
-            console.log('🔍 DEBUG - Updated session context model:', session.context.model);
             this.emit('claude-context-updated', { projectId, context: session.context });
           }
         }
@@ -463,14 +415,12 @@ Examples:
 
         // Check for completion
         if (msg.type === 'result') {
-          console.log(`✅ Claude session completed for ${projectId}`);
           this.updateStatus(projectId, 'completed');
           this.emit('claude-complete', { projectId });
           break;
         }
       }
 
-      console.log(`✅ Claude Code session finished for ${projectId}`);
     } catch (error: any) {
       console.error(`❌ Claude session error for ${projectId}:`, error);
 
@@ -495,7 +445,6 @@ Examples:
    * @param planMode - Optional flag to enable plan mode
    */
   async sendPrompt(projectId: string, projectPath: string, prompt: string, model?: string, attachments?: ClaudeAttachment[], thinkingEnabled?: boolean, planMode?: boolean): Promise<void> {
-    console.log(`📝 Sending prompt to Claude [${projectId}]: ${prompt.substring(0, 100)}...`);
 
     // Use startSession which handles resume automatically
     await this.startSession(projectId, projectPath, prompt, model, attachments, thinkingEnabled, planMode);
@@ -506,7 +455,6 @@ Examples:
    * @param projectId - Project identifier
    */
   clearSession(projectId: string): void {
-    console.log(`🗑️ Clearing Claude session for project: ${projectId}`);
 
     const session = this.sessions.get(projectId);
 
@@ -535,7 +483,6 @@ Examples:
     this.emit('claude-context-updated', { projectId, context: clearedContext });
 
     // IMPORTANT: Clear session ID from database ALWAYS (not just if session exists in memory)
-    console.log(`🗑️ Clearing session ID from database for ${projectId}`);
     databaseService.saveClaudeSessionId(projectId, null);
 
     // If there's an active session in memory, clean it up
@@ -675,17 +622,14 @@ Examples:
   interrupt(projectId: string): void {
     const session = this.sessions.get(projectId);
     if (!session) {
-      console.log(`⚠️ No active session to interrupt for ${projectId}`);
       return;
     }
 
-    console.log(`🛑 Interrupting Claude generation for ${projectId}`);
 
     try {
       // Use SDK's interrupt method if available on query object
       if (session.query && typeof (session.query as any).interrupt === 'function') {
         (session.query as any).interrupt();
-        console.log(`✅ Called query.interrupt() for ${projectId}`);
       }
 
       // Also abort via AbortController as fallback
@@ -814,11 +758,9 @@ Examples:
                 // Remove extra whitespace
                 questionsJson = questionsJson.replace(/\s+/g, ' ').trim();
 
-                console.log('🔍 [PLAN MODE] Cleaned JSON:', questionsJson);
 
                 const questionsData = JSON.parse(questionsJson);
 
-                console.log('🔍 [PLAN MODE] Detected questions from Claude:', questionsData);
 
                 // Emit questions event
                 this.emit('claude-questions', { projectId, questions: questionsData });

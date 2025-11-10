@@ -81,10 +81,6 @@ export function registerWebsiteImportHandlers(): void {
       // Check if auto-prompt was sent (from database, not file)
       const autoPromptSent = project.websiteImportAutoPromptSent !== null;
 
-      console.log(`⭐ [WEBSITE IMPORT] Status check for ${projectId}:`);
-      console.log(`   - Is Import: true`);
-      console.log(`   - Import Type: ${importType}`);
-      console.log(`   - Auto-prompt sent: ${autoPromptSent}${autoPromptSent ? ` (at ${new Date(project.websiteImportAutoPromptSent!).toISOString()})` : ''}`);
 
       return {
         success: true,
@@ -145,10 +141,8 @@ export function registerWebsiteImportHandlers(): void {
 
       if (fs.existsSync(tempDir)) {
         fs.rmSync(tempDir, { recursive: true, force: true });
-        console.log('🗑️ [WEBSITE IMPORT] Cleaned up temp directory:', tempProjectId);
         return { success: true };
       } else {
-        console.log('⚠️ [WEBSITE IMPORT] Temp directory not found:', tempProjectId);
         return { success: true }; // Not an error if already cleaned
       }
     } catch (error) {
@@ -164,9 +158,6 @@ export function registerWebsiteImportHandlers(): void {
     const userId = getCurrentUserId() || 'unknown';
     const tempProjectId = `website-import-${Date.now()}`;
 
-    console.log('🌐 [WEBSITE IMPORT] Starting analysis');
-    console.log('🌐 [WEBSITE IMPORT] URL:', url);
-    console.log('🌐 [WEBSITE IMPORT] Temp Project ID:', tempProjectId);
 
     // Create temp directory
     const tempDir = path.join(
@@ -182,7 +173,6 @@ export function registerWebsiteImportHandlers(): void {
       // Ensure temp directory exists
       if (!fs.existsSync(tempDir)) {
         fs.mkdirSync(tempDir, { recursive: true });
-        console.log('📁 [WEBSITE IMPORT] Created temp directory:', tempDir);
       }
 
       // Create images subdirectory
@@ -191,7 +181,6 @@ export function registerWebsiteImportHandlers(): void {
         fs.mkdirSync(imagesDir, { recursive: true });
       }
 
-      console.log('🚀 [WEBSITE IMPORT] Launching Puppeteer...');
       const browser = await puppeteer.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -202,10 +191,8 @@ export function registerWebsiteImportHandlers(): void {
       // Set viewport for consistent rendering
       await page.setViewport({ width: 1920, height: 1080 });
 
-      console.log('📄 [WEBSITE IMPORT] Navigating to website...');
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
 
-      console.log('🔍 [WEBSITE IMPORT] Extracting content...');
 
       // Extract page metadata
       const metadata = await page.evaluate(() => {
@@ -215,10 +202,8 @@ export function registerWebsiteImportHandlers(): void {
         };
       });
 
-      console.log('📝 [WEBSITE IMPORT] Extracted metadata:', metadata);
 
       // Extract all images
-      console.log('🖼️ [WEBSITE IMPORT] Extracting images...');
       const images = await page.evaluate((baseUrl: string) => {
         const imageElements = Array.from(document.querySelectorAll('img'));
         const extractedImages: Array<{ url: string; alt: string; role: string }> = [];
@@ -261,10 +246,8 @@ export function registerWebsiteImportHandlers(): void {
         return extractedImages;
       }, url);
 
-      console.log(`🖼️ [WEBSITE IMPORT] Found ${images.length} images`);
 
       // Download images
-      console.log('⬇️ [WEBSITE IMPORT] Downloading images...');
       const downloadedImages: ImageData[] = [];
 
       for (let i = 0; i < images.length; i++) {
@@ -292,16 +275,13 @@ export function registerWebsiteImportHandlers(): void {
             localPath: `images/${filename}`
           });
 
-          console.log(`✅ [WEBSITE IMPORT] Downloaded: ${filename}`);
         } catch (error) {
           console.warn(`⚠️ [WEBSITE IMPORT] Failed to download image: ${image.url}`, error);
         }
       }
 
-      console.log(`✅ [WEBSITE IMPORT] Downloaded ${downloadedImages.length}/${images.length} images`);
 
       // Extract sections and content
-      console.log('📋 [WEBSITE IMPORT] Extracting sections...');
       const sections = await page.evaluate(() => {
         const extractedSections: any[] = [];
 
@@ -372,10 +352,8 @@ export function registerWebsiteImportHandlers(): void {
         return extractedSections;
       });
 
-      console.log(`📋 [WEBSITE IMPORT] Extracted ${sections.length} sections`);
 
       // Extract navigation
-      console.log('🧭 [WEBSITE IMPORT] Extracting navigation...');
       const navigation = await page.evaluate(() => {
         const nav = document.querySelector('nav, header nav, [role="navigation"]');
         const items: Array<{ label: string; url: string }> = [];
@@ -394,10 +372,8 @@ export function registerWebsiteImportHandlers(): void {
         return { items };
       });
 
-      console.log(`🧭 [WEBSITE IMPORT] Extracted ${navigation.items.length} navigation items`);
 
       // Extract footer
-      console.log('🦶 [WEBSITE IMPORT] Extracting footer...');
       const footer = await page.evaluate(() => {
         const footerEl = document.querySelector('footer, [role="contentinfo"]');
         const links: Array<{ label: string; url: string }> = [];
@@ -418,7 +394,6 @@ export function registerWebsiteImportHandlers(): void {
         return { content, links };
       });
 
-      console.log('✅ [WEBSITE IMPORT] Footer extracted');
 
       // Assign images to sections (distribute downloaded images across sections)
       const sectionsWithImages = sections.map((section, index) => {
@@ -463,11 +438,9 @@ export function registerWebsiteImportHandlers(): void {
       // Save manifest
       const manifestPath = path.join(tempDir, 'manifest.json');
       fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-      console.log('💾 [WEBSITE IMPORT] Saved manifest.json');
 
       // Close browser
       await browser.close();
-      console.log('✅ [WEBSITE IMPORT] Analysis complete!');
 
       return {
         success: true,

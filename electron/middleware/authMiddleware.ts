@@ -59,7 +59,6 @@ export function validateProjectOwnership(projectId: string, silent: boolean = fa
     throw new UnauthorizedError('Access denied: Project belongs to another user')
   }
 
-  console.log(`✅ Authorization passed: User ${userId} owns project ${projectId}`)
   return project
 }
 

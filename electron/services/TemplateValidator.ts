@@ -167,22 +167,18 @@ class TemplateValidator {
    * @returns True if valid, false otherwise
    */
   validateAndLog(projectPath: string, projectName: string): boolean {
-    console.log(`🔍 Validating template structure for: ${projectName}`);
 
     const result = this.validate(projectPath);
 
     if (result.errors.length > 0) {
-      console.log(`❌ Template validation failed for ${projectName}:`);
-      result.errors.forEach(error => console.log(`   • ${error}`));
+      result.errors.forEach(error => console.error(`   • ${error}`));
     }
 
     if (result.warnings.length > 0) {
-      console.log(`⚠️ Template validation warnings for ${projectName}:`);
-      result.warnings.forEach(warning => console.log(`   • ${warning}`));
+      result.warnings.forEach(warning => console.warn(`   • ${warning}`));
     }
 
     if (result.valid) {
-      console.log(`✅ Template structure valid for ${projectName}`);
     }
 
     return result.valid;

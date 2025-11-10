@@ -15,15 +15,11 @@ export function registerProjectHandlers() {
       // SECURITY: Ensure user is authenticated
       const userId = requireAuth()
 
-      console.log(`🚀 Creating project: "${projectName}" from template: ${templateId}`)
       if (tempImportProjectId) {
-        console.log(`📦 [WEBSITE IMPORT] Temp project ID provided: ${tempImportProjectId}`)
       }
       if (screenshotData) {
-        console.log(`📸 [SCREENSHOT IMPORT] Screenshot provided`)
       }
       if (importType) {
-        console.log(`🎨 [IMPORT TYPE] ${importType}`)
       }
 
       // Fetch template details from MongoDB
@@ -63,7 +59,6 @@ export function registerProjectHandlers() {
   // Get all projects
   ipcMain.handle('project:get-all', async () => {
     try {
-      console.log('📋 Fetching all projects...')
 
       // Check if user is logged in
       const userId = getCurrentUserId()
@@ -75,7 +70,6 @@ export function registerProjectHandlers() {
       }
 
       const projects = projectService.getAllProjects()
-      console.log('✅ Fetched', projects.length, 'projects from database')
 
       return {
         success: true,
@@ -96,7 +90,6 @@ export function registerProjectHandlers() {
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId)
 
-      console.log(`📋 Fetching project: ${projectId}`)
 
       return {
         success: true,
@@ -125,7 +118,6 @@ export function registerProjectHandlers() {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId)
 
-      console.log(`🗑️  Deleting project: ${projectId}`)
 
       // IMPORTANT: Clean up sessions BEFORE deleting project
       // This prevents errors when cleanup operations try to validate project ownership
@@ -134,19 +126,16 @@ export function registerProjectHandlers() {
         const processManager = (await import('../services/ProcessManager')).processManager
         const status = processManager.getProcessStatus(projectId)
         if (status === 'running') {
-          console.log('🛑 Stopping dev server before deletion...')
           await processManager.stopDevServer(projectId)
         }
 
         // Destroy Claude session (if any)
         const claudeService = (await import('../services/ClaudeService')).claudeService
-        console.log('🛑 Destroying Claude session...')
         claudeService.destroySession(projectId)
 
         // Destroy terminal session (if any)
         const terminalService = (await import('../services/TerminalService')).terminalService
         const terminalAggregator = (await import('../services/TerminalAggregator')).terminalAggregator
-        console.log('🛑 Destroying terminal session...')
         terminalService.destroySession(projectId)
         terminalAggregator.deleteBuffer(projectId)
       } catch (cleanupError) {
@@ -183,7 +172,6 @@ export function registerProjectHandlers() {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId)
 
-      console.log(`⭐ Toggling favorite: ${projectId}`)
       const isFavorite = projectService.toggleFavorite(projectId)
 
       return {
@@ -213,7 +201,6 @@ export function registerProjectHandlers() {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId)
 
-      console.log(`🕐 Updating last opened: ${projectId}`)
       projectService.updateLastOpened(projectId)
 
       return {
@@ -254,7 +241,6 @@ export function registerProjectHandlers() {
         }
       }
 
-      console.log(`✏️ Renaming project: ${projectId} → ${newName}`)
 
       // NOTE: No need to stop services! Folder path is based on immutable project ID,
       // so renaming only updates the display name in the database. All services keep working.
@@ -287,7 +273,6 @@ export function registerProjectHandlers() {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId)
 
-      console.log(`📁 Opening in Finder/Explorer: ${projectId}`)
       projectService.showInFinder(projectId)
 
       return {
@@ -316,7 +301,6 @@ export function registerProjectHandlers() {
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId)
 
-      console.log(`🔑 Saving environment configuration for: ${projectId}`)
 
       // Save to database
       databaseService.saveEnvConfig(projectId, envVars)
@@ -350,7 +334,6 @@ export function registerProjectHandlers() {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId)
 
-      console.log(`🔑 Getting environment configuration for: ${projectId}`)
       const envVars = databaseService.getEnvConfig(projectId)
 
       return {
@@ -380,7 +363,6 @@ export function registerProjectHandlers() {
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId)
 
-      console.log(`📦 Installing dependencies for: ${projectId}`)
 
       // Install dependencies with progress streaming
       const result = await dependencyService.installFullstackDependencies(
