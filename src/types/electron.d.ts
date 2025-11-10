@@ -38,6 +38,8 @@ export type ProcessState = 'stopped' | 'starting' | 'running' | 'stopping' | 'cr
 
 export type ClaudeStatus = 'idle' | 'starting' | 'running' | 'completed' | 'error'
 
+export type LayoutState = 'DEFAULT' | 'STATUS_EXPANDED' | 'BROWSER_FULL'
+
 export enum InteractionType {
   USER_MESSAGE = 'user_message',           // Regular user message
   CLAUDE_RESPONSE = 'claude_response',     // Claude's response
@@ -712,7 +714,7 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
-    onStateChanged: (callback: (newState: string, previousState: string, thumbnail: string | null) => void) => () => void
+    onStateChanged: (callback: (newState: LayoutState, previousState: LayoutState, thumbnail: string | null) => void) => () => void
     onCycleRequested: (callback: () => void) => () => void
     onActionBarHeightChanged: (callback: (height: number) => void) => () => void
   }

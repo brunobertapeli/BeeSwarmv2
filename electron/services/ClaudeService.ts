@@ -296,7 +296,6 @@ Examples:
               }
             };
             content.push(imageContent);
-            });
           } else if (attachment.type === 'document') {
             const docContent = {
               type: 'document',
@@ -307,7 +306,6 @@ Examples:
               }
             };
             content.push(docContent);
-            });
           }
         }
 
@@ -315,9 +313,6 @@ Examples:
         content.push({
           type: 'text',
           text: finalPrompt
-        });
-
-          types: content.map(c => c.type)
         });
 
         // Create async iterator with single message
