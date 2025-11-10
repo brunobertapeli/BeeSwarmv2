@@ -98,7 +98,11 @@ class MongoService {
         await this.connect()
       }
 
-      const usersCollection = this.db!.collection('users')
+      if (!this.db) {
+        throw new Error('MongoDB connection not established')
+      }
+
+      const usersCollection = this.db.collection('users')
       const user = await usersCollection.findOne({ email: sanitizedEmail })
 
       if (!user) {
@@ -129,7 +133,11 @@ class MongoService {
         await this.connect()
       }
 
-      const usersCollection = this.db!.collection('users')
+      if (!this.db) {
+        throw new Error('MongoDB connection not established')
+      }
+
+      const usersCollection = this.db.collection('users')
 
       const newUser = {
         email: userData.email!,
@@ -158,7 +166,11 @@ class MongoService {
         await this.connect()
       }
 
-      const templatesCollection = this.db!.collection('templates')
+      if (!this.db) {
+        throw new Error('MongoDB connection not established')
+      }
+
+      const templatesCollection = this.db.collection('templates')
       const templates = await templatesCollection.find({}).toArray()
 
 
@@ -194,7 +206,11 @@ class MongoService {
         await this.connect()
       }
 
-      const templatesCollection = this.db!.collection('templates')
+      if (!this.db) {
+        throw new Error('MongoDB connection not established')
+      }
+
+      const templatesCollection = this.db.collection('templates')
       const template = await templatesCollection.findOne({ id: sanitizedTemplateId })
 
       if (!template) {
