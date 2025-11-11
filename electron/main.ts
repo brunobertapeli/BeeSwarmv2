@@ -22,6 +22,7 @@ import { registerGitHandlers, setGitHandlersWindow } from './handlers/gitHandler
 import { registerSecureStorageHandlers } from './handlers/secureStorageHandlers.js'
 import { registerWebsiteImportHandlers} from './handlers/websiteImportHandlers.js'
 import { registerClaudeMdHandlers } from './handlers/claudeMdHandlers.js'
+import { registerImageHandlers } from './handlers/imageHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { layoutManager } from './services/LayoutManager.js'
 import { mongoService } from './services/MongoService.js'
@@ -366,6 +367,7 @@ async function initializeApp() {
     registerPreviewHandlers()
     registerLayoutHandlers()
     registerShellHandlers()
+    registerImageHandlers()
     registerClaudeMdHandlers()
     registerTerminalHandlers()
     registerClaudeHandlers()

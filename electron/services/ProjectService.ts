@@ -47,7 +47,10 @@ class ProjectService {
         path: tempPath, // Will be updated to use project ID
         templateId: templateId,
         templateName: template.name,
-        status: 'creating'
+        status: 'creating',
+        deployServices: template.deployServices ? JSON.stringify(template.deployServices) : null,
+        imagePath: template.imagePath || null,
+        websiteImportAutoPromptSent: null
       })
 
       // Now that we have project ID, generate the real path using ID as folder name

@@ -465,6 +465,10 @@ export interface ElectronAPI {
     openExternal: (url: string) => Promise<void>
   }
 
+  image: {
+    replace: (projectId: string, imagePath: string, imageData: string) => Promise<{ success: boolean; path?: string; error?: string }>
+  }
+
   terminal: {
     createSession: (projectId: string) => Promise<{
       success: boolean

@@ -901,22 +901,13 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   // Handle preview visibility based on layout state and StatusSheet expanded state
   useEffect(() => {
     const handlePreviewVisibility = async () => {
-      console.log('🔄 [PREVIEW VISIBILITY] Effect triggered:', {
-        layoutState,
-        statusSheetExpanded,
-        projectId,
-        timestamp: new Date().toISOString()
-      })
-
       if (!projectId) {
-        console.log('⚠️ [PREVIEW VISIBILITY] No projectId, skipping')
         return
       }
 
       // DEFAULT state: Control preview visibility based on StatusSheet state
       if (layoutState === 'DEFAULT') {
         if (statusSheetExpanded) {
-          console.log('🎯 [PREVIEW VISIBILITY] DEFAULT + EXPANDED → Starting freeze capture')
           // StatusSheet expanded in DEFAULT → activate freeze, hide preview
           try {
             const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
@@ -926,46 +917,29 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             const currentExpanded = useLayoutStore.getState().statusSheetExpanded
             const currentLayout = useLayoutStore.getState().layoutState
 
-            console.log('🔍 [PREVIEW VISIBILITY] Capture complete, checking current state:', {
-              wasExpanded: statusSheetExpanded,
-              isStillExpanded: currentExpanded,
-              currentLayout,
-              captureSuccess: result?.success
-            })
-
             if (result?.success && result.freezeImage && currentExpanded && currentLayout === 'DEFAULT') {
-              console.log('✅ [PREVIEW VISIBILITY] Sheet still expanded, activating freeze overlay')
               setModalFreezeImage(result.freezeImage)
               setModalFreezeActive(true)
               await window.electronAPI?.preview.hide(projectId)
-              console.log('✅ [PREVIEW VISIBILITY] Preview hidden, freeze active')
-            } else {
-              console.log('⚠️ [PREVIEW VISIBILITY] Sheet was collapsed during capture, IGNORING freeze activation')
             }
           } catch (error) {
             console.error('❌ [PREVIEW VISIBILITY] Failed to capture freeze image:', error)
           }
         } else {
-          console.log('🎯 [PREVIEW VISIBILITY] DEFAULT + COLLAPSED → Deactivating freeze, showing preview')
           // StatusSheet collapsed in DEFAULT → deactivate freeze, show preview
           setModalFreezeActive(false)
           await window.electronAPI?.preview.show(projectId)
-          console.log('✅ [PREVIEW VISIBILITY] Preview shown, freeze deactivated')
         }
       }
       // TOOLS state: Preview frame is hidden completely (no frozen background)
       else if (layoutState === 'TOOLS') {
-        console.log('🎯 [PREVIEW VISIBILITY] TOOLS state → Deactivating freeze')
         // No freeze effect in TOOLS state - just empty space
         setModalFreezeActive(false)
-        console.log('✅ [PREVIEW VISIBILITY] Freeze deactivated in TOOLS')
       }
       // BROWSER_FULL state: Preview is shown by LayoutManager
       else if (layoutState === 'BROWSER_FULL') {
-        console.log('🎯 [PREVIEW VISIBILITY] BROWSER_FULL state → Deactivating freeze')
         // Deactivate freeze in fullscreen mode
         setModalFreezeActive(false)
-        console.log('✅ [PREVIEW VISIBILITY] Freeze deactivated in BROWSER_FULL')
       }
     }
 
@@ -974,10 +948,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
   // Handler for expanding StatusSheet
   const handleExpand = useCallback(() => {
-    console.log('📖 [HANDLE EXPAND] Expanding StatusSheet', {
-      currentLayoutState: layoutState,
-      timestamp: new Date().toISOString()
-    })
     // Just update the state - the useEffect will handle freeze/preview logic
     setIsExpanded(true)
     setStatusSheetExpanded(true)
@@ -986,10 +956,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
   // Handler for collapsing StatusSheet
   const handleCollapse = useCallback(() => {
-    console.log('📕 [HANDLE COLLAPSE] Collapsing StatusSheet', {
-      currentLayoutState: layoutState,
-      timestamp: new Date().toISOString()
-    })
     // Just update the state - the useEffect will handle freeze/preview logic
     setIsExpanded(false)
     setStatusSheetExpanded(false)
@@ -1030,25 +996,12 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   // Auto-collapse StatusSheet when cycling from TOOLS to DEFAULT
   // IMPORTANT: This must run BEFORE the preview visibility effect
   useEffect(() => {
-    console.log('🔁 [TAB CYCLE] Effect triggered (FIRST PRIORITY):', {
-      prevState: prevLayoutStateRef.current,
-      newState: layoutState,
-      statusSheetExpanded,
-      timestamp: new Date().toISOString()
-    })
-
     // Only collapse when going from TOOLS → DEFAULT with expanded sheet
     if (prevLayoutStateRef.current === 'TOOLS' && layoutState === 'DEFAULT' && statusSheetExpanded) {
-      console.log('⚡ [TAB CYCLE] TOOLS → DEFAULT with expanded sheet detected, IMMEDIATELY collapsing...')
       // Collapse the StatusSheet SYNCHRONOUSLY before other effects run
       setIsExpanded(false)
       setStatusSheetExpanded(false)
       setShowStatusSheet(false)
-      console.log('✅ [TAB CYCLE] Collapsed synchronously (statusSheetExpanded now false)')
-    } else if (prevLayoutStateRef.current === 'DEFAULT' && layoutState === 'TOOLS') {
-      console.log('⚡ [TAB CYCLE] DEFAULT → TOOLS transition (keeping sheet expanded)')
-    } else {
-      console.log('ℹ️ [TAB CYCLE] No action needed for this transition')
     }
 
     // Update ref for next comparison

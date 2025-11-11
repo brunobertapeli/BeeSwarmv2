@@ -18,6 +18,8 @@ export interface Project {
   claudeSessionId: string | null // Claude session ID for resume
   claudeContext: string | null // Claude context (JSON string with tokens, cost, etc.)
   websiteImportAutoPromptSent: number | null // Timestamp when auto-prompt was sent for website imports
+  deployServices: string | null // JSON array of deployment services
+  imagePath: string | null // Path to template images
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -227,6 +229,18 @@ class DatabaseService {
         this.db.exec('ALTER TABLE projects ADD COLUMN websiteImportAutoPromptSent INTEGER')
       }
 
+      // Migration 13: Add deployServices column if it doesn't exist
+      const hasDeployServices = tableInfo.some(col => col.name === 'deployServices')
+      if (!hasDeployServices) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN deployServices TEXT')
+      }
+
+      // Migration 14: Add imagePath column if it doesn't exist
+      const hasImagePath = tableInfo.some(col => col.name === 'imagePath')
+      if (!hasImagePath) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN imagePath TEXT')
+      }
+
       // Future migrations can be added here
     } catch (error) {
       console.error('❌ Migration failed:', error)
@@ -256,8 +270,8 @@ class DatabaseService {
     }
 
     const sql = `
-      INSERT INTO projects (id, userId, name, path, templateId, templateName, status, isFavorite, configCompleted, envVars, dependenciesInstalled, claudeSessionId, createdAt, lastOpenedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, userId, name, path, templateId, templateName, status, isFavorite, configCompleted, envVars, dependenciesInstalled, claudeSessionId, deployServices, imagePath, createdAt, lastOpenedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
 
     try {
@@ -274,6 +288,8 @@ class DatabaseService {
         newProject.envVars,
         newProject.dependenciesInstalled ? 1 : 0,
         newProject.claudeSessionId,
+        newProject.deployServices,
+        newProject.imagePath,
         newProject.createdAt,
         newProject.lastOpenedAt
       )

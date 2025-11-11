@@ -5,6 +5,8 @@ import { databaseService } from '../services/DatabaseService';
 import { processManager } from '../services/ProcessManager';
 import { chatHistoryManager } from '../services/ChatHistoryManager';
 import { projectLockService } from '../services/ProjectLockService';
+import { placeholderImageService } from '../services/PlaceholderImageService';
+import { previewService } from '../services/PreviewService';
 import { emitChatEvent } from './chatHandlers';
 import { spawn } from 'child_process';
 import * as path from 'path';
@@ -697,16 +699,36 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
       }
     }
 
-    // 1. Git commit
+    // 1. Generate placeholder images from manifest.json
+    try {
+      // Get project to access imagePath
+      const project = databaseService.getProjectById(projectId);
+      const imagesPath = project?.imagePath;
+
+      const placeholdersGenerated = await placeholderImageService.generatePlaceholders(projectPath, imagesPath);
+      if (placeholdersGenerated > 0) {
+        terminalAggregator.addSystemLine(projectId, '\n');
+        terminalAggregator.addSystemLine(projectId, `📸 Generated ${placeholdersGenerated} placeholder image(s)\n`);
+      }
+    } catch (error) {
+      console.error(`⚠️  Failed to generate placeholders for ${projectId}:`, error);
+      // Don't fail the whole workflow if placeholder generation fails
+      terminalAggregator.addSystemLine(
+        projectId,
+        `⚠️  Failed to generate placeholder images: ${error instanceof Error ? error.message : 'Unknown error'}\n`
+      );
+    }
+
+    // 2. Git commit
     await gitCommitChanges(projectId, projectPath);
 
-    // 2. Context update (placeholder for future implementation)
+    // 3. Context update (placeholder for future implementation)
     terminalAggregator.addSystemLine(
       projectId,
       '📋 Context update - TODO (placeholder)\n'
     );
 
-    // 3. Restart dev server (if running)
+    // 4. Restart dev server (if running)
     const processState = processManager.getProcessStatus(projectId);
     if (processState === 'running') {
       const devServerStartTime = Date.now();
@@ -781,6 +803,11 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
             restartTime: parseFloat(devServerElapsed),
           },
         });
+
+        // Refresh preview to show new changes (including generated placeholder images)
+        // Wait a bit for dev server to be fully ready before refreshing
+        await new Promise(resolve => setTimeout(resolve, 500));
+        previewService.refresh(projectId);
       } catch (error) {
         console.error(`❌ Dev server restart failed for ${projectId}:`, error);
         terminalAggregator.addDevServerLine(projectId, {

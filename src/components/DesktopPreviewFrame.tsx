@@ -3,6 +3,7 @@ import { RotateCw, ExternalLink, Code2, Maximize2, Minimize2, Activity } from 'l
 import { useLayoutStore } from '../store/layoutStore'
 import FrozenBackground from './FrozenBackground'
 import HealthStatusModal from './HealthStatusModal'
+import ImageEditModal from './ImageEditModal'
 import { HealthCheckStatus } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 
@@ -20,7 +21,14 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
   const [previewFailed, setPreviewFailed] = useState(false)
   const contentAreaRef = useRef<HTMLDivElement>(null)
   const healthButtonRef = useRef<HTMLButtonElement>(null)
-  const { layoutState, editModeEnabled } = useLayoutStore()
+  const {
+    layoutState,
+    editModeEnabled,
+    imageEditModalOpen,
+    imageEditModalData,
+    setImageEditModalOpen,
+    setImageEditModalData
+  } = useLayoutStore()
 
   // Create/Update BrowserView when using BrowserView mode
   useEffect(() => {
@@ -337,8 +345,31 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
                 if (img) {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('Image clicked:', img.src);
-                  alert('Image clicked: ' + img.src + '\\n\\nMenu will be implemented here.');
+
+                  // Convert image to data URL for reliable rendering
+                  let dataUrl = img.src;
+                  try {
+                    // Try to convert to canvas for cross-origin images
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || img.width;
+                    canvas.height = img.naturalHeight || img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    dataUrl = canvas.toDataURL('image/png');
+                  } catch (error) {
+                    // If canvas fails (CORS), use original src
+                    console.warn('Could not convert image to data URL:', error);
+                    dataUrl = img.src;
+                  }
+
+                  // Store image data for React to pick up
+                  window.__imageEditData = {
+                    src: dataUrl,
+                    width: img.naturalWidth || img.width,
+                    height: img.naturalHeight || img.height,
+                    path: img.getAttribute('src') || img.currentSrc
+                  };
+                  window.__imageEditRequested = true;
                 }
               }
             };
@@ -406,6 +437,44 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
 
     manageEditModeCSS()
   }, [useBrowserView, projectId, editModeEnabled])
+
+  // Poll for image click events from BrowserView
+  useEffect(() => {
+    if (!useBrowserView || !projectId || !editModeEnabled) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const result = await window.electronAPI?.preview.executeJavaScript(
+          projectId,
+          `
+            if (window.__imageEditRequested) {
+              const data = window.__imageEditData;
+              window.__imageEditRequested = false;
+              window.__imageEditData = null;
+              data;
+            } else {
+              null;
+            }
+          `
+        )
+
+        if (result?.result && result.result.src) {
+          // Open modal with image data
+          setImageEditModalData({
+            src: result.result.src,
+            width: result.result.width,
+            height: result.result.height,
+            path: result.result.path
+          })
+          setImageEditModalOpen(true)
+        }
+      } catch (error) {
+        // Silently ignore - preview might not be ready
+      }
+    }, 100) // Poll every 100ms
+
+    return () => clearInterval(pollInterval)
+  }, [useBrowserView, projectId, editModeEnabled, setImageEditModalOpen, setImageEditModalData])
 
   const handleOpenInBrowser = () => {
     if (port) {
@@ -643,6 +712,18 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
         onRestart={handleRestartServer}
         buttonRef={healthButtonRef}
       />
+
+      {/* Image Edit Modal */}
+      {imageEditModalData && (
+        <ImageEditModal
+          isOpen={imageEditModalOpen}
+          onClose={() => setImageEditModalOpen(false)}
+          imageSrc={imageEditModalData.src}
+          imageWidth={imageEditModalData.width}
+          imageHeight={imageEditModalData.height}
+          imagePath={imageEditModalData.path}
+        />
+      )}
     </>
   )
 }

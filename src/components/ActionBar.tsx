@@ -25,6 +25,7 @@ import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import StatusSheet from './StatusSheet'
 import ContextBar from './ContextBar'
+import ContentEditableInput, { type ContentEditableInputRef } from './ContentEditableInput'
 import type { ClaudeStatus, ClaudeContext, ClaudeModel } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 
@@ -71,7 +72,7 @@ function ActionBar({
   onAutoMessageSent
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [isHidden, setIsHidden] = useState(false) // Start visible (not hidden)
@@ -95,7 +96,7 @@ function ActionBar({
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string | string[]>>({})
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({})
   const [isProcessingAnswers, setIsProcessingAnswers] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef = useRef<ContentEditableInputRef>(null)
   const actionBarRef = useRef<HTMLDivElement>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
@@ -230,18 +231,32 @@ function ActionBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
+  // Watch for prefilled message from other components (e.g., image reference)
+  useEffect(() => {
+    if (prefilledMessage !== null) {
+      setMessage(prefilledMessage)
+      setPrefilledMessage(null) // Clear it after applying
+
+      // Focus textarea after a brief delay
+      setTimeout(() => {
+        textareaRef.current?.focus()
+      }, 100)
+    }
+  }, [prefilledMessage, setPrefilledMessage])
+
   // Auto-resize textarea
   useEffect(() => {
-    if (textareaRef.current) {
+    const textarea = textareaRef.current?.textarea
+    if (textarea) {
       // Only auto-resize when there's a message
       if (message) {
-        textareaRef.current.style.height = 'auto'
-        const scrollHeight = textareaRef.current.scrollHeight
+        textarea.style.height = 'auto'
+        const scrollHeight = textarea.scrollHeight
         const maxHeight = 8 * 24 // 8 lines * 24px line height
-        textareaRef.current.style.height = `${Math.min(scrollHeight, maxHeight)}px`
+        textarea.style.height = `${Math.min(scrollHeight, maxHeight)}px`
       } else {
         // Reset to base height when no message
-        textareaRef.current.style.height = attachments.length > 0 ? '70px' : '42px'
+        textarea.style.height = attachments.length > 0 ? '70px' : '42px'
       }
     }
   }, [message, attachments])
@@ -409,7 +424,33 @@ function ActionBar({
 
   const handleSend = async () => {
     if (message.trim() && !isInputBlocked && projectId) {
-      const prompt = message.trim()
+      // Build the final prompt with all context
+      let prompt = message.trim()
+
+      // Replace inline text content markers with actual content
+      // Format: [pasted 45 lines #123456]
+      for (const content of textContents) {
+        // Extract short ID from full content.id (TEXT_1234567890 -> 567890)
+        const shortId = content.id.replace('TEXT_', '').slice(-6)
+        const markerRegex = new RegExp(`\\[pasted (\\d+) lines #${shortId}\\]`, 'g')
+        if (prompt.match(markerRegex)) {
+          // Replace marker with formatted content in code block
+          const formattedContent = `\`\`\`\n${content.content}\n\`\`\``
+          prompt = prompt.replace(markerRegex, formattedContent)
+        }
+      }
+
+      // Prepend image references context if any exist
+      if (imageReferences.length > 0) {
+        const imageContext = imageReferences
+          .map(
+            (ref) =>
+              `- Image: ${ref.name}\n  Path: ${ref.path}\n  Dimensions: ${ref.dimensions}`
+          )
+          .join('\n')
+        prompt = `I'd like to modify the following image(s):\n\n${imageContext}\n\n${prompt}`
+      }
+
       const currentAttachments = [...attachments] // Copy attachments before clearing
       const usePlanMode = planModeToggle // Capture plan mode state before clearing
 
@@ -417,6 +458,8 @@ function ActionBar({
       setMessage('')
       setAttachments([]) // Clear attachments from UI
       setPlanModeToggle(false) // Reset toggle for next message
+      clearImageReferences() // Clear image references after sending
+      clearTextContents() // Clear text content pills after sending
 
       // Disable edit mode when sending a message to Claude
       if (editModeEnabled) {
@@ -721,6 +764,8 @@ function ActionBar({
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData.items
+
+    // Check for images first
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf('image') !== -1) {
         e.preventDefault()
@@ -738,6 +783,53 @@ function ActionBar({
           }
           reader.readAsDataURL(blob)
         }
+        return // Exit after handling image
+      }
+    }
+
+    // Check for large text pastes (logs, schemas, etc.)
+    const text = e.clipboardData.getData('text/plain')
+    if (text) {
+      const lineCount = text.split('\n').length
+      const charCount = text.length
+
+      // Threshold: 200+ characters OR 5+ lines
+      if (charCount >= 200 || lineCount >= 5) {
+        e.preventDefault()
+
+        // Generate unique short ID for this content
+        const timestamp = Date.now()
+        const shortId = timestamp.toString().slice(-6) // Last 6 digits
+        const contentId = `TEXT_${timestamp}`
+
+        // Insert inline marker at cursor position
+        const textarea = e.currentTarget
+        const cursorPos = textarea.selectionStart
+        const currentMessage = message
+
+        // Create simple marker: [pasted 45 lines #123456]
+        const marker = `[pasted ${lineCount} lines #${shortId}]`
+
+        const newMessage =
+          currentMessage.slice(0, cursorPos) +
+          marker +
+          currentMessage.slice(cursorPos)
+
+        setMessage(newMessage)
+
+        // Store content with full ID for later replacement
+        addTextContent({
+          id: contentId,
+          content: text,
+          lineCount,
+          preview: text.slice(0, 50).replace(/\n/g, ' ')
+        })
+
+        // Move cursor after the marker
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = cursorPos + marker.length
+          textarea.focus()
+        }, 0)
       }
     }
   }
@@ -980,10 +1072,14 @@ function ActionBar({
                 </div>
               )}
 
-              <textarea
+              <ContentEditableInput
                 ref={textareaRef}
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={(value) => setMessage(value)}
+                imageReferences={imageReferences}
+                onRemoveImageReference={removeImageReference}
+                textContents={textContents}
+                onRemoveTextContent={removeTextContent}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 onDragOver={handleDragOver}
@@ -1000,23 +1096,18 @@ function ActionBar({
                     : "Ask Claude to build..."
                 }
                 disabled={isInputBlocked}
-                className={`flex-1 border rounded-xl px-3.5 pr-11 text-sm outline-none transition-all resize-none overflow-y-auto caret-white ${
+                className={`flex-1 border rounded-xl pr-11 text-sm outline-none transition-all overflow-y-auto ${
                   isInputBlocked
                     ? 'bg-dark-bg/30 text-gray-500 placeholder-gray-600 cursor-not-allowed border-dark-border/50'
                     : planModeToggle
                     ? 'bg-dark-bg/50 text-white placeholder-gray-500 border-blue-400/50 focus:border-blue-400/70'
                     : 'bg-dark-bg/50 text-white placeholder-gray-500 border-dark-border/50 focus:border-primary/30'
-                } ${attachments.length > 0 ? 'pt-[38px] pb-2.5' : 'py-2.5'}`}
-                rows={1}
-                style={{
-                  lineHeight: '24px',
-                  maxHeight: '192px'
-                }}
+                } ${attachments.length > 0 ? 'pt-[38px]' : ''}`}
               />
               {isClaudeWorking ? (
                 <div
                   className={`absolute right-3 transition-all ${
-                    (textareaRef.current?.scrollHeight || 0) > 42
+                    (textareaRef.current?.textarea?.scrollHeight || 0) > 42
                       ? 'bottom-2.5'
                       : 'top-[12px]'
                   }`}

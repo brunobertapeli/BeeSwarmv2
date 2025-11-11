@@ -28,6 +28,8 @@ export interface Template {
     name: string
     description: string
   }>
+  deployServices?: string[]
+  imagePath?: string
 }
 
 class MongoService {
@@ -237,7 +239,9 @@ class MongoService {
         requiredServices: template.requiredServices || [],
         demoUrl: template.demoUrl,
         techStack: template.techStack || [],
-        libraries: template.libraries || []
+        libraries: template.libraries || [],
+        deployServices: template.deployServices || [],
+        imagePath: template.imagePath
       }))
     } catch (error) {
       console.error('Error fetching templates from MongoDB:', error)
@@ -281,7 +285,9 @@ class MongoService {
         requiredServices: template.requiredServices || [],
         demoUrl: template.demoUrl,
         techStack: template.techStack || [],
-        libraries: template.libraries || []
+        libraries: template.libraries || [],
+        deployServices: template.deployServices || [],
+        imagePath: template.imagePath
       }
     } catch (error) {
       console.error('Error fetching template from MongoDB:', error)

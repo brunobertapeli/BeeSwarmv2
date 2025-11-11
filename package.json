@@ -26,6 +26,7 @@
     "@xterm/addon-fit": "^0.10.0",
     "ansi-to-html": "^0.7.2",
     "better-sqlite3": "^12.4.1",
+    "canvas": "^3.2.0",
     "detect-port": "^2.1.0",
     "dotenv": "^17.2.3",
     "framer-motion": "^12.23.24",

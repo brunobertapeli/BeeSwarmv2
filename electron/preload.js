@@ -178,6 +178,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openExternal: (url) => ipcRenderer.invoke('shell:open-external', url)
   },
 
+  // Image methods
+  image: {
+    replace: (projectId, imagePath, imageData) => ipcRenderer.invoke('image:replace', projectId, imagePath, imageData)
+  },
+
   // Terminal methods
   terminal: {
     createSession: (projectId) => ipcRenderer.invoke('terminal:create-session', projectId),
