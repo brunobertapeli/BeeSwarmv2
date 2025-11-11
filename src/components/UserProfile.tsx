@@ -7,7 +7,7 @@ import bgImage from '../assets/images/bg.jpg'
 
 function UserProfile() {
   const { user, logout, currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const toast = useToast()
@@ -28,33 +28,29 @@ function UserProfile() {
   useEffect(() => {
     const handleFreeze = async () => {
       if (isDropdownOpen && currentProjectId) {
-        // If in STATUS_EXPANDED, use the existing thumbnail (BrowserView is already hidden)
-        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
-          setModalFreezeImage(thumbnailData)
-          setModalFreezeActive(true)
-        } else {
-          // Otherwise, capture fresh image to match current layout state
-          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+        // Capture fresh image to match current layout state
+        const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
 
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            // Hide BrowserView
+        if (result?.success && result.freezeImage) {
+          setModalFreezeImage(result.freezeImage)
+          setModalFreezeActive(true)
+          // Hide BrowserView (unless in TOOLS state where it's already hidden)
+          if (layoutState !== 'TOOLS') {
             await window.electronAPI?.preview.hide(currentProjectId)
           }
         }
       } else {
         // Unfreeze when dropdown closes
         setModalFreezeActive(false)
-        // Show BrowserView again (only if not in STATUS_EXPANDED)
-        if (currentProjectId && layoutState !== 'STATUS_EXPANDED') {
+        // Show BrowserView again (only if not in TOOLS)
+        if (currentProjectId && layoutState !== 'TOOLS') {
           await window.electronAPI?.preview.show(currentProjectId)
         }
       }
     }
 
     handleFreeze()
-  }, [isDropdownOpen, currentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
+  }, [isDropdownOpen, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   if (!user) return null
 

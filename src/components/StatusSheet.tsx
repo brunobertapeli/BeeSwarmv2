@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X, Brain, Clock, Server, MessageCircle, ClipboardCheck } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
@@ -99,7 +99,7 @@ function hasPlanWaitingApproval(block: ConversationBlock): boolean {
 
 function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, questions, onApprovePlan, onRejectPlan, onAnswerQuestions }: StatusSheetProps) {
   const { deploymentStatus, showStatusSheet, setShowStatusSheet, viewMode } = useAppStore()
-  const { layoutState, thumbnailData, setThumbnailData } = useLayoutStore()
+  const { layoutState, statusSheetExpanded, setStatusSheetExpanded, setModalFreezeActive, setModalFreezeImage } = useLayoutStore()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
   const [allBlocks, setAllBlocks] = useState<ConversationBlock[]>([])
@@ -118,6 +118,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string | string[]>>({})
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({})
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const statusSheetRef = useRef<HTMLDivElement>(null)
+  const prevLayoutStateRef = useRef<string>(layoutState)
 
   // Random loading phrases - use block ID for consistent selection
   const getLoadingPhrase = (blockId: string) => {
@@ -891,14 +893,167 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     }
   }, [actionBarRef])
 
-  // Auto-expand when entering STATUS_EXPANDED state, collapse when leaving
+  // Sync local expanded state with store
   useEffect(() => {
-    if (layoutState === 'STATUS_EXPANDED') {
-      setIsExpanded(true)
-    } else if (layoutState === 'DEFAULT') {
-      setIsExpanded(false)
+    setIsExpanded(statusSheetExpanded)
+  }, [statusSheetExpanded])
+
+  // Handle preview visibility based on layout state and StatusSheet expanded state
+  useEffect(() => {
+    const handlePreviewVisibility = async () => {
+      console.log('🔄 [PREVIEW VISIBILITY] Effect triggered:', {
+        layoutState,
+        statusSheetExpanded,
+        projectId,
+        timestamp: new Date().toISOString()
+      })
+
+      if (!projectId) {
+        console.log('⚠️ [PREVIEW VISIBILITY] No projectId, skipping')
+        return
+      }
+
+      // DEFAULT state: Control preview visibility based on StatusSheet state
+      if (layoutState === 'DEFAULT') {
+        if (statusSheetExpanded) {
+          console.log('🎯 [PREVIEW VISIBILITY] DEFAULT + EXPANDED → Starting freeze capture')
+          // StatusSheet expanded in DEFAULT → activate freeze, hide preview
+          try {
+            const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
+
+            // CRITICAL: Check if sheet is STILL expanded before activating freeze
+            // (it might have been collapsed while we were capturing)
+            const currentExpanded = useLayoutStore.getState().statusSheetExpanded
+            const currentLayout = useLayoutStore.getState().layoutState
+
+            console.log('🔍 [PREVIEW VISIBILITY] Capture complete, checking current state:', {
+              wasExpanded: statusSheetExpanded,
+              isStillExpanded: currentExpanded,
+              currentLayout,
+              captureSuccess: result?.success
+            })
+
+            if (result?.success && result.freezeImage && currentExpanded && currentLayout === 'DEFAULT') {
+              console.log('✅ [PREVIEW VISIBILITY] Sheet still expanded, activating freeze overlay')
+              setModalFreezeImage(result.freezeImage)
+              setModalFreezeActive(true)
+              await window.electronAPI?.preview.hide(projectId)
+              console.log('✅ [PREVIEW VISIBILITY] Preview hidden, freeze active')
+            } else {
+              console.log('⚠️ [PREVIEW VISIBILITY] Sheet was collapsed during capture, IGNORING freeze activation')
+            }
+          } catch (error) {
+            console.error('❌ [PREVIEW VISIBILITY] Failed to capture freeze image:', error)
+          }
+        } else {
+          console.log('🎯 [PREVIEW VISIBILITY] DEFAULT + COLLAPSED → Deactivating freeze, showing preview')
+          // StatusSheet collapsed in DEFAULT → deactivate freeze, show preview
+          setModalFreezeActive(false)
+          await window.electronAPI?.preview.show(projectId)
+          console.log('✅ [PREVIEW VISIBILITY] Preview shown, freeze deactivated')
+        }
+      }
+      // TOOLS state: Preview frame is hidden completely (no frozen background)
+      else if (layoutState === 'TOOLS') {
+        console.log('🎯 [PREVIEW VISIBILITY] TOOLS state → Deactivating freeze')
+        // No freeze effect in TOOLS state - just empty space
+        setModalFreezeActive(false)
+        console.log('✅ [PREVIEW VISIBILITY] Freeze deactivated in TOOLS')
+      }
+      // BROWSER_FULL state: Preview is shown by LayoutManager
+      else if (layoutState === 'BROWSER_FULL') {
+        console.log('🎯 [PREVIEW VISIBILITY] BROWSER_FULL state → Deactivating freeze')
+        // Deactivate freeze in fullscreen mode
+        setModalFreezeActive(false)
+        console.log('✅ [PREVIEW VISIBILITY] Freeze deactivated in BROWSER_FULL')
+      }
     }
-  }, [layoutState])
+
+    handlePreviewVisibility()
+  }, [layoutState, statusSheetExpanded, projectId, setModalFreezeActive, setModalFreezeImage])
+
+  // Handler for expanding StatusSheet
+  const handleExpand = useCallback(() => {
+    console.log('📖 [HANDLE EXPAND] Expanding StatusSheet', {
+      currentLayoutState: layoutState,
+      timestamp: new Date().toISOString()
+    })
+    // Just update the state - the useEffect will handle freeze/preview logic
+    setIsExpanded(true)
+    setStatusSheetExpanded(true)
+    setShowStatusSheet(true)
+  }, [setStatusSheetExpanded, setShowStatusSheet, layoutState])
+
+  // Handler for collapsing StatusSheet
+  const handleCollapse = useCallback(() => {
+    console.log('📕 [HANDLE COLLAPSE] Collapsing StatusSheet', {
+      currentLayoutState: layoutState,
+      timestamp: new Date().toISOString()
+    })
+    // Just update the state - the useEffect will handle freeze/preview logic
+    setIsExpanded(false)
+    setStatusSheetExpanded(false)
+    setShowStatusSheet(false)
+  }, [setStatusSheetExpanded, setShowStatusSheet, layoutState])
+
+  // Auto-collapse StatusSheet when clicking outside
+  useEffect(() => {
+    // Only add listener when StatusSheet is expanded
+    if (!statusSheetExpanded) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+
+      // Check if click is inside StatusSheet
+      const clickedInsideSheet = statusSheetRef.current?.contains(target)
+
+      // Check if click is inside ActionBar
+      const clickedInsideActionBar = actionBarRef?.current?.contains(target)
+
+      // If clicked outside both StatusSheet and ActionBar, collapse
+      if (!clickedInsideSheet && !clickedInsideActionBar) {
+        handleCollapse()
+      }
+    }
+
+    // Add listener with slight delay to avoid collapsing on the expand click itself
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside)
+    }, 100)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [statusSheetExpanded, actionBarRef, handleCollapse])
+
+  // Auto-collapse StatusSheet when cycling from TOOLS to DEFAULT
+  // IMPORTANT: This must run BEFORE the preview visibility effect
+  useEffect(() => {
+    console.log('🔁 [TAB CYCLE] Effect triggered (FIRST PRIORITY):', {
+      prevState: prevLayoutStateRef.current,
+      newState: layoutState,
+      statusSheetExpanded,
+      timestamp: new Date().toISOString()
+    })
+
+    // Only collapse when going from TOOLS → DEFAULT with expanded sheet
+    if (prevLayoutStateRef.current === 'TOOLS' && layoutState === 'DEFAULT' && statusSheetExpanded) {
+      console.log('⚡ [TAB CYCLE] TOOLS → DEFAULT with expanded sheet detected, IMMEDIATELY collapsing...')
+      // Collapse the StatusSheet SYNCHRONOUSLY before other effects run
+      setIsExpanded(false)
+      setStatusSheetExpanded(false)
+      setShowStatusSheet(false)
+      console.log('✅ [TAB CYCLE] Collapsed synchronously (statusSheetExpanded now false)')
+    } else if (prevLayoutStateRef.current === 'DEFAULT' && layoutState === 'TOOLS') {
+      console.log('⚡ [TAB CYCLE] DEFAULT → TOOLS transition (keeping sheet expanded)')
+    } else {
+      console.log('ℹ️ [TAB CYCLE] No action needed for this transition')
+    }
+
+    // Update ref for next comparison
+    prevLayoutStateRef.current = layoutState
+  }, [layoutState])  // Only depend on layoutState to ensure this runs first
 
   // Calculate bottom position based on action bar height
   const baseOffset = -2 // Gap between action bar and status sheet
@@ -906,53 +1061,13 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     ? (actionBarHeight > 0 ? actionBarHeight + baseOffset : 100)
     : (actionBarHeight > 0 ? actionBarHeight - 4 : 80)
 
-  const handleThumbnailClick = () => {
-    if (projectId) {
-      window.electronAPI?.layout.setState('DEFAULT', projectId)
-    }
-  }
-
-  // Render collapsed in DEFAULT/BROWSER_FULL (if has history), expanded in STATUS_EXPANDED
-  const shouldRenderCollapsed = (layoutState === 'DEFAULT' || layoutState === 'BROWSER_FULL') && hasHistory && !isExpanded
-  const shouldRenderExpanded = layoutState === 'STATUS_EXPANDED' && hasHistory
+  // Always render if has history (show collapsed or expanded based on state)
+  const shouldRender = hasHistory
 
   return (
     <>
-      {(shouldRenderCollapsed || shouldRenderExpanded) && (
-        <>
-      {/* Thumbnail Preview - Top Left - Static screenshot for navigation (only in STATUS_EXPANDED) */}
-      {shouldRenderExpanded && thumbnailData && (
+      {shouldRender && (
         <div
-          className="fixed top-16 left-4 z-[98] cursor-pointer group"
-          onClick={handleThumbnailClick}
-          title="Click to return to default view"
-        >
-          <div
-            className="relative rounded-lg border-2 border-gray-700 shadow-2xl transition-all group-hover:scale-105 overflow-hidden"
-            style={{
-              width: viewMode === 'mobile' ? '126px' : '224px',
-              height: viewMode === 'mobile' ? '224px' : '126px',
-            }}
-          >
-            <img
-              src={thumbnailData}
-              alt="Preview Thumbnail"
-              className="w-full h-full select-none pointer-events-none"
-              style={{ objectFit: 'cover' }}
-              draggable={false}
-            />
-            {/* Overlay hint */}
-            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center pointer-events-none gap-2">
-              <span className="text-white text-sm font-medium">Return to Default</span>
-              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div
         className={`fixed left-1/2 transform -translate-x-1/2 z-[99] pointer-events-none ${
           isVisible ? 'opacity-100' : 'opacity-0'
         }`}
@@ -961,7 +1076,9 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
           transition: 'opacity 300ms ease-out'
         }}
       >
-        <div className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[782px] overflow-hidden pb-4 relative pointer-events-auto"
+        <div
+        ref={statusSheetRef}
+        className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[782px] overflow-hidden pb-4 relative pointer-events-auto"
         style={{
           boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
         }}
@@ -986,19 +1103,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
           return (
             <div
               className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10"
-              onClick={() => {
-                // If in DEFAULT/BROWSER_FULL: transition to STATUS_EXPANDED
-                // If already in STATUS_EXPANDED: just expand in place
-                if (layoutState === 'DEFAULT' || layoutState === 'BROWSER_FULL') {
-                  if (projectId) {
-                    window.electronAPI?.layout.setState('STATUS_EXPANDED', projectId)
-                  }
-                } else {
-                  // Already in STATUS_EXPANDED, just expand
-                  setIsExpanded(true)
-                  setShowStatusSheet(true)
-                }
-              }}
+              onClick={handleExpand}
             >
               {currentBlock.type === 'deployment' ? (
                 <>
@@ -1044,10 +1149,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             {/* Collapsible header */}
             <div
               className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 px-3 transition-colors"
-              onClick={() => {
-                setIsExpanded(false)
-                setShowStatusSheet(false)
-              }}
+              onClick={handleCollapse}
             >
               <span className="text-xs font-medium text-gray-300">Workflow Activity</span>
               <button className="p-1">
@@ -2636,7 +2738,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
         `}</style>
       </div>
     </div>
-        </>
       )}
     </>
   )

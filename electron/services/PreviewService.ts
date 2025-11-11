@@ -186,7 +186,7 @@ class PreviewService extends EventEmitter {
    * Toggle DevTools for the preview
    * @param projectId - Unique project identifier
    * @param isMobile - Whether in mobile mode
-   * @param layoutState - Current layout state (DEFAULT, BROWSER_FULL, STATUS_EXPANDED)
+   * @param layoutState - Current layout state (DEFAULT, BROWSER_FULL, TOOLS)
    */
   toggleDevTools(projectId: string, isMobile?: boolean, layoutState?: string): void {
     const view = this.browserViews.get(projectId);

@@ -49,7 +49,7 @@ export interface HealthCheckStatus {
 
 export type ClaudeStatus = 'idle' | 'starting' | 'running' | 'completed' | 'error'
 
-export type LayoutState = 'DEFAULT' | 'STATUS_EXPANDED' | 'BROWSER_FULL'
+export type LayoutState = 'DEFAULT' | 'TOOLS' | 'BROWSER_FULL'
 
 export enum InteractionType {
   USER_MESSAGE = 'user_message',           // Regular user message
@@ -711,7 +711,7 @@ export interface ElectronAPI {
   }
 
   layout: {
-    setState: (state: 'DEFAULT' | 'STATUS_EXPANDED' | 'BROWSER_FULL', projectId?: string) => Promise<{
+    setState: (state: LayoutState, projectId?: string) => Promise<{
       success: boolean
       error?: string
     }>
@@ -721,12 +721,7 @@ export interface ElectronAPI {
     }>
     getState: () => Promise<{
       success: boolean
-      state?: 'DEFAULT' | 'STATUS_EXPANDED' | 'BROWSER_FULL'
-      error?: string
-    }>
-    captureThumbnail: (projectId: string) => Promise<{
-      success: boolean
-      thumbnail?: string
+      state?: LayoutState
       error?: string
     }>
     setActionBarHeight: (height: number) => Promise<{
@@ -751,7 +746,7 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
-    onStateChanged: (callback: (newState: LayoutState, previousState: LayoutState, thumbnail: string | null) => void) => () => void
+    onStateChanged: (callback: (newState: LayoutState, previousState: LayoutState) => void) => () => void
     onCycleRequested: (callback: () => void) => () => void
     onActionBarHeightChanged: (callback: (height: number) => void) => () => void
   }

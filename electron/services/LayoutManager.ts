@@ -5,7 +5,7 @@ import { previewService } from './PreviewService.js';
 /**
  * Layout state for the IDE
  */
-export type LayoutState = 'DEFAULT' | 'STATUS_EXPANDED' | 'BROWSER_FULL';
+export type LayoutState = 'DEFAULT' | 'TOOLS' | 'BROWSER_FULL';
 
 /**
  * Preview bounds interface
@@ -21,17 +21,13 @@ export interface PreviewBounds {
  * LayoutManager
  *
  * Manages the 3-state layout system for BrowserView coordination
- * States: DEFAULT (60% + ActionBar) | STATUS_EXPANDED (thumbnail + StatusSheet) | BROWSER_FULL (fullscreen)
+ * States: DEFAULT (preview + ActionBar) | TOOLS (ActionBar only, no preview) | BROWSER_FULL (fullscreen)
  */
 class LayoutManager extends EventEmitter {
   private currentState: LayoutState = 'DEFAULT';
   private mainWindow: BrowserWindow | null = null;
   private actionBarHeight: number = 110; // Default ActionBar height
   private headerHeight: number = 48; // Top header height
-  private desktopThumbnailSize = { width: 224, height: 126 }; // Desktop: landscape (16:9)
-  private mobileThumbnailSize = { width: 126, height: 224 }; // Mobile: portrait (9:16)
-  private thumbnailPosition = { top: 64, left: 16 }; // Below header, left margin
-  private thumbnailCache: Map<string, string> = new Map(); // Cache thumbnails per project
   private modalFreezeCache: Map<string, string> = new Map(); // Cache full-size captures for modal freeze
   private currentViewMode: 'desktop' | 'mobile' = 'desktop'; // Track current view mode
   private isTransitioning: boolean = false; // Guard against rapid state changes
@@ -47,13 +43,7 @@ class LayoutManager extends EventEmitter {
    * Set current view mode (desktop/mobile)
    */
   setViewMode(viewMode: 'desktop' | 'mobile'): void {
-    const wasChanged = this.currentViewMode !== viewMode;
     this.currentViewMode = viewMode;
-
-    // Clear thumbnail cache when view mode changes to force re-capture with new size
-    if (wasChanged) {
-      this.thumbnailCache.clear();
-    }
   }
 
   /**
@@ -78,51 +68,37 @@ class LayoutManager extends EventEmitter {
       const previousState = this.currentState;
       this.currentState = state;
 
-    // Calculate and apply bounds for new state
-    const bounds = this.calculateBounds(state);
+      // Calculate and apply bounds for new state
+      const bounds = this.calculateBounds(state);
 
-    if (state === 'STATUS_EXPANDED') {
-      // Ensure BrowserView is visible before capturing
-      const wasHidden = previewService.isPreviewHidden(projectId);
-      if (wasHidden) {
+      if (state === 'TOOLS') {
+        // TOOLS state: Hide preview, show ActionBar + StatusSheet
+        previewService.hide(projectId);
+
+        // Emit state change to renderer
+        this.emit('state-changed', state, previousState);
+      } else if (state === 'BROWSER_FULL') {
+        // BROWSER_FULL: Show preview in fullscreen
+        previewService.hide(projectId);
+
+        // Emit state change event to renderer first (so DOM can update)
+        this.emit('state-changed', state, previousState);
+
+        // Wait for DOM to settle, then show with correct bounds
+        await new Promise(resolve => setTimeout(resolve, 150));
+
+        // Show BrowserView - bounds will be set by DesktopPreviewFrame
         previewService.show(projectId);
-        // Set to DEFAULT bounds temporarily for capture
-        const defaultBounds = this.calculateBounds('DEFAULT');
-        previewService.updateBounds(projectId, defaultBounds);
-        // Small delay to ensure render
-        await new Promise(resolve => setTimeout(resolve, 50));
+      } else if (state === 'DEFAULT') {
+        // DEFAULT: Let StatusSheet component control preview visibility
+        // If StatusSheet is expanded, it will keep preview hidden (freeze active)
+        // If StatusSheet is collapsed, it will show preview
+
+        // Emit state change event to renderer
+        this.emit('state-changed', state, previousState);
+
+        // Don't auto-show - let renderer components handle it based on StatusSheet state
       }
-
-      // Capture fresh thumbnail
-      const thumbnail = await this.captureThumbnail(projectId);
-
-      if (thumbnail) {
-        // Cache it for subsequent fast transitions
-        this.thumbnailCache.set(projectId, thumbnail);
-      } else {
-      }
-
-      // Hide BrowserView (we'll show the static screenshot instead)
-      previewService.hide(projectId);
-
-      // Use captured or cached thumbnail
-      const finalThumbnail = thumbnail || this.thumbnailCache.get(projectId);
-
-      // Emit with thumbnail data (use cached if capture failed)
-      this.emit('state-changed', state, previousState, finalThumbnail);
-    } else if (state === 'BROWSER_FULL' || state === 'DEFAULT') {
-      // Hide BrowserView briefly to avoid flash during transition
-      previewService.hide(projectId);
-
-      // Emit state change event to renderer first (so DOM can update)
-      this.emit('state-changed', state, previousState);
-
-      // Wait for DOM to settle, then show with correct bounds
-      await new Promise(resolve => setTimeout(resolve, 150));
-
-      // Show BrowserView - bounds will be set by DesktopPreviewFrame
-      previewService.show(projectId);
-    }
     } finally {
       // Always clear the transition flag
       this.isTransitioning = false;
@@ -131,7 +107,7 @@ class LayoutManager extends EventEmitter {
 
   /**
    * Cycle to next state (for Tab key)
-   * DEFAULT ↔ STATUS_EXPANDED (toggle between default and thumbnail)
+   * DEFAULT ↔ TOOLS (toggle between preview and tools view)
    * Note: BROWSER_FULL is only accessible via fullscreen icon, not Tab cycling
    */
   async cycleState(projectId: string): Promise<void> {
@@ -144,9 +120,9 @@ class LayoutManager extends EventEmitter {
 
     switch (this.currentState) {
       case 'DEFAULT':
-        nextState = 'STATUS_EXPANDED';
+        nextState = 'TOOLS';
         break;
-      case 'STATUS_EXPANDED':
+      case 'TOOLS':
         nextState = 'DEFAULT';
         break;
       case 'BROWSER_FULL':
@@ -181,16 +157,13 @@ class LayoutManager extends EventEmitter {
           height: windowHeight - this.headerHeight - this.actionBarHeight,
         };
 
-      case 'STATUS_EXPANDED':
-        // Small thumbnail (top-left) - size depends on view mode
-        const thumbnailSize = this.currentViewMode === 'mobile'
-          ? this.mobileThumbnailSize
-          : this.desktopThumbnailSize;
+      case 'TOOLS':
+        // TOOLS state: Preview is hidden, no bounds needed
         return {
-          x: this.thumbnailPosition.left,
-          y: this.thumbnailPosition.top,
-          width: thumbnailSize.width,
-          height: thumbnailSize.height,
+          x: 0,
+          y: 0,
+          width: 0,
+          height: 0,
         };
 
       case 'BROWSER_FULL':
@@ -223,44 +196,6 @@ class LayoutManager extends EventEmitter {
       // Will need projectId - emit event instead
       this.emit('actionbar-height-changed', height);
     }
-  }
-
-  /**
-   * Capture thumbnail from BrowserView
-   */
-  async captureThumbnail(projectId: string): Promise<string | null> {
-    const preview = previewService.getPreview(projectId);
-    if (!preview) return null;
-
-    try {
-      const image = await preview.webContents.capturePage();
-      const thumbnailSize = this.currentViewMode === 'mobile'
-        ? this.mobileThumbnailSize
-        : this.desktopThumbnailSize;
-      const resized = image.resize({
-        width: thumbnailSize.width,
-        height: thumbnailSize.height,
-      });
-
-      // Return as base64 data URL
-      return `data:image/png;base64,${resized.toPNG().toString('base64')}`;
-    } catch (error) {
-      console.error('❌ Failed to capture thumbnail:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Get thumbnail size and position
-   */
-  getThumbnailInfo() {
-    const thumbnailSize = this.currentViewMode === 'mobile'
-      ? this.mobileThumbnailSize
-      : this.desktopThumbnailSize;
-    return {
-      size: thumbnailSize,
-      position: this.thumbnailPosition,
-    };
   }
 
   /**

@@ -26,7 +26,7 @@ interface HelpChatProps {
 
 function HelpChat({ projectId }: HelpChatProps) {
   const { user, currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
   const [isOpen, setIsOpen] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('chat')
   const [messages, setMessages] = useState<Message[]>([])
@@ -140,30 +140,26 @@ function HelpChat({ projectId }: HelpChatProps) {
     const handleFreezeFrame = async () => {
       if (isOpen && activeProjectId) {
         // Opening HelpChat - activate freeze frame
-        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
-          // Use existing thumbnail when in STATUS_EXPANDED
-          setModalFreezeImage(thumbnailData)
+        const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
+        if (result?.success && result.freezeImage) {
+          setModalFreezeImage(result.freezeImage)
           setModalFreezeActive(true)
-        } else {
-          // Capture and freeze for other states
-          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
+          // Hide BrowserView (unless in TOOLS state where it's already hidden)
+          if (layoutState !== 'TOOLS') {
             await window.electronAPI?.preview.hide(activeProjectId)
           }
         }
       } else {
         // Closing HelpChat - deactivate freeze frame
         setModalFreezeActive(false)
-        if (activeProjectId && layoutState !== 'STATUS_EXPANDED') {
+        if (activeProjectId && layoutState !== 'TOOLS') {
           await window.electronAPI?.preview.show(activeProjectId)
         }
       }
     }
 
     handleFreezeFrame()
-  }, [isOpen, projectId, currentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
+  }, [isOpen, projectId, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   const FAQ_ITEMS: FAQItem[] = [
     {

@@ -14,7 +14,7 @@ interface ContextBarProps {
 
 function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
   const { currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
   const [showTooltip, setShowTooltip] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [showAddendumModal, setShowAddendumModal] = useState(false)
@@ -68,30 +68,26 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
     const handleFreezeFrame = async () => {
       if (showTooltip && activeProjectId) {
         // Opening tooltip - activate freeze frame
-        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
-          // Use existing thumbnail when in STATUS_EXPANDED
-          setModalFreezeImage(thumbnailData)
+        const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
+        if (result?.success && result.freezeImage) {
+          setModalFreezeImage(result.freezeImage)
           setModalFreezeActive(true)
-        } else {
-          // Capture and freeze for other states
-          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
+          // Hide BrowserView (unless in TOOLS state where it's already hidden)
+          if (layoutState !== 'TOOLS') {
             await window.electronAPI?.preview.hide(activeProjectId)
           }
         }
       } else {
         // Closing tooltip - deactivate freeze frame
         setModalFreezeActive(false)
-        if (activeProjectId && layoutState !== 'STATUS_EXPANDED') {
+        if (activeProjectId && layoutState !== 'TOOLS') {
           await window.electronAPI?.preview.show(activeProjectId)
         }
       }
     }
 
     handleFreezeFrame()
-  }, [showTooltip, projectId, currentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
+  }, [showTooltip, projectId, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   const handleToggleTooltip = () => {
     setShowTooltip(!showTooltip)

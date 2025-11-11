@@ -1,12 +1,25 @@
 import { useLayoutStore } from '../store/layoutStore'
+import { useEffect } from 'react'
 
 function FrozenBackground() {
-  const { modalFreezeActive, modalFreezeImage } = useLayoutStore()
+  const { modalFreezeActive, modalFreezeImage, layoutState } = useLayoutStore()
+
+  useEffect(() => {
+    console.log('🖼️ [FROZEN BACKGROUND] State changed:', {
+      modalFreezeActive,
+      hasImage: !!modalFreezeImage,
+      layoutState,
+      willRender: modalFreezeActive && !!modalFreezeImage,
+      timestamp: new Date().toISOString()
+    })
+  }, [modalFreezeActive, modalFreezeImage, layoutState])
 
   if (!modalFreezeActive || !modalFreezeImage) {
+    console.log('⚪ [FROZEN BACKGROUND] Not rendering (inactive or no image)')
     return null
   }
 
+  console.log('🟢 [FROZEN BACKGROUND] RENDERING freeze overlay')
   return (
     <div
       className="absolute inset-0 z-[90] pointer-events-none"

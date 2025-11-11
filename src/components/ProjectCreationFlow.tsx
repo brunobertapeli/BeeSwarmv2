@@ -232,7 +232,7 @@ const FORBIDDEN_IMPORT_CATEGORIES = ['Ecommerce']
 
 export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCreationFlowProps) {
   const { user, currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
   const toast = useToast()
   const [currentStep, setCurrentStep] = useState<WizardStep>('category')
   const [selectedCategory, setSelectedCategory] = useState<ProjectCategory | null>(null)
@@ -304,30 +304,26 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     const handleFreezeFrame = async () => {
       if (isOpen && currentProjectId) {
         // Opening project creation - activate freeze frame
-        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
-          // Use existing thumbnail when in STATUS_EXPANDED
-          setModalFreezeImage(thumbnailData)
+        const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+        if (result?.success && result.freezeImage) {
+          setModalFreezeImage(result.freezeImage)
           setModalFreezeActive(true)
-        } else {
-          // Capture and freeze for other states
-          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
+          // Hide BrowserView (unless in TOOLS state where it's already hidden)
+          if (layoutState !== 'TOOLS') {
             await window.electronAPI?.preview.hide(currentProjectId)
           }
         }
       } else {
         // Closing project creation - deactivate freeze frame
         setModalFreezeActive(false)
-        if (currentProjectId && layoutState !== 'STATUS_EXPANDED') {
+        if (currentProjectId && layoutState !== 'TOOLS') {
           await window.electronAPI?.preview.show(currentProjectId)
         }
       }
     }
 
     handleFreezeFrame()
-  }, [isOpen, currentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
+  }, [isOpen, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   // Refresh user session when modal opens
   useEffect(() => {

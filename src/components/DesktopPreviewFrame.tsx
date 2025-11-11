@@ -82,8 +82,8 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
   useEffect(() => {
     if (!useBrowserView || !projectId || !contentAreaRef.current) return
 
-    // Don't update bounds in STATUS_EXPANDED - LayoutManager handles thumbnail
-    if (layoutState === 'STATUS_EXPANDED') {
+    // Don't update bounds in TOOLS - preview is hidden
+    if (layoutState === 'TOOLS') {
       return
     }
 
@@ -207,8 +207,8 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
       } else {
         // Unfreeze when modal closes
         useLayoutStore.setState({ modalFreezeActive: false })
-        // Show BrowserView again (unless in STATUS_EXPANDED state)
-        if (projectId && layoutState !== 'STATUS_EXPANDED') {
+        // Show BrowserView again (unless in TOOLS state)
+        if (projectId && layoutState !== 'TOOLS') {
           await window.electronAPI?.preview.show(projectId)
         }
       }
@@ -487,8 +487,8 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
     }
   }
 
-  // Hide the frame UI in STATUS_EXPANDED state (only thumbnail shows in StatusSheet)
-  if (layoutState === 'STATUS_EXPANDED') {
+  // In TOOLS state, hide the preview frame completely (no frozen background)
+  if (layoutState === 'TOOLS') {
     return null
   }
 

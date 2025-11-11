@@ -269,9 +269,9 @@ function ActionBar({
     }
   }, [showModelDropdown, showPlusMenu, showTweakMenu])
 
-  // Reset kanban state when leaving STATUS_EXPANDED mode
+  // Reset kanban state when leaving TOOLS mode
   useEffect(() => {
-    if (layoutState !== 'STATUS_EXPANDED' && kanbanEnabled) {
+    if (layoutState !== 'TOOLS' && kanbanEnabled) {
       setKanbanEnabled(false)
     }
   }, [layoutState, kanbanEnabled])
@@ -292,17 +292,17 @@ function ActionBar({
         }
       }
 
-      // N - Add Sticky Note (only in STATUS_EXPANDED mode)
+      // N - Add Sticky Note (only in TOOLS mode)
       if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (layoutState === 'STATUS_EXPANDED') {
+        if (layoutState === 'TOOLS') {
           e.preventDefault()
           handleAddStickyNote()
         }
       }
 
-      // K - Toggle Kanban Board (only in STATUS_EXPANDED mode)
+      // K - Toggle Kanban Board (only in TOOLS mode)
       if (e.key.toLowerCase() === 'k' && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        if (layoutState === 'STATUS_EXPANDED') {
+        if (layoutState === 'TOOLS') {
           e.preventDefault()
           toggleKanban()
         }
@@ -666,18 +666,6 @@ function ActionBar({
     // Notify LayoutManager about view mode change
     await window.electronAPI?.layout.setViewMode(newMode)
 
-    // Clear thumbnail cache so next capture uses correct size
-    if (projectId) {
-      const { layoutState } = useLayoutStore.getState()
-      // If we're currently in thumbnail state, re-capture with new size
-      if (layoutState === 'STATUS_EXPANDED') {
-        await window.electronAPI?.layout.setState('DEFAULT', projectId)
-        setTimeout(async () => {
-          await window.electronAPI?.layout.setState('STATUS_EXPANDED', projectId)
-        }, 100)
-      }
-    }
-
     toast.info(
       `Switched to ${newMode} view`,
       'Preview mode updated'
@@ -693,16 +681,16 @@ function ActionBar({
   }
 
   const handleAddStickyNote = () => {
-    // Only allow in STATUS_EXPANDED mode
-    if (layoutState !== 'STATUS_EXPANDED') return
+    // Only allow in TOOLS mode
+    if (layoutState !== 'TOOLS') return
 
     // TODO: Implement sticky note creation
     toast.info('Sticky Note Added', 'New sticky note created')
   }
 
   const toggleKanban = () => {
-    // Only allow in STATUS_EXPANDED mode
-    if (layoutState !== 'STATUS_EXPANDED') return
+    // Only allow in TOOLS mode
+    if (layoutState !== 'TOOLS') return
 
     const newState = !kanbanEnabled
     setKanbanEnabled(newState)
@@ -1333,9 +1321,9 @@ function ActionBar({
 
             <button
               onClick={toggleViewMode}
-              disabled={layoutState === 'STATUS_EXPANDED'}
+              disabled={layoutState === 'TOOLS'}
               className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
-                layoutState === 'STATUS_EXPANDED'
+                layoutState === 'TOOLS'
                   ? 'opacity-40 cursor-not-allowed'
                   : 'hover:bg-dark-bg/50'
               }`}
@@ -1384,9 +1372,9 @@ function ActionBar({
 
             <button
               onClick={handleAddStickyNote}
-              disabled={layoutState !== 'STATUS_EXPANDED'}
+              disabled={layoutState !== 'TOOLS'}
               className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
-                layoutState !== 'STATUS_EXPANDED'
+                layoutState !== 'TOOLS'
                   ? 'opacity-40 cursor-not-allowed'
                   : 'hover:bg-dark-bg/50'
               }`}
@@ -1394,7 +1382,7 @@ function ActionBar({
               <StickyNote
                 size={15}
                 className={`transition-colors ${
-                  layoutState === 'STATUS_EXPANDED'
+                  layoutState === 'TOOLS'
                     ? 'text-gray-400 hover:text-gray-200'
                     : 'text-gray-400'
                 }`}
@@ -1406,9 +1394,9 @@ function ActionBar({
 
             <button
               onClick={toggleKanban}
-              disabled={layoutState !== 'STATUS_EXPANDED'}
+              disabled={layoutState !== 'TOOLS'}
               className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
-                layoutState !== 'STATUS_EXPANDED'
+                layoutState !== 'TOOLS'
                   ? 'opacity-40 cursor-not-allowed'
                   : 'hover:bg-dark-bg/50'
               }`}
@@ -1418,7 +1406,7 @@ function ActionBar({
                 className={`transition-colors ${
                   kanbanEnabled
                     ? 'text-blue-500'
-                    : layoutState === 'STATUS_EXPANDED'
+                    : layoutState === 'TOOLS'
                     ? 'text-gray-400 hover:text-gray-200'
                     : 'text-gray-400'
                 }`}

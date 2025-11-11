@@ -45,7 +45,7 @@ function ProjectSelector({
   onProjectUpdated,
 }: ProjectSelectorProps) {
   const { isAuthenticated, currentProjectId: appCurrentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, thumbnailData } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
   const toast = useToast()
   const [projects, setProjects] = useState<ProjectWithMeta[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
@@ -78,30 +78,26 @@ function ProjectSelector({
     const handleFreezeFrame = async () => {
       if (isOpen && activeProjectId) {
         // Opening project selector - activate freeze frame
-        if (layoutState === 'STATUS_EXPANDED' && thumbnailData) {
-          // Use existing thumbnail when in STATUS_EXPANDED
-          setModalFreezeImage(thumbnailData)
+        const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
+        if (result?.success && result.freezeImage) {
+          setModalFreezeImage(result.freezeImage)
           setModalFreezeActive(true)
-        } else {
-          // Capture and freeze for other states
-          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
+          // Hide BrowserView (unless in TOOLS state where it's already hidden)
+          if (layoutState !== 'TOOLS') {
             await window.electronAPI?.preview.hide(activeProjectId)
           }
         }
       } else {
         // Closing project selector - deactivate freeze frame
         setModalFreezeActive(false)
-        if (activeProjectId && layoutState !== 'STATUS_EXPANDED') {
+        if (activeProjectId && layoutState !== 'TOOLS') {
           await window.electronAPI?.preview.show(activeProjectId)
         }
       }
     }
 
     handleFreezeFrame()
-  }, [isOpen, currentProjectId, appCurrentProjectId, layoutState, thumbnailData, setModalFreezeActive, setModalFreezeImage])
+  }, [isOpen, currentProjectId, appCurrentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   // Fetch projects and templates from database
   useEffect(() => {

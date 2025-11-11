@@ -310,13 +310,8 @@ Please read the manifest to understand what my website is about, then create an 
 
   // NEW: Listen for layout state changes from Electron
   useEffect(() => {
-    const unsubscribe = window.electronAPI?.layout.onStateChanged?.((newState, previousState, thumbnail) => {
+    const unsubscribe = window.electronAPI?.layout.onStateChanged?.((newState, previousState) => {
       useLayoutStore.getState().setLayoutState(newState)
-
-      // If thumbnail data is provided, update the store
-      if (thumbnail) {
-        useLayoutStore.getState().setThumbnailData(thumbnail)
-      }
     })
 
     return unsubscribe

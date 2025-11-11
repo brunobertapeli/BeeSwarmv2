@@ -68,24 +68,6 @@ export function registerLayoutHandlers(): void {
     }
   });
 
-  // Capture thumbnail
-  ipcMain.handle('layout:capture-thumbnail', async (_event, projectId: string) => {
-    try {
-      const thumbnail = await layoutManager.captureThumbnail(projectId);
-
-      return {
-        success: true,
-        thumbnail,
-      };
-    } catch (error) {
-      console.error('❌ Error capturing thumbnail:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to capture thumbnail',
-      };
-    }
-  });
-
   // Set ActionBar height
   ipcMain.handle('layout:set-actionbar-height', async (_event, height: number) => {
     try {
@@ -182,9 +164,9 @@ export function registerLayoutHandlers(): void {
  */
 function setupLayoutEventForwarding(): void {
   // State changed
-  layoutManager.on('state-changed', (newState: LayoutState, previousState: LayoutState, thumbnail?: string | null) => {
+  layoutManager.on('state-changed', (newState: LayoutState, previousState: LayoutState) => {
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
-      mainWindowContents.send('layout-state-changed', newState, previousState, thumbnail);
+      mainWindowContents.send('layout-state-changed', newState, previousState);
     }
   });
 

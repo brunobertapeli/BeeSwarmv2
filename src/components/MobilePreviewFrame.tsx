@@ -58,8 +58,8 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   useEffect(() => {
     if (!projectId || !contentAreaRef.current) return
 
-    // Don't update bounds in STATUS_EXPANDED - LayoutManager handles thumbnail
-    if (layoutState === 'STATUS_EXPANDED') {
+    // Don't update bounds in TOOLS - preview is hidden
+    if (layoutState === 'TOOLS') {
       return
     }
 
@@ -300,11 +300,6 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
     }
   }
 
-  // Hide the frame UI in STATUS_EXPANDED state (only thumbnail shows in StatusSheet)
-  if (layoutState === 'STATUS_EXPANDED') {
-    return null
-  }
-
   // Get device dimensions for sizing
   const deviceWidth = selectedDevice?.width || 393
   const deviceHeight = selectedDevice?.height || 852
@@ -321,6 +316,11 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   const maxHeight = isFullscreen ? window.innerHeight - 180 : window.innerHeight - 300
   const calculatedWidth = Math.min(deviceWidth * scale, (maxHeight / aspectRatio))
   const calculatedHeight = calculatedWidth * aspectRatio
+
+  // In TOOLS state, hide the preview frame completely (no frozen background)
+  if (layoutState === 'TOOLS') {
+    return null
+  }
 
   return (
     <div className={`w-full h-full flex items-center justify-center ${
