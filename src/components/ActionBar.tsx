@@ -72,7 +72,7 @@ function ActionBar({
   onAutoMessageSent
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [isHidden, setIsHidden] = useState(false) // Start visible (not hidden)
@@ -90,7 +90,6 @@ function ActionBar({
   const [showTweakMenu, setShowTweakMenu] = useState(false)
   const [thinkingEnabled, setThinkingEnabled] = useState(true)
   const [planModeToggle, setPlanModeToggle] = useState(false) // Only for next message, resets after send
-  const [kanbanEnabled, setKanbanEnabled] = useState(false) // Toggle for kanban view
   const [attachments, setAttachments] = useState<Array<{id: string, type: 'image' | 'file', name: string, preview?: string}>>([])
   const [questions, setQuestions] = useState<any>(null)
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string | string[]>>({})
@@ -284,13 +283,6 @@ function ActionBar({
     }
   }, [showModelDropdown, showPlusMenu, showTweakMenu])
 
-  // Reset kanban state when leaving TOOLS mode
-  useEffect(() => {
-    if (layoutState !== 'TOOLS' && kanbanEnabled) {
-      setKanbanEnabled(false)
-    }
-  }, [layoutState, kanbanEnabled])
-
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -326,7 +318,7 @@ function ActionBar({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [layoutState, kanbanEnabled, editModeEnabled]) // Re-run when layout state or kanban state changes
+  }, [layoutState, kanbanEnabled, editModeEnabled, setKanbanEnabled, setEditModeEnabled]) // Re-run when layout state or kanban state changes
 
   // Listen for questions from Claude (plan mode)
   useEffect(() => {

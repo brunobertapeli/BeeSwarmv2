@@ -338,6 +338,43 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
+    saveKanbanState: (id: string, kanbanState: {
+      enabled: boolean;
+      position: { x: number; y: number };
+      size: { width: number; height: number };
+      columns: Array<{
+        id: string;
+        title: string;
+        cards: Array<{
+          id: string;
+          title: string;
+          content: string;
+          priority: string;
+        }>;
+      }>;
+    }) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    getKanbanState: (id: string) => Promise<{
+      success: boolean
+      kanbanState?: {
+        enabled: boolean;
+        position: { x: number; y: number };
+        size: { width: number; height: number };
+        columns: Array<{
+          id: string;
+          title: string;
+          cards: Array<{
+            id: string;
+            title: string;
+            content: string;
+            priority: string;
+          }>;
+        }>;
+      } | null
+      error?: string
+    }>
   }
 
   process: {

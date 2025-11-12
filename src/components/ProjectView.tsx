@@ -13,6 +13,7 @@ import TerminalModal from './TerminalModal'
 import DesktopPreviewFrame from './DesktopPreviewFrame'
 import MobilePreviewFrame from './MobilePreviewFrame'
 import HelpChat from './HelpChat'
+import KanbanWidget from './KanbanWidget'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 
@@ -40,7 +41,7 @@ function ProjectView() {
     setSelectedDevice,
   } = useAppStore()
 
-  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState } = useLayoutStore()
   const toast = useToast()
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'apikeys' | 'deployment'>('general')
   const [projects, setProjects] = useState<Project[]>([])
@@ -110,6 +111,13 @@ function ProjectView() {
 
     applyDeviceEmulation()
   }, [viewMode, selectedDevice, currentProjectId])
+
+  // Load Kanban widget state when project changes
+  useEffect(() => {
+    if (currentProjectId) {
+      loadKanbanState(currentProjectId)
+    }
+  }, [currentProjectId, loadKanbanState])
 
   // Handle freeze frame when UserProfile opens/closes
   useEffect(() => {
@@ -668,6 +676,9 @@ Please read the manifest to understand what my website is about, then create an 
         autoMessage={websiteImportPrompt}
         onAutoMessageSent={handleWebsiteImportPromptSent}
       />
+
+      {/* Kanban Widget */}
+      {kanbanEnabled && layoutState === 'TOOLS' && <KanbanWidget />}
 
       {/* Help Chat */}
       <HelpChat

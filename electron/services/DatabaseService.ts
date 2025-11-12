@@ -20,8 +20,29 @@ export interface Project {
   websiteImportAutoPromptSent: number | null // Timestamp when auto-prompt was sent for website imports
   deployServices: string | null // JSON array of deployment services
   imagePath: string | null // Path to template images
+  kanbanState: string | null // JSON string with { enabled, position, size }
   createdAt: number
   lastOpenedAt: number | null
+}
+
+export interface KanbanCard {
+  id: string
+  title: string
+  content: string
+  priority: string
+}
+
+export interface KanbanColumn {
+  id: string
+  title: string
+  cards: KanbanCard[]
+}
+
+export interface KanbanState {
+  enabled: boolean
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  columns: KanbanColumn[]
 }
 
 export interface ChatBlock {
@@ -239,6 +260,12 @@ class DatabaseService {
       const hasImagePath = tableInfo.some(col => col.name === 'imagePath')
       if (!hasImagePath) {
         this.db.exec('ALTER TABLE projects ADD COLUMN imagePath TEXT')
+      }
+
+      // Migration 15: Add kanbanState column if it doesn't exist
+      const hasKanbanState = tableInfo.some(col => col.name === 'kanbanState')
+      if (!hasKanbanState) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN kanbanState TEXT')
       }
 
       // Future migrations can be added here
@@ -570,6 +597,47 @@ class DatabaseService {
       return JSON.parse(project.claudeContext)
     } catch (error) {
       console.error('❌ Failed to parse Claude context:', error)
+      return null
+    }
+  }
+
+  /**
+   * Save Kanban widget state for a project
+   */
+  saveKanbanState(projectId: string, kanbanState: KanbanState): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save Kanban state after database closed - ignoring')
+      return
+    }
+
+    const stateJson = JSON.stringify(kanbanState)
+    const sql = 'UPDATE projects SET kanbanState = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(stateJson, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save Kanban state:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get Kanban widget state for a project
+   */
+  getKanbanState(projectId: string): KanbanState | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!project?.kanbanState) {
+      return null
+    }
+
+    try {
+      return JSON.parse(project.kanbanState) as KanbanState
+    } catch (error) {
+      console.error('❌ Failed to parse Kanban state:', error)
       return null
     }
   }

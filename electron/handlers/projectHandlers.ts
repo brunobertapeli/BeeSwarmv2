@@ -396,4 +396,61 @@ export function registerProjectHandlers() {
       }
     }
   })
+
+  // Save Kanban widget state
+  ipcMain.handle('project:save-kanban-state', async (_event, projectId: string, kanbanState: { enabled: boolean; position: { x: number; y: number }; size: { width: number; height: number } }) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      databaseService.saveKanbanState(projectId, kanbanState)
+
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('❌ Error saving Kanban state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save Kanban state'
+      }
+    }
+  })
+
+  // Get Kanban widget state
+  ipcMain.handle('project:get-kanban-state', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      const kanbanState = databaseService.getKanbanState(projectId)
+
+      return {
+        success: true,
+        kanbanState
+      }
+    } catch (error) {
+      console.error('❌ Error getting Kanban state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Kanban state'
+      }
+    }
+  })
 }

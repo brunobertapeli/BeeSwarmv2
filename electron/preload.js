@@ -65,7 +65,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showInFinder: (id) => ipcRenderer.invoke('project:show-in-finder', id),
     saveEnvConfig: (id, envVars) => ipcRenderer.invoke('project:save-env-config', id, envVars),
     getEnvConfig: (id) => ipcRenderer.invoke('project:get-env-config', id),
-    installDependencies: (id) => ipcRenderer.invoke('project:install-dependencies', id)
+    installDependencies: (id) => ipcRenderer.invoke('project:install-dependencies', id),
+    saveKanbanState: (id, kanbanState) => ipcRenderer.invoke('project:save-kanban-state', id, kanbanState),
+    getKanbanState: (id) => ipcRenderer.invoke('project:get-kanban-state', id)
   },
 
   // Listen for dependency install progress
