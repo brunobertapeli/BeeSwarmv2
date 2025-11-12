@@ -18,8 +18,10 @@ import {
   X as CloseIcon,
   Edit2,
   StickyNote,
-  Kanban
+  Kanban,
+  LayoutGrid
 } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore, type DeploymentStatus } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
@@ -88,6 +90,7 @@ function ActionBar({
   const [loadingDots, setLoadingDots] = useState('')
   const [showPlusMenu, setShowPlusMenu] = useState(false)
   const [showTweakMenu, setShowTweakMenu] = useState(false)
+  const [showWidgetsMenu, setShowWidgetsMenu] = useState(false)
   const [thinkingEnabled, setThinkingEnabled] = useState(true)
   const [planModeToggle, setPlanModeToggle] = useState(false) // Only for next message, resets after send
   const [attachments, setAttachments] = useState<Array<{id: string, type: 'image' | 'file', name: string, preview?: string}>>([])
@@ -1388,6 +1391,89 @@ function ActionBar({
             <div className="flex-1" />
 
             {/* Action Icons */}
+            {/* Widgets Menu */}
+            <div
+              className="relative flex items-center"
+              onMouseEnter={() => setShowWidgetsMenu(true)}
+              onMouseLeave={() => setShowWidgetsMenu(false)}
+            >
+              {/* Main Widgets Icon */}
+              <button
+                disabled={layoutState !== 'TOOLS'}
+                className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
+                  layoutState !== 'TOOLS'
+                    ? 'opacity-40 cursor-not-allowed'
+                    : 'hover:bg-dark-bg/50'
+                }`}
+              >
+                <LayoutGrid
+                  size={15}
+                  className={`transition-colors ${
+                    layoutState === 'TOOLS'
+                      ? 'text-gray-400 hover:text-gray-200'
+                      : 'text-gray-400'
+                  }`}
+                />
+                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                  Open Widgets
+                </span>
+              </button>
+
+              {/* Animated Widget Icons */}
+              <AnimatePresence>
+                {showWidgetsMenu && layoutState === 'TOOLS' && (
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: 'auto' }}
+                    exit={{ width: 0 }}
+                    transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+                    className="flex items-center overflow-hidden"
+                  >
+                    <motion.button
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2, delay: 0.1 }}
+                      onClick={handleAddStickyNote}
+                      className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
+                    >
+                      <StickyNote
+                        size={15}
+                        className="text-gray-400 hover:text-yellow-400 transition-colors"
+                      />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                        New Sticky Note (N)
+                      </span>
+                    </motion.button>
+
+                    <motion.button
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2, delay: 0.15 }}
+                      onClick={toggleKanban}
+                      className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
+                    >
+                      <Kanban
+                        size={15}
+                        className={`transition-colors ${
+                          kanbanEnabled
+                            ? 'text-blue-500'
+                            : 'text-gray-400 hover:text-blue-400'
+                        }`}
+                      />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                        Toggle Kanban (K)
+                      </span>
+                    </motion.button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Divider */}
+            <div className="w-px h-5 bg-dark-border/50" />
+
             <button
               onClick={onConsoleClick}
               className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
@@ -1446,52 +1532,6 @@ function ActionBar({
               />
               <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
                 {editModeEnabled ? 'Disable Edit Mode (E)' : 'Enable Edit Mode (E)'}
-              </span>
-            </button>
-
-            <button
-              onClick={handleAddStickyNote}
-              disabled={layoutState !== 'TOOLS'}
-              className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
-                layoutState !== 'TOOLS'
-                  ? 'opacity-40 cursor-not-allowed'
-                  : 'hover:bg-dark-bg/50'
-              }`}
-            >
-              <StickyNote
-                size={15}
-                className={`transition-colors ${
-                  layoutState === 'TOOLS'
-                    ? 'text-gray-400 hover:text-gray-200'
-                    : 'text-gray-400'
-                }`}
-              />
-              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
-                Add Sticky Note (N)
-              </span>
-            </button>
-
-            <button
-              onClick={toggleKanban}
-              disabled={layoutState !== 'TOOLS'}
-              className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
-                layoutState !== 'TOOLS'
-                  ? 'opacity-40 cursor-not-allowed'
-                  : 'hover:bg-dark-bg/50'
-              }`}
-            >
-              <Kanban
-                size={15}
-                className={`transition-colors ${
-                  kanbanEnabled
-                    ? 'text-blue-500'
-                    : layoutState === 'TOOLS'
-                    ? 'text-gray-400 hover:text-gray-200'
-                    : 'text-gray-400'
-                }`}
-              />
-              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
-                {kanbanEnabled ? 'Close Kanban Board (K)' : 'Open Kanban Board (K)'}
               </span>
             </button>
 
