@@ -3,6 +3,7 @@ import { processManager, ProcessState } from '../services/ProcessManager';
 import { databaseService } from '../services/DatabaseService';
 import { terminalAggregator } from '../services/TerminalAggregator';
 import { claudeService } from '../services/ClaudeService';
+import { logPersistenceService } from '../services/LogPersistenceService';
 
 let mainWindowContents: WebContents | null = null;
 
@@ -32,6 +33,9 @@ export function registerProcessHandlers(): void {
 
       // Start the server
       const port = await processManager.startDevServer(projectId, project.path);
+
+      // Initialize log persistence for this project
+      logPersistenceService.initializeProject(projectId);
 
       return {
         success: true,
@@ -78,6 +82,9 @@ export function registerProcessHandlers(): void {
 
       // Restart the server
       const port = await processManager.restartDevServer(projectId, project.path);
+
+      // Reinitialize log persistence after restart
+      logPersistenceService.initializeProject(projectId);
 
       return {
         success: true,
@@ -200,6 +207,9 @@ function setupProcessEventForwarding(): void {
 
   // Process output
   processManager.on('process-output', (projectId: string, output: any) => {
+    // Persist ALL process output to disk (before filtering)
+    logPersistenceService.handleProcessOutput(projectId, output);
+
     // Filter out Vite HMR noise during Claude operations
     const isClaudeRunning = claudeService.isRunning(projectId);
 

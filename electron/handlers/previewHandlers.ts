@@ -1,5 +1,6 @@
 import { ipcMain, WebContents } from 'electron';
 import { previewService, PreviewBounds } from '../services/PreviewService';
+import { logPersistenceService } from '../services/LogPersistenceService';
 
 let mainWindowContents: WebContents | null = null;
 
@@ -321,6 +322,8 @@ function setupPreviewEventForwarding(): void {
     if (mainWindowContents && !mainWindowContents.isDestroyed()) {
       mainWindowContents.send('preview-console', projectId, message);
     }
+    // Persist console logs to disk
+    logPersistenceService.handlePreviewConsole(projectId, message);
   });
 
   // DevTools toggled

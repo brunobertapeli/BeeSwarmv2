@@ -79,6 +79,7 @@ import { claudeService } from './services/ClaudeService.js'
 import { chatHistoryManager } from './services/ChatHistoryManager.js'
 import { projectLockService } from './services/ProjectLockService.js'
 import { keywordService } from './services/KeywordService.js'
+import { logPersistenceService } from './services/LogPersistenceService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -623,7 +624,10 @@ app.on('before-quit', async (event) => {
     // 5. Destroy all previews
     previewService.destroyAll()
 
-    // 6. Close database last (after all operations complete)
+    // 6. Flush pending log writes
+    logPersistenceService.cleanup()
+
+    // 7. Close database last (after all operations complete)
     databaseService.close()
 
   } catch (error) {
