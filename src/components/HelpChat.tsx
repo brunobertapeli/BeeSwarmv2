@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { MessageCircle, X, Send, Sparkles, ChevronDown, ArrowLeft, Bug, Mail } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
-import { useLayoutStore } from '../store/layoutStore'
 import bgImage from '../assets/images/bg.jpg'
 
 interface FAQItem {
@@ -22,12 +21,12 @@ interface Message {
 
 interface HelpChatProps {
   projectId?: string
+  isOpen: boolean
+  onClose: () => void
 }
 
-function HelpChat({ projectId }: HelpChatProps) {
-  const { user, currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
-  const [isOpen, setIsOpen] = useState(false)
+function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
+  const { user } = useAppStore()
   const [viewMode, setViewMode] = useState<ViewMode>('chat')
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
@@ -133,34 +132,6 @@ function HelpChat({ projectId }: HelpChatProps) {
     }
   }, [isOpen])
 
-  // Handle freeze frame when HelpChat opens/closes
-  useEffect(() => {
-    const activeProjectId = projectId || currentProjectId
-
-    const handleFreezeFrame = async () => {
-      if (isOpen && activeProjectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(activeProjectId)
-          }
-        }
-      } else {
-        // Closing HelpChat - deactivate freeze frame
-        setModalFreezeActive(false)
-        // Only show browser back if in DEFAULT state
-        if (activeProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(activeProjectId)
-        }
-      }
-    }
-
-    handleFreezeFrame()
-  }, [isOpen, projectId, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
-
   const FAQ_ITEMS: FAQItem[] = [
     {
       question: "How do I create a new project?",
@@ -168,7 +139,7 @@ function HelpChat({ projectId }: HelpChatProps) {
     },
     {
       question: "How can I change the preview size?",
-      answer: "Use the buttons in the top bar of the preview window: Full Screen, Large (80%), or Medium (66%). You can also switch between desktop and mobile views."
+      answer: "You can switch between desktop and mobile views using the view toggle button in the action bar."
     },
     {
       question: "What is Claude and how do I use it?",
@@ -409,31 +380,9 @@ function HelpChat({ projectId }: HelpChatProps) {
 
   return (
     <>
-      {/* Floating Help Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 z-[100] w-14 h-14 rounded-full bg-dark-card/50 backdrop-blur-xl border border-dark-border/50 shadow-2xl flex items-center justify-center transition-all duration-300 hover:bg-dark-card hover:border-primary/50 hover:scale-110 group ${
-          hasNewMessages ? 'animate-bounce' : ''
-        }`}
-        title="Help & Support"
-      >
-        {isOpen ? (
-          <X size={20} className="text-gray-400 group-hover:text-primary transition-colors" />
-        ) : (
-          <MessageCircle size={20} className="text-gray-400 group-hover:text-primary transition-colors" />
-        )}
-
-        {/* Badge for unread messages */}
-        {!isOpen && unreadCount > 0 && (
-          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
-            <span className="text-white text-[10px] font-bold">{unreadCount}</span>
-          </div>
-        )}
-      </button>
-
       {/* Chat Modal */}
       {isOpen && (
-        <div className="fixed bottom-24 right-6 z-[100] w-[400px] h-[600px] animate-scaleIn">
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-[400px] h-[600px] animate-fadeIn">
           <div className="bg-dark-card/95 backdrop-blur-xl border border-dark-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full relative">
             {/* Background Image */}
             <div
@@ -475,7 +424,7 @@ function HelpChat({ projectId }: HelpChatProps) {
                 </div>
               </div>
               <button
-                onClick={() => setIsOpen(false)}
+                onClick={onClose}
                 className="p-1 hover:bg-dark-bg/50 rounded transition-colors"
               >
                 <X size={16} className="text-gray-400 hover:text-white transition-colors" />

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { ChevronDown, Settings } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import { useWebsiteImport } from '../hooks/useWebsiteImport'
 import ActionBar from './ActionBar'
-import ProjectHeader from './ProjectHeader'
 import ProjectSelector from './ProjectSelector'
+import UserProfile from './UserProfile'
 import { ProjectCreationFlow } from './ProjectCreationFlow'
 import ProjectSettings from './ProjectSettings'
 import TerminalModal from './TerminalModal'
@@ -13,6 +14,7 @@ import DesktopPreviewFrame from './DesktopPreviewFrame'
 import MobilePreviewFrame from './MobilePreviewFrame'
 import HelpChat from './HelpChat'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
+import bgImage from '../assets/images/bg.jpg'
 
 function ProjectView() {
   const {
@@ -38,12 +40,16 @@ function ProjectView() {
     setSelectedDevice,
   } = useAppStore()
 
+  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
   const toast = useToast()
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'apikeys' | 'deployment'>('general')
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showCreationFlow, setShowCreationFlow] = useState(false)
+  const [showUserProfileModal, setShowUserProfileModal] = useState(false)
+  const [showHelpChat, setShowHelpChat] = useState(false)
+  const [helpChatFreezeReady, setHelpChatFreezeReady] = useState(false)
 
   // Dev server and preview state
   const [serverStatus, setServerStatus] = useState<ProcessState>('stopped')
@@ -104,6 +110,63 @@ function ProjectView() {
 
     applyDeviceEmulation()
   }, [viewMode, selectedDevice, currentProjectId])
+
+  // Handle freeze frame when UserProfile opens/closes
+  useEffect(() => {
+    const handleFreezeFrame = async () => {
+      if (showUserProfileModal && currentProjectId) {
+        // Only freeze if in DEFAULT state (browser is visible)
+        if (layoutState === 'DEFAULT') {
+          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
+            await window.electronAPI?.preview.hide(currentProjectId)
+          }
+        }
+      } else {
+        // Closing UserProfile - deactivate freeze frame
+        setModalFreezeActive(false)
+        // Only show browser back if in DEFAULT state
+        if (currentProjectId && layoutState === 'DEFAULT') {
+          await window.electronAPI?.preview.show(currentProjectId)
+        }
+      }
+    }
+
+    handleFreezeFrame()
+  }, [showUserProfileModal, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
+
+  // Handle freeze frame when HelpChat opens/closes
+  useEffect(() => {
+    const handleFreezeFrame = async () => {
+      if (showHelpChat && currentProjectId) {
+        // Only freeze if in DEFAULT state (browser is visible)
+        if (layoutState === 'DEFAULT') {
+          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
+            await window.electronAPI?.preview.hide(currentProjectId)
+            setHelpChatFreezeReady(true)
+          }
+        } else {
+          // Not in DEFAULT state, show immediately
+          setHelpChatFreezeReady(true)
+        }
+      } else {
+        // Closing HelpChat - deactivate freeze frame
+        setHelpChatFreezeReady(false)
+        setModalFreezeActive(false)
+        // Only show browser back if in DEFAULT state
+        if (currentProjectId && layoutState === 'DEFAULT') {
+          await window.electronAPI?.preview.show(currentProjectId)
+        }
+      }
+    }
+
+    handleFreezeFrame()
+  }, [showHelpChat, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   // Handle website import - auto-send prompt
   useEffect(() => {
@@ -404,12 +467,53 @@ Please read the manifest to understand what my website is about, then create an 
   }
 
   return (
-    <div className="w-full h-screen relative flex flex-col pt-12 bg-gradient-to-br from-zinc-950 via-neutral-900 to-black">
-      {/* Project Header - Fixed */}
-      <ProjectHeader
-        projectName={getProjectName()}
-        onOpenProjectSelector={() => setShowProjectSelector(true)}
-      />
+    <div className="w-full h-screen relative flex flex-col bg-gradient-to-br from-zinc-950 via-neutral-900 to-black">
+      {/* Top Header Bar */}
+      <div className="fixed top-0 left-0 right-0 h-[40px] z-[99] border-b border-gray-700/50 bg-gray-800/50 flex items-center justify-center relative overflow-hidden" style={{ WebkitAppRegion: 'drag' } as any}>
+        {/* Background image with low opacity */}
+        <div
+          className="absolute inset-0 opacity-10 pointer-events-none"
+          style={{
+            backgroundImage: `url(${bgImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+
+        {/* Project Name - Rounded Capsule (clickable) - Centered */}
+        <button
+          onClick={() => setShowProjectSelector(true)}
+          className="min-w-[150px] pl-[50px] pr-[50px] py-1.5 rounded-lg border border-gray-700/60 bg-dark-card/95 backdrop-blur-xl hover:bg-dark-card hover:border-primary/40 transition-all flex items-center justify-center gap-2 relative z-10 mt-[3px] group"
+          style={{ WebkitAppRegion: 'no-drag' } as any}
+        >
+          <span className="text-xs font-medium text-gray-300 group-hover:text-white transition-colors">{getProjectName()}</span>
+          <ChevronDown size={14} className="text-gray-400 group-hover:text-primary transition-colors" />
+        </button>
+
+        {/* Settings Icon - Absolute Right Side, Vertically Centered */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            setShowUserProfileModal(!showUserProfileModal)
+          }}
+          data-settings-button
+          className="absolute right-4 p-1.5 hover:bg-dark-bg/50 rounded-lg transition-colors z-10 mt-[3px]"
+          style={{ WebkitAppRegion: 'no-drag' } as any}
+        >
+          <Settings size={16} className="text-gray-400 hover:text-white transition-colors" />
+        </button>
+      </div>
+
+      {/* User Profile Modal */}
+      {showUserProfileModal && (
+        <div className="fixed top-[48px] right-2 z-[100]">
+          <UserProfile
+            onClose={() => setShowUserProfileModal(false)}
+            excludeElement="[data-settings-button]"
+            onOpenHelp={() => setShowHelpChat(true)}
+          />
+        </div>
+      )}
 
       {/* Project Selector Modal */}
       <ProjectSelector
@@ -429,7 +533,7 @@ Please read the manifest to understand what my website is about, then create an 
       />
 
       {/* Preview Area - Desktop or Mobile Mode */}
-      <div className="w-full flex-1 relative overflow-hidden">
+      <div className="w-full flex-1 relative overflow-hidden pt-[40px] mt-0">
         {loading ? (
           // Loading State
           <div className="w-full h-full flex items-center justify-center relative">
@@ -566,7 +670,11 @@ Please read the manifest to understand what my website is about, then create an 
       />
 
       {/* Help Chat */}
-      <HelpChat projectId={currentProjectId || undefined} />
+      <HelpChat
+        projectId={currentProjectId || undefined}
+        isOpen={showHelpChat && helpChatFreezeReady}
+        onClose={() => setShowHelpChat(false)}
+      />
 
       {/* Project Settings Modal */}
       <ProjectSettings

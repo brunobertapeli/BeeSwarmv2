@@ -208,7 +208,7 @@ function createWindow() {
       sandbox: false, // Needed for some Electron features
     },
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 15, y: 15 },
+    trafficLightPosition: { x: 10, y: 10 },
   })
 
   // Suppress harmless DevTools Autofill protocol errors

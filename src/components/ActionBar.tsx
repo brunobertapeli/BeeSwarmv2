@@ -876,11 +876,6 @@ function ActionBar({
     }
   }
 
-  // Hide ActionBar when in BROWSER_FULL state
-  if (layoutState === 'BROWSER_FULL') {
-    return null
-  }
-
   return (
     <>
       {/* Bottom hover trigger zone */}

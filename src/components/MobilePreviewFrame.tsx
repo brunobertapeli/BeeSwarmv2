@@ -3,7 +3,6 @@ import { RotateCw, Code2 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
 import FrozenBackground from './FrozenBackground'
-import bgImage from '../assets/images/bg.jpg'
 
 interface MobilePreviewFrameProps {
   port?: number
@@ -13,6 +12,7 @@ interface MobilePreviewFrameProps {
 function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   const [devToolsOpen, setDevToolsOpen] = useState(false)
   const contentAreaRef = useRef<HTMLDivElement>(null)
+  const browserViewRef = useRef<HTMLDivElement>(null)
   const { layoutState, editModeEnabled } = useLayoutStore()
   const { selectedDevice } = useAppStore()
 
@@ -21,7 +21,7 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
     if (!projectId || !port) return
 
     const createOrUpdatePreview = async () => {
-      const rect = contentAreaRef.current?.getBoundingClientRect()
+      const rect = browserViewRef.current?.getBoundingClientRect()
       if (!rect) {
         return
       }
@@ -56,7 +56,7 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
 
   // Update bounds when layout state changes or window resizes
   useEffect(() => {
-    if (!projectId || !contentAreaRef.current) return
+    if (!projectId || !browserViewRef.current) return
 
     // Don't update bounds in TOOLS - preview is hidden
     if (layoutState === 'TOOLS') {
@@ -64,7 +64,7 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
     }
 
     const updateBounds = () => {
-      const rect = contentAreaRef.current?.getBoundingClientRect()
+      const rect = browserViewRef.current?.getBoundingClientRect()
       if (!rect) return
 
       const bounds = {
@@ -305,15 +305,11 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   const deviceHeight = selectedDevice?.height || 852
   const aspectRatio = deviceHeight / deviceWidth
 
-  // In BROWSER_FULL state, make it larger but still phone-sized
-  const isFullscreen = layoutState === 'BROWSER_FULL'
-
-  // Scale factors for different states - increased DEFAULT from 0.6 to 0.7 (10% bigger)
-  const scale = isFullscreen ? 0.8 : 0.7 // 80% of viewport in fullscreen, 70% in default
+  // Scale factor for mobile preview
+  const scale = 0.735
 
   // Calculate dimensions maintaining aspect ratio
-  // Increased top gap for fullscreen from 100 to 180
-  const maxHeight = isFullscreen ? window.innerHeight - 180 : window.innerHeight - 300
+  const maxHeight = window.innerHeight - 300
   const calculatedWidth = Math.min(deviceWidth * scale, (maxHeight / aspectRatio))
   const calculatedHeight = calculatedWidth * aspectRatio
 
@@ -323,9 +319,7 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   }
 
   return (
-    <div className={`w-full h-full flex items-center justify-center ${
-      isFullscreen ? 'pt-12 pb-8' : 'pb-40'
-    }`}>
+    <div className="w-full h-full flex items-center justify-center pb-40" style={{ marginTop: '-50px' }}>
       {/* Mobile phone container - centered */}
       <div
         className="flex flex-col bg-gray-900 rounded-3xl overflow-hidden shadow-2xl"
@@ -336,23 +330,14 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
         }}
       >
         {/* Minimal top bar with controls */}
-        <div className="h-8 bg-gray-800/50 border-b border-gray-700/50 flex items-center px-2 gap-2 flex-shrink-0 relative overflow-hidden">
-          {/* Background image with low opacity */}
-          <div
-            className="absolute inset-0 opacity-10 pointer-events-none"
-            style={{
-              backgroundImage: `url(${bgImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            }}
-          />
+        <div className="h-[37px] bg-dark-card/95 backdrop-blur-xl border-t border-l border-r border-b border-dark-border/80 rounded-t-3xl flex items-center px-2 gap-2 flex-shrink-0 relative">
           {/* Device name indicator */}
-          <div className="flex-1 text-[10px] text-gray-400 font-medium px-2 relative z-10">
+          <div className="flex-1 text-[10px] text-gray-400 font-medium px-2">
             {selectedDevice?.name || 'Mobile'}
           </div>
 
           {/* Controls */}
-          <div className="flex gap-1 relative z-10">
+          <div className="flex gap-1">
             {/* Refresh */}
             <button
               onClick={handleRefresh}
@@ -377,13 +362,19 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
           </div>
         </div>
 
-        {/* Content Area - BrowserView will be positioned here */}
+        {/* Content Area - With padding for frame */}
         <div
           ref={contentAreaRef}
-          className="flex-1 bg-white overflow-hidden relative"
+          className="flex-1 bg-dark-card/95 border-l border-r border-b border-dark-border/80 rounded-b-3xl overflow-hidden relative px-1.5 py-3.5"
         >
-          {/* Frozen background overlay - positioned exactly where BrowserView appears */}
-          <FrozenBackground />
+          {/* Inner area for BrowserView positioning */}
+          <div
+            ref={browserViewRef}
+            className="w-full h-full bg-white relative"
+          >
+            {/* Frozen background overlay - positioned exactly where BrowserView appears */}
+            <FrozenBackground />
+          </div>
         </div>
       </div>
     </div>

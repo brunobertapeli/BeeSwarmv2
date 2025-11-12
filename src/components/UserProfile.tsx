@@ -1,55 +1,39 @@
-import { useState, useRef, useEffect } from 'react'
+import { useRef, useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
-import { LogOut, Settings, CreditCard, User as UserIcon } from 'lucide-react'
+import { LogOut, Settings, CreditCard, User as UserIcon, MessageCircle } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
 import bgImage from '../assets/images/bg.jpg'
 
-function UserProfile() {
-  const { user, logout, currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+interface UserProfileProps {
+  onClose: () => void
+  excludeElement?: string
+  onOpenHelp?: () => void
+}
+
+function UserProfile({ onClose, excludeElement, onOpenHelp }: UserProfileProps) {
+  const { user, logout } = useAppStore()
   const dropdownRef = useRef<HTMLDivElement>(null)
   const toast = useToast()
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false)
+      const target = event.target as Node
+
+      // Don't close if clicking the excluded element (settings button)
+      if (excludeElement && (target as Element).closest?.(excludeElement)) {
+        return
+      }
+
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
+        onClose()
       }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  // Handle modal freeze when dropdown opens/closes
-  useEffect(() => {
-    const handleFreeze = async () => {
-      if (isDropdownOpen && currentProjectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
-
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(currentProjectId)
-          }
-        }
-      } else {
-        // Unfreeze when dropdown closes
-        setModalFreezeActive(false)
-        // Only show browser back if in DEFAULT state
-        if (currentProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(currentProjectId)
-        }
-      }
-    }
-
-    handleFreeze()
-  }, [isDropdownOpen, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
+  }, [onClose, excludeElement])
 
   if (!user) return null
 
@@ -66,12 +50,12 @@ function UserProfile() {
     } catch (error: any) {
       toast.error('Logout failed', error.message || 'An error occurred')
     }
-    setIsDropdownOpen(false)
+    onClose()
   }
 
   const handleManageSubscription = () => {
     toast.info('Coming soon', 'Subscription management will be available soon')
-    setIsDropdownOpen(false)
+    onClose()
   }
 
   const getPlanBadgeColor = (plan: string) => {
@@ -97,43 +81,9 @@ function UserProfile() {
   }
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      {/* User Profile Button */}
-      <button
-        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-        className="flex items-center gap-3 px-3 py-2 rounded-lg"
-      >
-        {/* User Avatar */}
-        <div className="relative">
-          {user.photoUrl ? (
-            <img
-              src={user.photoUrl}
-              alt={user.name}
-              className="w-8 h-8 rounded-full object-cover ring-2 ring-dark-border"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center ring-2 ring-dark-border">
-              <span className="text-white text-sm font-medium">
-                {user.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* User Info */}
-        <div className="text-left">
-          <div className="text-sm font-medium text-white leading-tight">
-            {user.name}
-          </div>
-          <div className="text-xs text-gray-400 leading-tight">
-            {getPlanLabel(user.plan)}
-          </div>
-        </div>
-      </button>
-
+    <div ref={dropdownRef}>
       {/* Dropdown Menu */}
-      {isDropdownOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-dark-card border border-dark-border rounded-lg shadow-xl overflow-hidden z-[100]">
+      <div className="w-64 bg-dark-card border border-dark-border rounded-lg shadow-xl overflow-hidden mt-2">
           {/* Background Image */}
           <div
             className="absolute inset-0 opacity-10 pointer-events-none"
@@ -181,6 +131,17 @@ function UserProfile() {
           {/* Menu Items */}
           <div className="py-1 relative z-10">
             <button
+              onClick={() => {
+                onOpenHelp?.()
+                onClose()
+              }}
+              className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-dark-bg transition-colors text-sm text-gray-300 hover:text-white"
+            >
+              <MessageCircle size={16} className="text-gray-400" />
+              <span>Help & Support</span>
+            </button>
+
+            <button
               onClick={handleManageSubscription}
               className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-dark-bg transition-colors text-sm text-gray-300 hover:text-white"
             >
@@ -191,7 +152,7 @@ function UserProfile() {
             <button
               onClick={() => {
                 toast.info('Coming soon', 'Settings will be available soon')
-                setIsDropdownOpen(false)
+                onClose()
               }}
               className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-dark-bg transition-colors text-sm text-gray-300 hover:text-white"
             >
@@ -210,7 +171,6 @@ function UserProfile() {
             </button>
           </div>
         </div>
-      )}
     </div>
   )
 }

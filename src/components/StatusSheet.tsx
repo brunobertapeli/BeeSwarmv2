@@ -936,11 +936,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
         // No freeze effect in TOOLS state - just empty space
         setModalFreezeActive(false)
       }
-      // BROWSER_FULL state: Preview is shown by LayoutManager
-      else if (layoutState === 'BROWSER_FULL') {
-        // Deactivate freeze in fullscreen mode
-        setModalFreezeActive(false)
-      }
     }
 
     handlePreviewVisibility()

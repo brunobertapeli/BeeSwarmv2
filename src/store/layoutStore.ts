@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type LayoutState = 'DEFAULT' | 'TOOLS' | 'BROWSER_FULL';
+export type LayoutState = 'DEFAULT' | 'TOOLS';
 
 interface LayoutStoreState {
   // Current layout state
@@ -63,9 +63,6 @@ interface LayoutStoreState {
 
   // Helper: Check if ActionBar should be visible
   isActionBarVisible: () => boolean;
-
-  // Helper: Check if BrowserView should be fullscreen
-  isBrowserFullscreen: () => boolean;
 }
 
 export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
@@ -109,10 +106,5 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   isActionBarVisible: () => {
     const state = get().layoutState;
     return state === 'DEFAULT' || state === 'TOOLS';
-  },
-
-  isBrowserFullscreen: () => {
-    const state = get().layoutState;
-    return state === 'BROWSER_FULL';
   },
 }));
