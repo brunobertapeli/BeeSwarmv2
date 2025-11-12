@@ -77,20 +77,20 @@ function ProjectSelector({
 
     const handleFreezeFrame = async () => {
       if (isOpen && activeProjectId) {
-        // Opening project selector - activate freeze frame
-        const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
-        if (result?.success && result.freezeImage) {
-          setModalFreezeImage(result.freezeImage)
-          setModalFreezeActive(true)
-          // Hide BrowserView (unless in TOOLS state where it's already hidden)
-          if (layoutState !== 'TOOLS') {
+        // Only freeze if in DEFAULT state (browser is visible)
+        if (layoutState === 'DEFAULT') {
+          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
             await window.electronAPI?.preview.hide(activeProjectId)
           }
         }
       } else {
         // Closing project selector - deactivate freeze frame
         setModalFreezeActive(false)
-        if (activeProjectId && layoutState !== 'TOOLS') {
+        // Only show browser back if in DEFAULT state
+        if (activeProjectId && layoutState === 'DEFAULT') {
           await window.electronAPI?.preview.show(activeProjectId)
         }
       }

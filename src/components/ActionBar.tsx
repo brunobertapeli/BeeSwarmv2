@@ -1022,15 +1022,16 @@ function ActionBar({
 
       {/* Action Bar */}
       <div
-        className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] transition-all duration-500 ease-out ${
+        className={`fixed left-1/2 transform -translate-x-1/2 z-[100] transition-all duration-500 ease-out ${
           isVisible && !isHidden
             ? 'translate-y-0 opacity-100'
             : 'translate-y-32 opacity-0'
         }`}
+        style={{ bottom: '11px' }}
         onMouseEnter={handleMouseEnterBar}
         onMouseLeave={handleMouseLeaveBar}
       >
-        <div ref={actionBarRef} className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 rounded-2xl shadow-2xl overflow-visible w-[782px] relative action-bar-container">
+        <div ref={actionBarRef} className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 rounded-2xl shadow-2xl overflow-visible w-[938px] relative action-bar-container">
           {/* Top Row - Textarea with Send Icon Inside */}
           <div className="px-3 pt-3 pb-2">
             <div className="relative flex items-start">

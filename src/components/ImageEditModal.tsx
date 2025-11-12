@@ -41,22 +41,21 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
   useEffect(() => {
     const handleFreeze = async () => {
       if (isOpen && currentProjectId) {
-        // Capture fresh image to match current layout state
-        const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+        // Only freeze if in DEFAULT state (browser is visible)
+        if (layoutState === 'DEFAULT') {
+          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
 
-        if (result?.success && result.freezeImage) {
-          setModalFreezeImage(result.freezeImage)
-          setModalFreezeActive(true)
-          // Hide BrowserView (unless in TOOLS state where it's already hidden)
-          if (layoutState !== 'TOOLS') {
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
             await window.electronAPI?.preview.hide(currentProjectId)
           }
         }
       } else {
         // Unfreeze when modal closes
         setModalFreezeActive(false)
-        // Show BrowserView again (only if not in TOOLS)
-        if (currentProjectId && layoutState !== 'TOOLS') {
+        // Only show browser back if in DEFAULT state
+        if (currentProjectId && layoutState === 'DEFAULT') {
           await window.electronAPI?.preview.show(currentProjectId)
         }
       }
@@ -196,11 +195,11 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
 
   // Crop tool handlers
   const handleZoomIn = () => {
-    setZoom(prev => Math.min(prev + 0.1, 3))
+    setZoom(prev => Math.min(prev + 0.05, 3))
   }
 
   const handleZoomOut = () => {
-    setZoom(prev => Math.max(prev - 0.1, 0.5))
+    setZoom(prev => prev - 0.05)
   }
 
   const handleResetZoom = () => {

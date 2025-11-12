@@ -202,21 +202,22 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
   useEffect(() => {
     const handleFreeze = async () => {
       if (showHealthModal && projectId) {
-        // Capture and freeze the browser
-        const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
-        if (result?.success && result.freezeImage) {
-          useLayoutStore.setState({
-            modalFreezeImage: result.freezeImage,
-            modalFreezeActive: true
-          })
-          // Hide BrowserView to prevent z-index issues
-          await window.electronAPI?.preview.hide(projectId)
+        // Only freeze if in DEFAULT state (browser is visible)
+        if (layoutState === 'DEFAULT') {
+          const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
+          if (result?.success && result.freezeImage) {
+            useLayoutStore.setState({
+              modalFreezeImage: result.freezeImage,
+              modalFreezeActive: true
+            })
+            await window.electronAPI?.preview.hide(projectId)
+          }
         }
       } else {
         // Unfreeze when modal closes
         useLayoutStore.setState({ modalFreezeActive: false })
-        // Show BrowserView again (unless in TOOLS state)
-        if (projectId && layoutState !== 'TOOLS') {
+        // Only show browser back if in DEFAULT state
+        if (projectId && layoutState === 'DEFAULT') {
           await window.electronAPI?.preview.show(projectId)
         }
       }
@@ -568,7 +569,7 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
     <>
       <div className={`w-full h-full ${
         isFullscreen ? '' : 'pb-40 flex items-center justify-center p-8 pt-0'
-      }`}>
+      }`} style={!isFullscreen ? { marginTop: '-20px' } : {}}>
         {/* Scaled container in DEFAULT, fullscreen in BROWSER_FULL */}
         <div className={`flex flex-col ${
           isFullscreen

@@ -303,20 +303,20 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
   useEffect(() => {
     const handleFreezeFrame = async () => {
       if (isOpen && currentProjectId) {
-        // Opening project creation - activate freeze frame
-        const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
-        if (result?.success && result.freezeImage) {
-          setModalFreezeImage(result.freezeImage)
-          setModalFreezeActive(true)
-          // Hide BrowserView (unless in TOOLS state where it's already hidden)
-          if (layoutState !== 'TOOLS') {
+        // Only freeze if in DEFAULT state (browser is visible)
+        if (layoutState === 'DEFAULT') {
+          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+          if (result?.success && result.freezeImage) {
+            setModalFreezeImage(result.freezeImage)
+            setModalFreezeActive(true)
             await window.electronAPI?.preview.hide(currentProjectId)
           }
         }
       } else {
         // Closing project creation - deactivate freeze frame
         setModalFreezeActive(false)
-        if (currentProjectId && layoutState !== 'TOOLS') {
+        // Only show browser back if in DEFAULT state
+        if (currentProjectId && layoutState === 'DEFAULT') {
           await window.electronAPI?.preview.show(currentProjectId)
         }
       }

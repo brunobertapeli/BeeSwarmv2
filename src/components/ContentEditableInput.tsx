@@ -68,6 +68,7 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
     ref
   ) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null)
+    const highlightRef = useRef<HTMLDivElement>(null)
 
     // Expose methods and element to parent via ref
     useImperativeHandle(ref, () => ({
@@ -85,10 +86,15 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
       },
     }))
 
+    // Sync scroll between textarea and highlight overlay
+    const handleScroll = () => {
+      if (textareaRef.current && highlightRef.current) {
+        highlightRef.current.scrollTop = textareaRef.current.scrollTop
+      }
+    }
+
     // Handle text changes and detect broken markers
     const handleChange = (newValue: string) => {
-      console.log('🔍 handleChange called with:', newValue)
-
       // Check if any markers were partially deleted/edited
       const markerRegex = /\[pasted (\d+) lines #(\d+)\]/g
       const foundMarkers = new Set<string>()
@@ -96,45 +102,33 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
 
       // Find all intact markers in the new value
       while ((match = markerRegex.exec(newValue)) !== null) {
-        console.log('✅ Found intact marker:', match[0], 'ID:', match[2])
         foundMarkers.add(match[2]) // Store the short ID
       }
-
-      console.log('📋 Found markers set:', Array.from(foundMarkers))
 
       // Check for broken markers and remove only the broken marker portion
       // Match: [pasted followed by only spaces, digits, "lines", or #, then optional ]
       // Stops when hitting other text like letters that aren't "lines"
       let cleanedValue = newValue.replace(/\[pasted(?: (?:\d+|lines|#\d*))*\]?/g, (match) => {
-        console.log('🔎 Checking potential marker:', match)
         // If this matches the complete valid pattern, keep it
         if (/^\[pasted \d+ lines #\d+\]$/.test(match)) {
-          console.log('  ✅ Valid marker, keeping it')
           return match
         }
         // Check if this is just "[pasted" alone - keep it while user is typing
         if (match === '[pasted') {
-          console.log('  ⏸️ Just opening bracket, keeping for now')
           return match
         }
         // Otherwise it's broken (incomplete or missing closing bracket), remove it
-        console.log('  ❌ Broken marker, removing it')
         return ''
       })
 
-      console.log('🧹 Cleaned value:', cleanedValue)
-      console.log('🆚 Values different?', cleanedValue !== newValue)
-
       // If we cleaned anything, update and notify
       if (cleanedValue !== newValue) {
-        console.log('💾 Updating with cleaned value')
         onChange(cleanedValue)
 
         // Remove corresponding content from store
         textContents.forEach(content => {
           const shortId = content.id.replace('TEXT_', '').slice(-6)
           if (!foundMarkers.has(shortId)) {
-            console.log('🗑️ Removing content:', content.id)
             onRemoveTextContent(content.id)
           }
         })
@@ -145,7 +139,6 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
       textContents.forEach(content => {
         const shortId = content.id.replace('TEXT_', '').slice(-6)
         if (!foundMarkers.has(shortId)) {
-          console.log('🗑️ Marker removed, cleaning up content:', content.id)
           // This marker was removed, clean up
           onRemoveTextContent(content.id)
         }
@@ -257,12 +250,15 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
 
           {/* Highlight layer behind textarea */}
           <div
-            className={`absolute inset-0 pointer-events-none whitespace-pre-wrap break-words overflow-hidden ${hasPills ? 'pl-2 py-2.5' : 'px-3.5 py-2.5'}`}
+            ref={highlightRef}
+            className={`absolute inset-0 pointer-events-none whitespace-pre-wrap break-words overflow-auto ${hasPills ? 'pl-2 py-2.5' : 'px-3.5 py-2.5'} [&::-webkit-scrollbar]:hidden`}
             style={{
               lineHeight: '24px',
-              maxHeight: '192px',
+              maxHeight: '84px',
               wordWrap: 'break-word',
               overflowWrap: 'break-word',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
             }}
             aria-hidden="true"
           >
@@ -280,12 +276,13 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
             onPaste={onPaste}
             onDragOver={onDragOver}
             onDrop={onDrop}
+            onScroll={handleScroll}
             disabled={disabled}
             className={`relative bg-transparent border-none outline-none resize-none ${hasPills ? 'pl-2 py-2.5' : 'px-3.5 py-2.5'} w-full`}
             rows={1}
             style={{
               lineHeight: '24px',
-              maxHeight: '192px',
+              maxHeight: '84px',
               caretColor: 'white',
               color: 'transparent',
               WebkitTextFillColor: 'transparent',

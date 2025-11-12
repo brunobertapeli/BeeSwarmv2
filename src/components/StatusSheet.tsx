@@ -1009,10 +1009,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   }, [layoutState])  // Only depend on layoutState to ensure this runs first
 
   // Calculate bottom position based on action bar height
-  const baseOffset = -2 // Gap between action bar and status sheet
+  const baseOffset = -7 // Gap between action bar and status sheet (adjusted for 5px lower action bar)
   const bottomPosition = isVisible
-    ? (actionBarHeight > 0 ? actionBarHeight + baseOffset : 100)
-    : (actionBarHeight > 0 ? actionBarHeight - 4 : 80)
+    ? (actionBarHeight > 0 ? actionBarHeight + baseOffset : 95)
+    : (actionBarHeight > 0 ? actionBarHeight - 9 : 75)
 
   // Always render if has history (show collapsed or expanded based on state)
   const shouldRender = hasHistory
@@ -1031,7 +1031,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       >
         <div
         ref={statusSheetRef}
-        className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[782px] overflow-hidden pb-4 relative pointer-events-auto"
+        className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[938px] overflow-hidden pb-4 relative pointer-events-auto"
         style={{
           boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
         }}
