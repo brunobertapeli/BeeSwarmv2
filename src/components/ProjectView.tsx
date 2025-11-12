@@ -14,6 +14,7 @@ import DesktopPreviewFrame from './DesktopPreviewFrame'
 import MobilePreviewFrame from './MobilePreviewFrame'
 import HelpChat from './HelpChat'
 import KanbanWidget from './KanbanWidget'
+import StickyNoteWidget from './StickyNoteWidget'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 
@@ -41,7 +42,7 @@ function ProjectView() {
     setSelectedDevice,
   } = useAppStore()
 
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState } = useLayoutStore()
   const toast = useToast()
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'apikeys' | 'deployment'>('general')
   const [projects, setProjects] = useState<Project[]>([])
@@ -116,8 +117,9 @@ function ProjectView() {
   useEffect(() => {
     if (currentProjectId) {
       loadKanbanState(currentProjectId)
+      loadStickyNotesState(currentProjectId)
     }
-  }, [currentProjectId, loadKanbanState])
+  }, [currentProjectId, loadKanbanState, loadStickyNotesState])
 
   // Handle freeze frame when UserProfile opens/closes
   useEffect(() => {
@@ -679,6 +681,11 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Kanban Widget */}
       {kanbanEnabled && layoutState === 'TOOLS' && <KanbanWidget />}
+
+      {/* Sticky Notes */}
+      {layoutState === 'TOOLS' && stickyNotes.map((note) => (
+        <StickyNoteWidget key={note.id} note={note} />
+      ))}
 
       {/* Help Chat */}
       <HelpChat

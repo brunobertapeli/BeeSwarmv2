@@ -106,6 +106,26 @@ interface LayoutStoreState {
   }>)) => void;
   loadKanbanState: (projectId: string) => Promise<void>;
 
+  // Sticky notes state
+  stickyNotes: Array<{
+    id: string;
+    position: { x: number; y: number }; // Relative position (0-1)
+    content: string;
+    color: 'yellow' | 'orange' | 'pink' | 'blue' | 'green';
+    stickyText: boolean; // True for handwritten-style font
+    zIndex: number;
+  }>;
+  addStickyNote: () => void;
+  updateStickyNote: (id: string, updates: Partial<{
+    position: { x: number; y: number };
+    content: string;
+    color: 'yellow' | 'orange' | 'pink' | 'blue' | 'green';
+    stickyText: boolean;
+  }>) => void;
+  removeStickyNote: (id: string) => void;
+  bringNoteToFront: (id: string) => void;
+  loadStickyNotesState: (projectId: string) => Promise<void>;
+
   // Helper to check if in specific state
   isState: (state: LayoutState) => boolean;
 
@@ -143,6 +163,31 @@ const debouncedSaveKanbanState = (projectId: string, kanbanState: {
   }, 500); // 500ms debounce
 };
 
+// Debounce helper for saving Sticky Notes state
+let saveStickyNotesTimeout: NodeJS.Timeout | null = null;
+const debouncedSaveStickyNotesState = (projectId: string, stickyNotesState: {
+  notes: Array<{
+    id: string;
+    position: { x: number; y: number };
+    content: string;
+    color: 'yellow' | 'orange' | 'pink' | 'blue' | 'green';
+    stickyText: boolean;
+    zIndex: number;
+  }>;
+}) => {
+  if (saveStickyNotesTimeout) {
+    clearTimeout(saveStickyNotesTimeout);
+  }
+
+  saveStickyNotesTimeout = setTimeout(async () => {
+    try {
+      await window.electronAPI?.projects.saveStickyNotesState(projectId, stickyNotesState);
+    } catch (error) {
+      console.error('Failed to save sticky notes state:', error);
+    }
+  }, 500); // 500ms debounce
+};
+
 export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   // State
   layoutState: 'DEFAULT', // Start in DEFAULT state
@@ -164,6 +209,9 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
     { id: 'progress', title: 'In Progress', cards: [] },
     { id: 'done', title: 'Done', cards: [] }
   ],
+
+  // Sticky notes initial state
+  stickyNotes: [],
 
   // Setters
   setLayoutState: (state) => set({ layoutState: state }),
@@ -287,6 +335,100 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
           { id: 'progress', title: 'In Progress', cards: [] },
           { id: 'done', title: 'Done', cards: [] }
         ]
+      });
+    }
+  },
+
+  // Sticky notes functions
+  addStickyNote: () => {
+    const currentNotes = get().stickyNotes;
+    const maxZ = currentNotes.length > 0
+      ? Math.max(...currentNotes.map(n => n.zIndex))
+      : 30;
+
+    const newNote = {
+      id: `note-${Date.now()}`,
+      position: { x: 0.1 + Math.random() * 0.1, y: 0.1 + Math.random() * 0.1 }, // Random position near top-left
+      content: '',
+      color: 'yellow' as const,
+      stickyText: false,
+      zIndex: maxZ + 1
+    };
+
+    set((state) => ({ stickyNotes: [...state.stickyNotes, newNote] }));
+
+    // Save to database
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveStickyNotesState(currentProjectId, { notes: state.stickyNotes });
+    }
+  },
+
+  updateStickyNote: (id, updates) => {
+    set((state) => ({
+      stickyNotes: state.stickyNotes.map(note =>
+        note.id === id ? { ...note, ...updates } : note
+      )
+    }));
+
+    // Save to database
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveStickyNotesState(currentProjectId, { notes: state.stickyNotes });
+    }
+  },
+
+  removeStickyNote: (id) => {
+    set((state) => ({
+      stickyNotes: state.stickyNotes.filter(note => note.id !== id)
+    }));
+
+    // Save to database
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveStickyNotesState(currentProjectId, { notes: state.stickyNotes });
+    }
+  },
+
+  bringNoteToFront: (id) => {
+    const currentNotes = get().stickyNotes;
+    const maxZ = Math.max(...currentNotes.map(n => n.zIndex));
+
+    set((state) => ({
+      stickyNotes: state.stickyNotes.map(note =>
+        note.id === id ? { ...note, zIndex: maxZ + 1 } : note
+      )
+    }));
+
+    // Save to database
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveStickyNotesState(currentProjectId, { notes: state.stickyNotes });
+    }
+  },
+
+  loadStickyNotesState: async (projectId: string) => {
+    try {
+      const result = await window.electronAPI?.projects.getStickyNotesState(projectId);
+      if (result?.success && result.stickyNotesState) {
+        set({
+          stickyNotes: result.stickyNotesState.notes
+        });
+      } else {
+        // Reset to defaults if no saved state
+        set({
+          stickyNotes: []
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load sticky notes state:', error);
+      // Reset to defaults on error
+      set({
+        stickyNotes: []
       });
     }
   },

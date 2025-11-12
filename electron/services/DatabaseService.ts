@@ -21,6 +21,7 @@ export interface Project {
   deployServices: string | null // JSON array of deployment services
   imagePath: string | null // Path to template images
   kanbanState: string | null // JSON string with { enabled, position, size }
+  stickyNotesState: string | null // JSON string with sticky notes array
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -43,6 +44,19 @@ export interface KanbanState {
   position: { x: number; y: number }
   size: { width: number; height: number }
   columns: KanbanColumn[]
+}
+
+export interface StickyNote {
+  id: string
+  position: { x: number; y: number }
+  content: string
+  color: 'yellow' | 'orange' | 'pink' | 'blue' | 'green'
+  stickyText: boolean
+  zIndex: number
+}
+
+export interface StickyNotesState {
+  notes: StickyNote[]
 }
 
 export interface ChatBlock {
@@ -266,6 +280,12 @@ class DatabaseService {
       const hasKanbanState = tableInfo.some(col => col.name === 'kanbanState')
       if (!hasKanbanState) {
         this.db.exec('ALTER TABLE projects ADD COLUMN kanbanState TEXT')
+      }
+
+      // Migration 16: Add stickyNotesState column if it doesn't exist
+      const hasStickyNotesState = tableInfo.some(col => col.name === 'stickyNotesState')
+      if (!hasStickyNotesState) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN stickyNotesState TEXT')
       }
 
       // Future migrations can be added here
@@ -638,6 +658,47 @@ class DatabaseService {
       return JSON.parse(project.kanbanState) as KanbanState
     } catch (error) {
       console.error('❌ Failed to parse Kanban state:', error)
+      return null
+    }
+  }
+
+  /**
+   * Save sticky notes state for a project
+   */
+  saveStickyNotesState(projectId: string, stickyNotesState: StickyNotesState): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save sticky notes state after database closed - ignoring')
+      return
+    }
+
+    const stateJson = JSON.stringify(stickyNotesState)
+    const sql = 'UPDATE projects SET stickyNotesState = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(stateJson, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save sticky notes state:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get sticky notes state for a project
+   */
+  getStickyNotesState(projectId: string): StickyNotesState | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!project?.stickyNotesState) {
+      return null
+    }
+
+    try {
+      return JSON.parse(project.stickyNotesState) as StickyNotesState
+    } catch (error) {
+      console.error('❌ Failed to parse sticky notes state:', error)
       return null
     }
   }

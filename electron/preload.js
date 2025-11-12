@@ -67,7 +67,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getEnvConfig: (id) => ipcRenderer.invoke('project:get-env-config', id),
     installDependencies: (id) => ipcRenderer.invoke('project:install-dependencies', id),
     saveKanbanState: (id, kanbanState) => ipcRenderer.invoke('project:save-kanban-state', id, kanbanState),
-    getKanbanState: (id) => ipcRenderer.invoke('project:get-kanban-state', id)
+    getKanbanState: (id) => ipcRenderer.invoke('project:get-kanban-state', id),
+    saveStickyNotesState: (id, stickyNotesState) => ipcRenderer.invoke('project:save-sticky-notes-state', id, stickyNotesState),
+    getStickyNotesState: (id) => ipcRenderer.invoke('project:get-sticky-notes-state', id)
   },
 
   // Listen for dependency install progress

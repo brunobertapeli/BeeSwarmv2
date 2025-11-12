@@ -453,4 +453,61 @@ export function registerProjectHandlers() {
       }
     }
   })
+
+  // Save sticky notes state
+  ipcMain.handle('project:save-sticky-notes-state', async (_event, projectId: string, stickyNotesState: { notes: Array<{ id: string; position: { x: number; y: number }; content: string; color: string; stickyText: boolean; zIndex: number }> }) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      databaseService.saveStickyNotesState(projectId, stickyNotesState)
+
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('❌ Error saving sticky notes state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save sticky notes state'
+      }
+    }
+  })
+
+  // Get sticky notes state
+  ipcMain.handle('project:get-sticky-notes-state', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      const stickyNotesState = databaseService.getStickyNotesState(projectId)
+
+      return {
+        success: true,
+        stickyNotesState
+      }
+    } catch (error) {
+      console.error('❌ Error getting sticky notes state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get sticky notes state'
+      }
+    }
+  })
 }

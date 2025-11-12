@@ -375,6 +375,33 @@ export interface ElectronAPI {
       } | null
       error?: string
     }>
+    saveStickyNotesState: (id: string, stickyNotesState: {
+      notes: Array<{
+        id: string;
+        position: { x: number; y: number };
+        content: string;
+        color: 'yellow' | 'orange' | 'pink' | 'blue' | 'green';
+        stickyText: boolean;
+        zIndex: number;
+      }>;
+    }) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    getStickyNotesState: (id: string) => Promise<{
+      success: boolean
+      stickyNotesState?: {
+        notes: Array<{
+          id: string;
+          position: { x: number; y: number };
+          content: string;
+          color: 'yellow' | 'orange' | 'pink' | 'blue' | 'green';
+          stickyText: boolean;
+          zIndex: number;
+        }>;
+      } | null
+      error?: string
+    }>
   }
 
   process: {
