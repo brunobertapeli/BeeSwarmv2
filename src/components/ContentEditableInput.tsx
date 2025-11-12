@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useImperativeHandle, useRef, useEffect } from 'react'
 import { X } from 'lucide-react'
 
 interface ImageReference {
@@ -70,6 +70,18 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const highlightRef = useRef<HTMLDivElement>(null)
 
+    // Sync scroll between textarea and highlight overlay
+    const syncScroll = () => {
+      if (textareaRef.current && highlightRef.current) {
+        highlightRef.current.scrollTop = textareaRef.current.scrollTop
+        highlightRef.current.scrollLeft = textareaRef.current.scrollLeft
+      }
+    }
+
+    const handleScroll = () => {
+      syncScroll()
+    }
+
     // Expose methods and element to parent via ref
     useImperativeHandle(ref, () => ({
       focus: () => {
@@ -86,12 +98,10 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
       },
     }))
 
-    // Sync scroll between textarea and highlight overlay
-    const handleScroll = () => {
-      if (textareaRef.current && highlightRef.current) {
-        highlightRef.current.scrollTop = textareaRef.current.scrollTop
-      }
-    }
+    // Sync scroll whenever value changes (handles programmatic updates)
+    useEffect(() => {
+      syncScroll()
+    }, [value])
 
     // Handle text changes and detect broken markers
     const handleChange = (newValue: string) => {
@@ -132,6 +142,9 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
             onRemoveTextContent(content.id)
           }
         })
+
+        // Sync scroll after state update
+        requestAnimationFrame(() => syncScroll())
         return
       }
 
@@ -145,6 +158,9 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
       })
 
       onChange(newValue)
+
+      // Sync scroll after value change (critical for auto-scroll on Enter/typing)
+      requestAnimationFrame(() => syncScroll())
     }
 
     const handleImagePillRemove = (id: string) => {
@@ -160,6 +176,9 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
       }
 
       onKeyDown?.(e)
+
+      // Sync scroll after key press (especially Enter) to handle auto-scroll
+      requestAnimationFrame(() => syncScroll())
     }
 
     // Calculate if we need padding for pills
@@ -283,6 +302,7 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
             style={{
               lineHeight: '24px',
               maxHeight: '84px',
+              overflow: 'auto',
               caretColor: 'white',
               color: 'transparent',
               WebkitTextFillColor: 'transparent',

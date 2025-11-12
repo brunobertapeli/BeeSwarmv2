@@ -75,7 +75,21 @@ class PlaceholderImageService {
 
       // Read and parse manifest
       const manifestContent = await fs.readFile(manifestPath, 'utf-8');
-      const manifest: ImageManifestEntry[] = JSON.parse(manifestContent);
+
+      // Handle empty or whitespace-only files
+      if (!manifestContent || manifestContent.trim().length === 0) {
+        console.log('ℹ️ [PlaceholderImageService] Manifest file is empty, skipping');
+        return 0;
+      }
+
+      // Parse JSON with error handling
+      let manifest: ImageManifestEntry[];
+      try {
+        manifest = JSON.parse(manifestContent);
+      } catch (parseError) {
+        console.warn('⚠️ [PlaceholderImageService] Invalid JSON in manifest.json, skipping');
+        return 0;
+      }
 
       if (!Array.isArray(manifest) || manifest.length === 0) {
         console.log('ℹ️ [PlaceholderImageService] Manifest is empty, skipping');
