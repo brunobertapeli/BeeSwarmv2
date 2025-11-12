@@ -19,7 +19,8 @@ import {
   Edit2,
   StickyNote,
   Kanban,
-  LayoutGrid
+  LayoutGrid,
+  Camera
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore, type DeploymentStatus } from '../store/appStore'
@@ -28,6 +29,7 @@ import { useToast } from '../hooks/useToast'
 import StatusSheet from './StatusSheet'
 import ContextBar from './ContextBar'
 import ContentEditableInput, { type ContentEditableInputRef } from './ContentEditableInput'
+import ScreenshotModal from './ScreenshotModal'
 import type { ClaudeStatus, ClaudeContext, ClaudeModel } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 
@@ -98,6 +100,8 @@ function ActionBar({
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string | string[]>>({})
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({})
   const [isProcessingAnswers, setIsProcessingAnswers] = useState(false)
+  const [showScreenshotModal, setShowScreenshotModal] = useState(false)
+  const [screenshotData, setScreenshotData] = useState<string | null>(null)
   const textareaRef = useRef<ContentEditableInputRef>(null)
   const actionBarRef = useRef<HTMLDivElement>(null)
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -299,6 +303,14 @@ function ActionBar({
         if (layoutState === 'DEFAULT') {
           e.preventDefault()
           toggleEditMode()
+        }
+      }
+
+      // P - Take Screenshot (only in DEFAULT mode)
+      if (e.key.toLowerCase() === 'p' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (layoutState === 'DEFAULT') {
+          e.preventDefault()
+          handleTakeScreenshot()
         }
       }
 
@@ -736,6 +748,44 @@ function ActionBar({
       newState ? 'Kanban Enabled' : 'Kanban Disabled',
       newState ? 'Kanban board shown' : 'Kanban board hidden'
     )
+  }
+
+  const handleTakeScreenshot = async () => {
+    // Only allow in DEFAULT mode
+    if (layoutState !== 'DEFAULT' || !projectId) return
+
+    try {
+      const result = await window.electronAPI?.preview.captureScreenshot(projectId)
+
+      if (result?.success && result.dataUrl) {
+        setScreenshotData(result.dataUrl)
+        setShowScreenshotModal(true)
+
+        // Set up callback for when user sends screenshot
+        window.onScreenshotSend = (screenshotSrc: string, description: string) => {
+          // Add screenshot as attachment (for Claude to see the actual image)
+          setAttachments(prev => [...prev, {
+            id: Date.now().toString(),
+            type: 'image',
+            name: 'capture.png',
+            preview: screenshotSrc
+          }])
+
+          // Set the description as the message
+          setMessage(description)
+
+          // Focus textarea
+          setTimeout(() => {
+            textareaRef.current?.focus()
+          }, 100)
+        }
+      } else {
+        toast.error('Screenshot Failed', result?.error || 'Failed to capture screenshot')
+      }
+    } catch (error) {
+      console.error('Error taking screenshot:', error)
+      toast.error('Screenshot Failed', error instanceof Error ? error.message : 'Unknown error')
+    }
   }
 
   const handleStop = async () => {
@@ -1536,6 +1586,28 @@ function ActionBar({
             </button>
 
             <button
+              onClick={handleTakeScreenshot}
+              disabled={layoutState !== 'DEFAULT'}
+              className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
+                layoutState !== 'DEFAULT'
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:bg-dark-bg/50'
+              }`}
+            >
+              <Camera
+                size={15}
+                className={`transition-colors ${
+                  layoutState === 'DEFAULT'
+                    ? 'text-gray-400 hover:text-gray-200'
+                    : 'text-gray-400'
+                }`}
+              />
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                Take Screenshot (P)
+              </span>
+            </button>
+
+            <button
               onClick={onSettingsClick}
               className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
             >
@@ -1642,6 +1714,20 @@ function ActionBar({
           opacity: 1;
         }
       `}</style>
+
+      {/* Screenshot Modal */}
+      {screenshotData && (
+        <ScreenshotModal
+          isOpen={showScreenshotModal}
+          onClose={() => {
+            setShowScreenshotModal(false)
+            setScreenshotData(null)
+            // Clean up callback
+            window.onScreenshotSend = undefined
+          }}
+          screenshotSrc={screenshotData}
+        />
+      )}
     </>
   )
 }

@@ -243,6 +243,35 @@ export function registerPreviewHandlers(): void {
     }
   });
 
+  // Capture screenshot
+  ipcMain.handle('preview:capture-screenshot', async (_event, projectId: string) => {
+    try {
+      const preview = previewService.getPreview(projectId);
+
+      if (!preview) {
+        return {
+          success: false,
+          error: 'Preview not found',
+        };
+      }
+
+      // Capture the page
+      const image = await preview.webContents.capturePage();
+      const dataUrl = `data:image/png;base64,${image.toPNG().toString('base64')}`;
+
+      return {
+        success: true,
+        dataUrl,
+      };
+    } catch (error) {
+      console.error('❌ Error capturing screenshot:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to capture screenshot',
+      };
+    }
+  });
+
   // Check if preview exists
   ipcMain.handle('preview:has-preview', async (_event, projectId: string) => {
     try {

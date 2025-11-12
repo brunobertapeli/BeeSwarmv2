@@ -202,6 +202,13 @@ export interface ChatBlock {
   createdAt: number
 }
 
+// Window interface extension for screenshot callback
+declare global {
+  interface Window {
+    onScreenshotSend?: (screenshotSrc: string, description: string) => void
+  }
+}
+
 export interface ElectronAPI {
   send: (channel: string, data: any) => void
   receive: (channel: string, func: (...args: any[]) => void) => void
@@ -500,6 +507,11 @@ export interface ElectronAPI {
     }>
     removeCSS: (projectId: string) => Promise<{
       success: boolean
+      error?: string
+    }>
+    captureScreenshot: (projectId: string) => Promise<{
+      success: boolean
+      dataUrl?: string
       error?: string
     }>
     executeJavaScript: (projectId: string, code: string) => Promise<{

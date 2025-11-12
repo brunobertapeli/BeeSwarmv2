@@ -141,6 +141,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     injectCSS: (projectId, css) => ipcRenderer.invoke('preview:inject-css', projectId, css),
     removeCSS: (projectId) => ipcRenderer.invoke('preview:remove-css', projectId),
     executeJavaScript: (projectId, code) => ipcRenderer.invoke('preview:execute-javascript', projectId, code),
+    captureScreenshot: (projectId) => ipcRenderer.invoke('preview:capture-screenshot', projectId),
     hasPreview: (projectId) => ipcRenderer.invoke('preview:has-preview', projectId),
     waitForPreview: (projectId, timeoutMs) => ipcRenderer.invoke('preview:wait-for-preview', projectId, timeoutMs),
 
