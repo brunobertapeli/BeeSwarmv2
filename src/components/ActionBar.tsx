@@ -6,7 +6,6 @@ import {
   ChevronDown,
   Loader2,
   Send,
-  Pin,
   Globe,
   ExternalLink,
   Terminal,
@@ -79,8 +78,6 @@ function ActionBar({
   const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
-  const [isHidden, setIsHidden] = useState(false) // Start visible (not hidden)
-  const [isLocked, setIsLocked] = useState(true) // Start pinned
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
   const [claudeContext, setClaudeContext] = useState<ClaudeContext | null>(null)
   const [availableModels, setAvailableModels] = useState<ClaudeModel[]>([])
@@ -104,7 +101,6 @@ function ActionBar({
   const [screenshotData, setScreenshotData] = useState<string | null>(null)
   const textareaRef = useRef<ContentEditableInputRef>(null)
   const actionBarRef = useRef<HTMLDivElement>(null)
-  const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
   const plusMenuRef = useRef<HTMLDivElement>(null)
   const tweakMenuRef = useRef<HTMLDivElement>(null)
@@ -126,19 +122,6 @@ function ActionBar({
     }, 300)
     return () => clearTimeout(timer)
   }, [])
-
-  // Handle auto-open and auto-pin for website import
-  useEffect(() => {
-    if (autoOpen && !isHidden) {
-      // Auto-open is already handled by isVisible animation above
-      // Just ensure it's not hidden
-      setIsHidden(false)
-    }
-    if (autoPinned) {
-      setIsLocked(true)
-      setIsHidden(false) // Show the ActionBar when auto-pinned
-    }
-  }, [autoOpen, autoPinned])
 
   // Load available models on mount
   useEffect(() => {
@@ -250,22 +233,6 @@ function ActionBar({
     }
   }, [prefilledMessage, setPrefilledMessage])
 
-  // Auto-resize textarea
-  useEffect(() => {
-    const textarea = textareaRef.current?.textarea
-    if (textarea) {
-      // Only auto-resize when there's a message
-      if (message) {
-        textarea.style.height = 'auto'
-        const scrollHeight = textarea.scrollHeight
-        const maxHeight = 8 * 24 // 8 lines * 24px line height
-        textarea.style.height = `${Math.min(scrollHeight, maxHeight)}px`
-      } else {
-        // Reset to base height when no message
-        textarea.style.height = attachments.length > 0 ? '70px' : '42px'
-      }
-    }
-  }, [message, attachments])
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -357,57 +324,6 @@ function ActionBar({
 
   // Auto-send message for website import
   // This needs to be after handleSend is defined, so we'll move it below
-
-  const startHideTimer = () => {
-    if (!isLocked) {
-      hideTimerRef.current = setTimeout(() => {
-        setIsHidden(true)
-      }, 2000)
-    }
-  }
-
-  const clearHideTimer = () => {
-    if (hideTimerRef.current) {
-      clearTimeout(hideTimerRef.current)
-      hideTimerRef.current = null
-    }
-  }
-
-  const handleMouseEnterBar = () => {
-    clearHideTimer()
-    setIsHidden(false)
-  }
-
-  const handleMouseLeaveBar = () => {
-    if (!isLocked && !isTextareaFocused) {
-      startHideTimer()
-    }
-  }
-
-  const handleMouseEnterBottom = () => {
-    if (isHidden) {
-      setIsHidden(false)
-    }
-  }
-
-  const toggleLock = () => {
-    setIsLocked(!isLocked)
-    if (isLocked) {
-      // When unlocking, start the hide timer
-      startHideTimer()
-    } else {
-      // When locking, clear any hide timer and show the bar
-      clearHideTimer()
-      setIsHidden(false)
-    }
-  }
-
-  // Clean up timer on unmount
-  useEffect(() => {
-    return () => {
-      clearHideTimer()
-    }
-  }, [])
 
   // Animate loading dots when Claude is working
   useEffect(() => {
@@ -923,35 +839,11 @@ function ActionBar({
 
   return (
     <>
-      {/* Bottom hover trigger zone */}
-      <div
-        className="fixed bottom-0 left-0 right-0 h-4 z-[90]"
-        onMouseEnter={handleMouseEnterBottom}
-      />
-
-      {/* iOS-style indicator when hidden */}
-      {isHidden && (
-        <div className="fixed bottom-2 left-1/2 transform -translate-x-1/2 z-[90]">
-          <div className="w-32 h-1 bg-gray-600/50 rounded-full" />
-        </div>
-      )}
-
       {/* Status Sheet - shows when action bar is visible and has history */}
-      {!isHidden && (
-        <StatusSheet
-          projectId={projectId}
-          actionBarRef={actionBarRef}
-          onMouseEnter={() => {
-            clearHideTimer()
-            setIsTextareaFocused(true) // Prevent auto-hide
-          }}
-          onMouseLeave={() => {
-            setIsTextareaFocused(false)
-            if (!isLocked) {
-              startHideTimer()
-            }
-          }}
-          onStopClick={handleStop}
+      <StatusSheet
+        projectId={projectId}
+        actionBarRef={actionBarRef}
+        onStopClick={handleStop}
           questions={questions}
           onRejectPlan={() => {
             // User wants to refine the plan - keep conversation going with plan mode
@@ -1058,22 +950,19 @@ function ActionBar({
             }
           }}
         />
-      )}
 
       {/* Action Bar */}
       <div
-        className={`fixed left-1/2 transform -translate-x-1/2 z-[100] transition-all duration-500 ease-out ${
-          isVisible && !isHidden
+        className={`fixed right-0 z-[110] transition-all duration-500 ease-out w-2/3 ${
+          isVisible
             ? 'translate-y-0 opacity-100'
             : 'translate-y-32 opacity-0'
         }`}
-        style={{ bottom: '11px' }}
-        onMouseEnter={handleMouseEnterBar}
-        onMouseLeave={handleMouseLeaveBar}
+        style={{ bottom: '0px', height: '150px' }}
       >
-        <div ref={actionBarRef} className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 rounded-2xl shadow-2xl overflow-visible w-[938px] relative action-bar-container">
+        <div ref={actionBarRef} className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-visible w-full h-full relative action-bar-container flex flex-col">
           {/* Top Row - Textarea with Send Icon Inside */}
-          <div className="px-3 pt-3 pb-2">
+          <div className="px-3 pt-3 pb-2 flex-shrink-0">
             <div className="relative flex items-start">
               {/* Custom Plan Mode Placeholder */}
               {planModeToggle && !message && attachments.length === 0 && !isTextareaFocused && (
@@ -1146,13 +1035,7 @@ function ActionBar({
                 } ${attachments.length > 0 ? 'pt-[38px]' : ''}`}
               />
               {isClaudeWorking ? (
-                <div
-                  className={`absolute right-3 transition-all ${
-                    (textareaRef.current?.textarea?.scrollHeight || 0) > 42
-                      ? 'bottom-2.5'
-                      : 'top-[12px]'
-                  }`}
-                >
+                <div className="absolute right-3 bottom-2.5">
                   <div className="relative w-[18px] h-[18px]">
                     {/* Pulsing outer ring */}
                     <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
@@ -1164,11 +1047,7 @@ function ActionBar({
                 <button
                   onClick={handleSend}
                   disabled={!message.trim() || isInputBlocked}
-                  className={`absolute right-3 transition-all ${
-                    (textareaRef.current?.scrollHeight || 0) > 42
-                      ? 'bottom-2.5'
-                      : 'top-[12px]'
-                  } ${
+                  className={`absolute right-3 bottom-2.5 ${
                     message.trim() && !isInputBlocked
                       ? planModeToggle
                         ? 'text-blue-400 hover:text-blue-500 cursor-pointer'
@@ -1183,7 +1062,7 @@ function ActionBar({
           </div>
 
           {/* Bottom Row - Model Dropdown + Icons */}
-          <div className="flex items-center gap-1.5 px-3 pb-2.5">
+          <div className="flex items-center gap-1.5 px-3 pb-2.5 flex-shrink-0">
             {/* Plus Button */}
             <div className="relative" ref={plusMenuRef}>
               <button
@@ -1191,7 +1070,7 @@ function ActionBar({
                 className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
               >
                 <Plus size={15} className="text-gray-400 hover:text-primary transition-colors" />
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                   Attach files
                 </span>
               </button>
@@ -1213,12 +1092,10 @@ function ActionBar({
                       <button
                         onClick={async () => {
                           setShowPlusMenu(false)
-                          setIsLocked(true) // Lock the action bar
                           const input = document.createElement('input')
                           input.type = 'file'
                           input.accept = 'image/jpeg,image/png,image/gif,image/webp'
                           input.onchange = async (e) => {
-                            setIsLocked(false) // Unlock when file selected
                             const file = (e.target as HTMLInputElement).files?.[0]
                             if (file) {
                               const reader = new FileReader()
@@ -1234,10 +1111,6 @@ function ActionBar({
                               reader.readAsDataURL(file)
                             }
                           }
-                          // Handle cancel (when user closes picker without selecting)
-                          window.addEventListener('focus', () => {
-                            setTimeout(() => setIsLocked(false), 500)
-                          }, { once: true })
                           input.click()
                         }}
                         className="w-full px-3 py-2 rounded-lg text-left text-[11px] text-gray-300 hover:bg-dark-bg/50 transition-colors flex items-center gap-2"
@@ -1248,12 +1121,10 @@ function ActionBar({
                       <button
                         onClick={async () => {
                           setShowPlusMenu(false)
-                          setIsLocked(true) // Lock the action bar
                           const input = document.createElement('input')
                           input.type = 'file'
                           input.accept = '.pdf,.docx,.csv,.txt,.html,.odt,.rtf,.epub'
                           input.onchange = async (e) => {
-                            setIsLocked(false) // Unlock when file selected
                             const file = (e.target as HTMLInputElement).files?.[0]
                             if (file) {
                               const reader = new FileReader()
@@ -1269,10 +1140,6 @@ function ActionBar({
                               reader.readAsDataURL(file)
                             }
                           }
-                          // Handle cancel (when user closes picker without selecting)
-                          window.addEventListener('focus', () => {
-                            setTimeout(() => setIsLocked(false), 500)
-                          }, { once: true })
                           input.click()
                         }}
                         className="w-full px-3 py-2 rounded-lg text-left text-[11px] text-gray-300 hover:bg-dark-bg/50 transition-colors flex items-center gap-2"
@@ -1293,7 +1160,7 @@ function ActionBar({
                 className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
               >
                 <Sliders size={15} className="text-gray-400 hover:text-primary transition-colors" />
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                   Settings
                 </span>
               </button>
@@ -1464,7 +1331,7 @@ function ActionBar({
                       : 'text-gray-400'
                   }`}
                 />
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                   Open Widgets
                 </span>
               </button>
@@ -1491,7 +1358,7 @@ function ActionBar({
                         size={15}
                         className="text-gray-400 hover:text-yellow-400 transition-colors"
                       />
-                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         New Sticky Note (N)
                       </span>
                     </motion.button>
@@ -1512,7 +1379,7 @@ function ActionBar({
                             : 'text-gray-400 hover:text-blue-400'
                         }`}
                       />
-                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle Kanban (K)
                       </span>
                     </motion.button>
@@ -1529,7 +1396,7 @@ function ActionBar({
               className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
             >
               <Terminal size={15} className="text-gray-400 hover:text-primary transition-colors" />
-              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                 Console
               </span>
             </button>
@@ -1548,7 +1415,7 @@ function ActionBar({
               ) : (
                 <Smartphone size={15} className="text-gray-400 hover:text-primary transition-colors" />
               )}
-              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                 {viewMode === 'desktop' ? 'Desktop view' : 'Mobile view'}
               </span>
             </button>
@@ -1558,7 +1425,7 @@ function ActionBar({
               className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
             >
               <ImageIcon size={15} className="text-gray-400 hover:text-primary transition-colors" />
-              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                 Images
               </span>
             </button>
@@ -1580,7 +1447,7 @@ function ActionBar({
                     : 'text-gray-400'
                 } ${layoutState === 'DEFAULT' && !editModeEnabled ? 'hover:text-gray-200' : ''}`}
               />
-              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                 {editModeEnabled ? 'Disable Edit Mode (E)' : 'Enable Edit Mode (E)'}
               </span>
             </button>
@@ -1602,7 +1469,7 @@ function ActionBar({
                     : 'text-gray-400'
                 }`}
               />
-              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                 Take Screenshot (P)
               </span>
             </button>
@@ -1612,7 +1479,7 @@ function ActionBar({
               className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
             >
               <Settings size={15} className="text-gray-400 hover:text-primary transition-colors" />
-              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                 Settings
               </span>
             </button>
@@ -1631,7 +1498,7 @@ function ActionBar({
                   <Rocket size={13} className="text-gray-600" />
                   <span className="text-[11px] text-gray-600 font-medium">Deploy</span>
                 </div>
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                   Connect Netlify first
                 </span>
               </button>
@@ -1646,7 +1513,7 @@ function ActionBar({
                   <span className="text-[11px] text-primary font-medium">Live</span>
                   <ExternalLink size={10} className="text-primary opacity-60" />
                 </div>
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                   Visit live site
                 </span>
               </button>
@@ -1678,32 +1545,11 @@ function ActionBar({
                   <Rocket size={13} className="text-gray-400 group-hover:text-primary transition-colors" />
                   <span className="text-[11px] text-gray-300 hover:text-white font-medium transition-colors">Deploy</span>
                 </div>
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
+                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                   Deploy to Netlify
                 </span>
               </button>
             )}
-
-            {/* Divider */}
-            <div className="w-px h-5 bg-dark-border/50" />
-
-            {/* Pin Button */}
-            <button
-              onClick={toggleLock}
-              className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
-            >
-              <Pin
-                size={15}
-                className={`transition-colors ${
-                  isLocked
-                    ? 'text-primary'
-                    : 'text-gray-400 hover:text-primary'
-                }`}
-              />
-              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[60]">
-                {isLocked ? 'Auto-hide' : 'Keep visible'}
-              </span>
-            </button>
           </div>
         </div>
       </div>

@@ -557,11 +557,11 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
 
   return (
     <>
-      <div className="w-full h-full pb-40 flex items-center justify-center p-8 pt-0" style={{ marginTop: '-40px' }}>
-        {/* Scaled container */}
-        <div className="flex flex-col w-[95%] h-[95%] rounded-lg overflow-hidden shadow-2xl" style={{ boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)' }}>
+      <div className="w-full h-full flex flex-col">
+        {/* Container */}
+        <div className="flex flex-col w-full h-full overflow-hidden shadow-2xl" style={{ boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)' }}>
         {/* Minimal top bar with controls */}
-        <div className="h-10 bg-dark-card/95 backdrop-blur-xl border-t border-l border-r border-dark-border/80 rounded-t-lg flex items-center px-3 gap-2 flex-shrink-0 relative">
+        <div className="h-10 bg-dark-card/95 backdrop-blur-xl border-t border-l border-r border-dark-border/80 flex items-center px-3 gap-2 flex-shrink-0 relative">
           {/* Browser label */}
           <div className="text-[12px] text-gray-500 font-medium px-2">
             CodeDeck Browser v.1.0

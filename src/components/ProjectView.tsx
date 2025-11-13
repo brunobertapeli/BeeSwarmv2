@@ -5,6 +5,8 @@ import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import { useWebsiteImport } from '../hooks/useWebsiteImport'
 import ActionBar from './ActionBar'
+import ResearchAgent from './ResearchAgent'
+import ResearchAgentStatusSheet from './ResearchAgentStatusSheet'
 import ProjectSelector from './ProjectSelector'
 import UserProfile from './UserProfile'
 import { ProjectCreationFlow } from './ProjectCreationFlow'
@@ -59,6 +61,7 @@ function ProjectView() {
   const [previewReady, setPreviewReady] = useState(false)
   const [terminalOutput, setTerminalOutput] = useState<ProcessOutput[]>([])
   const previewContainerRef = useRef<HTMLDivElement>(null)
+  const researchAgentRef = useRef<HTMLDivElement>(null)
 
   // Website import state
   const websiteImport = useWebsiteImport(currentProjectId)
@@ -586,7 +589,7 @@ Please read the manifest to understand what my website is about, then create an 
       />
 
       {/* Preview Area - Desktop or Mobile Mode */}
-      <div className="w-full flex-1 relative overflow-hidden pt-[40px] mt-0">
+      <div className="w-full relative overflow-hidden" style={{ height: 'calc(100vh - 40px - 187px)' }}>
         {loading ? (
           // Loading State
           <div className="absolute inset-0 flex items-center justify-center">
@@ -708,6 +711,22 @@ Please read the manifest to understand what my website is about, then create an 
           </DesktopPreviewFrame>
         )}
       </div>
+
+      {/* Research Agent Status Sheet */}
+      {projects.length > 0 && currentProject && (
+        <ResearchAgentStatusSheet
+          projectId={currentProjectId || undefined}
+          researchAgentRef={researchAgentRef}
+        />
+      )}
+
+      {/* Research Agent - Only show when a project is loaded */}
+      {projects.length > 0 && currentProject && (
+        <ResearchAgent
+          ref={researchAgentRef}
+          projectId={currentProjectId || undefined}
+        />
+      )}
 
       {/* Floating Action Bar - Only show when a project is loaded */}
       {projects.length > 0 && currentProject && (

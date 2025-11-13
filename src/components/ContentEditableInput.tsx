@@ -273,7 +273,7 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
             className={`absolute inset-0 pointer-events-none whitespace-pre-wrap break-words overflow-auto ${hasPills ? 'pl-2 py-2.5' : 'px-3.5 py-2.5'} [&::-webkit-scrollbar]:hidden`}
             style={{
               lineHeight: '24px',
-              maxHeight: '84px',
+              height: '77px',
               wordWrap: 'break-word',
               overflowWrap: 'break-word',
               scrollbarWidth: 'none',
@@ -298,10 +298,10 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
             onScroll={handleScroll}
             disabled={disabled}
             className={`relative bg-transparent border-none outline-none resize-none ${hasPills ? 'pl-2 py-2.5' : 'px-3.5 py-2.5'} w-full`}
-            rows={1}
+            rows={3}
             style={{
               lineHeight: '24px',
-              maxHeight: '84px',
+              height: '77px',
               overflow: 'auto',
               caretColor: 'white',
               color: 'transparent',

@@ -1004,10 +1004,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   }, [layoutState])  // Only depend on layoutState to ensure this runs first
 
   // Calculate bottom position based on action bar height
-  const baseOffset = -7 // Gap between action bar and status sheet (adjusted for 5px lower action bar)
+  const baseOffset = -19 // Gap between action bar and status sheet (adjusted for 5px lower action bar)
   const bottomPosition = isVisible
     ? (actionBarHeight > 0 ? actionBarHeight + baseOffset : 95)
-    : (actionBarHeight > 0 ? actionBarHeight - 9 : 75)
+    : (actionBarHeight > 0 ? actionBarHeight - 14 : 75)
 
   // Always render if has history (show collapsed or expanded based on state)
   const shouldRender = hasHistory
@@ -1016,7 +1016,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     <>
       {shouldRender && (
         <div
-        className={`fixed left-1/2 transform -translate-x-1/2 z-[99] pointer-events-none ${
+        className={`fixed right-0 z-[99] pointer-events-none w-2/3 ${
           isVisible ? 'opacity-100' : 'opacity-0'
         }`}
         style={{
@@ -1026,7 +1026,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       >
         <div
         ref={statusSheetRef}
-        className="bg-dark-card border border-dark-border rounded-t-2xl shadow-2xl w-[938px] overflow-hidden pb-4 relative pointer-events-auto"
+        className="bg-dark-card border border-dark-border shadow-2xl w-full overflow-hidden pb-4 relative pointer-events-auto"
         style={{
           boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
         }}
@@ -1061,6 +1061,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                     <Globe size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
                   )}
                   <span className="text-xs text-gray-200 flex-1 line-clamp-1">{collapsedState.text}</span>
+                  <ChevronUp size={14} className="text-gray-400" />
                 </>
               ) : (
                 <div className="flex items-center gap-2 flex-1">
@@ -1085,6 +1086,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                       <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
                     </button>
                   )}
+                  <ChevronUp size={14} className="text-gray-400" />
                 </div>
               )}
             </div>
