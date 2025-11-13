@@ -272,10 +272,11 @@ class ProcessManager extends EventEmitter {
   /**
    * Stop netlify dev server for a project
    * @param projectId - Unique project identifier
+   * @param force - If true, bypasses the active project check (used for deletion)
    */
-  async stopDevServer(projectId: string): Promise<void> {
-    // Guard: Never stop the currently active project's server
-    if (this.currentProjectId === projectId) {
+  async stopDevServer(projectId: string, force: boolean = false): Promise<void> {
+    // Guard: Never stop the currently active project's server (unless forced)
+    if (!force && this.currentProjectId === projectId) {
       console.warn('⚠️  Prevented stopping server for active project:', projectId);
       return;
     }

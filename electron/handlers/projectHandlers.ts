@@ -122,11 +122,11 @@ export function registerProjectHandlers() {
       // IMPORTANT: Clean up sessions BEFORE deleting project
       // This prevents errors when cleanup operations try to validate project ownership
       try {
-        // Stop any running processes
+        // Stop any running processes (force=true to bypass active project check)
         const processManager = (await import('../services/ProcessManager')).processManager
         const status = processManager.getProcessStatus(projectId)
         if (status === 'running') {
-          await processManager.stopDevServer(projectId)
+          await processManager.stopDevServer(projectId, true)
         }
 
         // Destroy Claude session (if any)

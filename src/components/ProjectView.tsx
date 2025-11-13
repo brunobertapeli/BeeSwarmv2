@@ -448,6 +448,10 @@ Please read the manifest to understand what my website is about, then create an 
     // Set as current project in ProcessManager to prevent accidental server stops
     await window.electronAPI?.process.setCurrentProject(projectId)
 
+    // Ensure layout state is reset to DEFAULT for new project
+    await window.electronAPI?.layout.setState('DEFAULT', projectId)
+    useLayoutStore.getState().setLayoutState('DEFAULT')
+
     setCurrentProject(projectId)
     setShowProjectSelector(false)
     if (project) {
@@ -490,15 +494,54 @@ Please read the manifest to understand what my website is about, then create an 
           }}
         />
 
-        {/* Project Name - Rounded Capsule (clickable) - Centered */}
-        <button
-          onClick={() => setShowProjectSelector(true)}
-          className="min-w-[150px] pl-[50px] pr-[50px] py-1.5 rounded-lg border border-gray-700/60 bg-dark-card/95 backdrop-blur-xl hover:bg-dark-card hover:border-primary/40 transition-all flex items-center justify-center gap-2 relative z-10 mt-[3px] group"
-          style={{ WebkitAppRegion: 'no-drag' } as any}
-        >
-          <span className="text-xs font-medium text-gray-300 group-hover:text-white transition-colors">{getProjectName()}</span>
-          <ChevronDown size={14} className="text-gray-400 group-hover:text-primary transition-colors" />
-        </button>
+        {/* Unified Control - Project Name + View Switcher */}
+        {projects.length > 0 && (
+          <div
+            className="flex items-center bg-dark-card/95 backdrop-blur-xl border border-gray-700/60 rounded-lg relative z-10 mt-[3px] overflow-hidden"
+            style={{ WebkitAppRegion: 'no-drag' } as any}
+          >
+            {/* Project Name */}
+            <button
+              onClick={() => setShowProjectSelector(true)}
+              className="px-4 py-1.5 flex items-center gap-2 group hover:bg-dark-bg/30 transition-all border-r border-gray-700/50"
+            >
+              <span className="text-xs font-medium text-gray-300 group-hover:text-white transition-colors">{getProjectName()}</span>
+              <ChevronDown size={14} className="text-gray-400 group-hover:text-primary transition-colors" />
+            </button>
+
+            {/* View Switcher */}
+            <div className="flex items-center p-0.5">
+              <button
+                onClick={() => {
+                  if (currentProject?.id) {
+                    window.electronAPI?.layout.setState('DEFAULT', currentProject.id)
+                  }
+                }}
+                className={`px-3 py-1 rounded-md text-[10px] font-medium transition-all ${
+                  layoutState === 'DEFAULT'
+                    ? 'bg-primary/20 text-primary'
+                    : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                Browser View
+              </button>
+              <button
+                onClick={() => {
+                  if (currentProject?.id) {
+                    window.electronAPI?.layout.setState('TOOLS', currentProject.id)
+                  }
+                }}
+                className={`px-3 py-1 rounded-md text-[10px] font-medium transition-all ${
+                  layoutState === 'TOOLS'
+                    ? 'bg-primary/20 text-primary'
+                    : 'text-gray-400 hover:text-gray-300'
+                }`}
+              >
+                Workspace
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Settings Icon - Absolute Right Side, Vertically Centered */}
         <button
@@ -546,7 +589,7 @@ Please read the manifest to understand what my website is about, then create an 
       <div className="w-full flex-1 relative overflow-hidden pt-[40px] mt-0">
         {loading ? (
           // Loading State
-          <div className="w-full h-full flex items-center justify-center relative">
+          <div className="absolute inset-0 flex items-center justify-center">
             {/* Background Gradient */}
             <div className="absolute inset-0 bg-gradient-to-br from-purple-950 via-blue-950 to-black" />
             <div className="absolute inset-0 bg-black/40" />
@@ -569,7 +612,7 @@ Please read the manifest to understand what my website is about, then create an 
           </div>
         ) : projects.length === 0 ? (
           // No Projects State
-          <div className="w-full h-full flex items-center justify-center relative">
+          <div className="absolute inset-0 flex items-center justify-center">
             {/* Background Gradient */}
             <div className="absolute inset-0 bg-gradient-to-br from-purple-950 via-blue-950 to-black" />
             <div className="absolute inset-0 bg-black/40" />
@@ -592,7 +635,7 @@ Please read the manifest to understand what my website is about, then create an 
               <h2 className="text-2xl font-bold text-white mb-2">No Projects Yet</h2>
               <p className="text-gray-400 mb-8">Create your first project to get started</p>
               <button
-                onClick={() => setShowTemplateSelector(true)}
+                onClick={handleCreateProject}
                 className="px-6 py-3 bg-primary hover:bg-primary-dark text-white font-medium rounded-lg transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 flex items-center gap-2 mx-auto"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -666,18 +709,20 @@ Please read the manifest to understand what my website is about, then create an 
         )}
       </div>
 
-      {/* Floating Action Bar */}
-      <ActionBar
-        projectId={currentProjectId || undefined}
-        onChatClick={handleChatClick}
-        onImagesClick={handleImagesClick}
-        onSettingsClick={handleSettingsClick}
-        onConsoleClick={handleConsoleClick}
-        autoOpen={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
-        autoPinned={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
-        autoMessage={websiteImportPrompt}
-        onAutoMessageSent={handleWebsiteImportPromptSent}
-      />
+      {/* Floating Action Bar - Only show when a project is loaded */}
+      {projects.length > 0 && currentProject && (
+        <ActionBar
+          projectId={currentProjectId || undefined}
+          onChatClick={handleChatClick}
+          onImagesClick={handleImagesClick}
+          onSettingsClick={handleSettingsClick}
+          onConsoleClick={handleConsoleClick}
+          autoOpen={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
+          autoPinned={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
+          autoMessage={websiteImportPrompt}
+          onAutoMessageSent={handleWebsiteImportPromptSent}
+        />
+      )}
 
       {/* Kanban Widget */}
       {kanbanEnabled && layoutState === 'TOOLS' && <KanbanWidget />}

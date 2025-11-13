@@ -193,13 +193,8 @@ function ProjectSelector({
 
     setIsDeleting(true)
 
-    // Optimistically remove from UI
     const projectToDelete = deletingProject
-    const previousProjects = projects
-
-    setProjects(projects.filter(p => p.id !== deletingProject.id))
-    setDeletingProject(null)
-    setDeleteConfirmName('')
+    const wasDeletingCurrentProject = projectToDelete.id === currentProjectId
 
     try {
       const result = await window.electronAPI?.projects.delete(projectToDelete.id)
@@ -207,20 +202,30 @@ function ProjectSelector({
       if (result?.success) {
         toast.success('Project deleted', `"${projectToDelete.name}" has been deleted successfully`)
 
+        // Remove from local state
+        const remainingProjects = projects.filter(p => p.id !== projectToDelete.id)
+        setProjects(remainingProjects)
+
+        // If user deleted the current project, switch to most recently used project
+        if (wasDeletingCurrentProject && remainingProjects.length > 0) {
+          const mostRecentProject = remainingProjects[0] // Already sorted by lastOpenedAt DESC
+          await window.electronAPI?.process.setCurrentProject(mostRecentProject.id)
+          onSelectProject(mostRecentProject.id)
+          toast.info('Switched project', `Now viewing ${mostRecentProject.name}`)
+        }
+
         // Notify parent to refresh
         onProjectUpdated?.()
 
-        // Close modal after successful deletion
+        // Close modal and reset state
+        setDeletingProject(null)
+        setDeleteConfirmName('')
         onClose()
       } else {
-        // Revert optimistic update on error
-        setProjects(previousProjects)
         toast.error('Delete failed', result?.error || 'Failed to delete project')
       }
     } catch (error) {
       console.error('Error deleting project:', error)
-      // Revert optimistic update on error
-      setProjects(previousProjects)
       toast.error('Error', error instanceof Error ? error.message : 'Failed to delete project')
     } finally {
       setIsDeleting(false)
@@ -443,8 +448,10 @@ function ProjectSelector({
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => {
-              setDeletingProject(null)
-              setDeleteConfirmName('')
+              if (!isDeleting) {
+                setDeletingProject(null)
+                setDeleteConfirmName('')
+              }
             }}
           />
           <div className="relative w-[420px] bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6">
@@ -461,15 +468,16 @@ function ProjectSelector({
                 value={deleteConfirmName}
                 onChange={(e) => setDeleteConfirmName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && deleteConfirmName === deletingProject.name) {
+                  if (e.key === 'Enter' && deleteConfirmName === deletingProject.name && !isDeleting) {
                     handleDeleteConfirm()
                   }
-                  if (e.key === 'Escape') {
+                  if (e.key === 'Escape' && !isDeleting) {
                     setDeletingProject(null)
                     setDeleteConfirmName('')
                   }
                 }}
-                className="w-full px-4 py-2 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+                disabled={isDeleting}
+                className="w-full px-4 py-2 bg-dark-bg border border-dark-border rounded-lg text-white text-sm focus:outline-none focus:border-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder={deletingProject.name}
                 autoFocus
               />

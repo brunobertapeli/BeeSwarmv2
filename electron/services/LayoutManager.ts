@@ -90,14 +90,16 @@ class LayoutManager extends EventEmitter {
         // Show BrowserView - bounds will be set by DesktopPreviewFrame
         previewService.show(projectId);
       } else if (state === 'DEFAULT') {
-        // DEFAULT: Let StatusSheet component control preview visibility
-        // If StatusSheet is expanded, it will keep preview hidden (freeze active)
-        // If StatusSheet is collapsed, it will show preview
+        // DEFAULT: Show preview (StatusSheet component may hide it temporarily if expanded)
 
-        // Emit state change event to renderer
+        // Emit state change event to renderer first
         this.emit('state-changed', state, previousState);
 
-        // Don't auto-show - let renderer components handle it based on StatusSheet state
+        // Wait for DOM to settle, then show preview
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        // Show BrowserView - ensures it's visible when switching back to DEFAULT
+        previewService.show(projectId);
       }
     } finally {
       // Always clear the transition flag
