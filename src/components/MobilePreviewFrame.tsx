@@ -306,7 +306,7 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   const aspectRatio = deviceHeight / deviceWidth
 
   // Scale factor for mobile preview
-  const scale = 0.735
+  const scale = 0.77175 // 0.735 * 1.05 = 5% bigger
 
   // Calculate dimensions maintaining aspect ratio
   const maxHeight = window.innerHeight - 300
@@ -319,10 +319,10 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   }
 
   return (
-    <div className="w-full h-full flex items-center justify-center pb-40" style={{ marginTop: '-50px' }}>
+    <div className="w-full h-full flex items-center justify-center">
       {/* Mobile phone container - centered */}
       <div
-        className="flex flex-col bg-gray-900 rounded-3xl overflow-hidden shadow-2xl"
+        className="flex flex-col bg-gray-900 rounded-t-3xl overflow-hidden shadow-2xl"
         style={{
           width: `${calculatedWidth}px`,
           height: `${calculatedHeight}px`,

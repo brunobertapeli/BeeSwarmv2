@@ -343,8 +343,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   addStickyNote: () => {
     const currentNotes = get().stickyNotes;
     const maxZ = currentNotes.length > 0
-      ? Math.max(...currentNotes.map(n => n.zIndex))
-      : 30;
+      ? Math.max(...currentNotes.map(n => n.zIndex), 95)
+      : 96;
 
     const newNote = {
       id: `note-${Date.now()}`,
@@ -352,7 +352,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       content: '',
       color: 'yellow' as const,
       stickyText: false,
-      zIndex: maxZ + 1
+      zIndex: Math.min(maxZ + 1, 98) // Cap at 98 to stay below status sheets (z-99)
     };
 
     set((state) => ({ stickyNotes: [...state.stickyNotes, newNote] }));
@@ -395,12 +395,28 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
 
   bringNoteToFront: (id) => {
     const currentNotes = get().stickyNotes;
-    const maxZ = Math.max(...currentNotes.map(n => n.zIndex));
+
+    // Sort notes by current zIndex (excluding the one we're bringing to front)
+    const otherNotes = currentNotes.filter(n => n.id !== id).sort((a, b) => a.zIndex - b.zIndex);
+    const targetNote = currentNotes.find(n => n.id === id);
+
+    if (!targetNote) return;
+
+    // Restack notes: assign 96, 97 to oldest notes, and 98 to the front note
+    const BASE_Z = 96;
+    const MAX_Z = 98;
+    const availableSlots = MAX_Z - BASE_Z + 1; // 3 slots: 96, 97, 98
 
     set((state) => ({
-      stickyNotes: state.stickyNotes.map(note =>
-        note.id === id ? { ...note, zIndex: maxZ + 1 } : note
-      )
+      stickyNotes: state.stickyNotes.map(note => {
+        if (note.id === id) {
+          return { ...note, zIndex: MAX_Z }; // Clicked note goes to front
+        }
+        // Reassign other notes starting from the back
+        const index = otherNotes.findIndex(n => n.id === note.id);
+        const newZ = BASE_Z + Math.max(0, index - (otherNotes.length - availableSlots + 1));
+        return { ...note, zIndex: newZ };
+      })
     }));
 
     // Save to database

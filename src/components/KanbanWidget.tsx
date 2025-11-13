@@ -215,10 +215,11 @@ function KanbanWidget() {
         // Keep widget within viewport bounds with 3px padding on all sides
         const padding = 3
         const headerHeight = 40 + padding // Top header bar height + padding
+        const bottomReservedArea = 187 // Action bar + Research Agent
         const minX = padding
         const maxX = window.innerWidth - 900 - padding
         const minY = headerHeight
-        const maxY = window.innerHeight - kanbanSize.height - padding
+        const maxY = window.innerHeight - kanbanSize.height - bottomReservedArea - padding
 
         setKanbanPosition({
           x: Math.max(minX, Math.min(newX, maxX)),
@@ -231,6 +232,7 @@ function KanbanWidget() {
         let newY = kanbanPosition.y
         const padding = 3
         const headerHeight = 40 + padding // Top header bar height + padding
+        const bottomReservedArea = 187 // Action bar + Research Agent
 
         // Handle vertical resize directions only
         if (resizeDirection === 's') {
@@ -369,7 +371,7 @@ function KanbanWidget() {
                       />
                     ) : (
                       <div className="mb-2">
-                        <p className="text-xs text-gray-300 leading-relaxed hover:text-white transition-colors">
+                        <p className="text-xs text-gray-300 leading-relaxed hover:text-white transition-colors line-clamp-3 break-words">
                           {card.title}
                         </p>
                         {/* Content indicator */}
@@ -470,12 +472,12 @@ function KanbanWidget() {
               {/* Title */}
               <div>
                 <label className="block text-[10px] font-medium text-gray-400 mb-1">Title</label>
-                <input
-                  type="text"
+                <textarea
                   value={modalTitle}
                   onChange={(e) => setModalTitle(e.target.value)}
-                  className="w-full bg-dark-bg/50 border border-dark-border/50 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-primary/50 transition-colors"
+                  className="w-full bg-dark-bg/50 border border-dark-border/50 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-primary/50 transition-colors resize-none scrollbar-thin"
                   placeholder="Enter card title..."
+                  rows={3}
                 />
               </div>
 

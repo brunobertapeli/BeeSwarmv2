@@ -84,10 +84,11 @@ function StickyNoteWidget({ note }: StickyNoteWidgetProps) {
     // Apply boundaries (same as KanbanWidget)
     const padding = 3
     const headerHeight = 40 + padding // Top header bar height + padding (43px)
+    const bottomReservedArea = 187 // Action bar + Research Agent
     const minX = padding
     const maxX = containerWidth - NOTE_SIZE - padding
     const minY = headerHeight
-    const maxY = containerHeight - NOTE_SIZE - padding
+    const maxY = containerHeight - NOTE_SIZE - bottomReservedArea - padding
 
     const clampedPixelX = Math.max(minX, Math.min(newPixelX, maxX))
     const clampedPixelY = Math.max(minY, Math.min(newPixelY, maxY))
