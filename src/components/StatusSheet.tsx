@@ -42,7 +42,7 @@ interface Action {
 
 interface ConversationBlock {
   id: string
-  type: 'conversation' | 'deployment'
+  type: 'conversation' | 'deployment' | 'initialization'
   projectId?: string
   userPrompt?: string
   messages?: ConversationMessage[]
@@ -57,6 +57,9 @@ interface ConversationBlock {
   // Deployment-specific fields
   deploymentStages?: DeploymentStage[]
   deploymentUrl?: string
+  // Initialization-specific fields
+  initializationStages?: DeploymentStage[]
+  templateName?: string
 }
 
 interface StatusSheetProps {
@@ -355,11 +358,24 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       }
     }
 
-    // Parse actions
+    // Parse actions - check if this is an initialization block
     let actions: Action[] | undefined
+    let initializationStages: { label: string; isComplete: boolean }[] | undefined
+    let templateName: string | undefined
+    let blockType: 'conversation' | 'initialization' = 'conversation'
+
     if (block.actions) {
       try {
-        actions = JSON.parse(block.actions)
+        const parsedActions = JSON.parse(block.actions)
+
+        // Check if this is initialization data
+        if (parsedActions.type === 'initialization') {
+          blockType = 'initialization'
+          templateName = parsedActions.templateName
+          initializationStages = parsedActions.stages
+        } else {
+          actions = parsedActions
+        }
       } catch (e) {
         console.error('Failed to parse actions:', e)
       }
@@ -367,7 +383,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
     return {
       id: block.id,
-      type: 'conversation' as const,
+      type: blockType,
       projectId: block.projectId,
       userPrompt: block.userPrompt,
       messages,
@@ -377,6 +393,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       completionStats,
       summary: block.summary || undefined,
       actions,
+      initializationStages,
+      templateName,
     }
   }
 
@@ -827,6 +845,14 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       return { text: currentStage ? currentStage.label : 'Deploying...', icon: null, needsAttention: false }
     }
 
+    if (currentBlock.type === 'initialization') {
+      if (currentBlock.isComplete) {
+        return { text: 'Project ready!', icon: CheckCircle2, needsAttention: true }
+      }
+      const currentStage = currentBlock.initializationStages?.find((s) => !s.isComplete)
+      return { text: currentStage ? currentStage.label : 'Setting up project...', icon: null, needsAttention: false }
+    }
+
     // Check for in-progress actions
     if (currentBlock.actions && currentBlock.actions.length > 0) {
       const inProgressAction = currentBlock.actions.find(a => a.status === 'in_progress')
@@ -1053,12 +1079,18 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
               className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10"
               onClick={handleExpand}
             >
-              {currentBlock.type === 'deployment' ? (
+              {currentBlock.type === 'deployment' || currentBlock.type === 'initialization' ? (
                 <>
                   {isWorking ? (
                     <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />
                   ) : (
-                    <Globe size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
+                    <>
+                      {currentBlock.type === 'deployment' ? (
+                        <Globe size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
+                      ) : (
+                        <Rocket size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
+                      )}
+                    </>
                   )}
                   <span className="text-xs text-gray-200 flex-1 line-clamp-1">{collapsedState.text}</span>
                   <ChevronUp size={14} className="text-gray-400" />
@@ -1165,6 +1197,47 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                 // Stop button logic - show on last incomplete block
                 const isLastBlock = blockIndex === allBlocks.length - 1;
                 const showStopButton = isLastBlock && !block.isComplete
+
+                // Render initialization block
+                if (block.type === 'initialization') {
+                  return (
+                    <div key={block.id} className="bg-primary/5 rounded-lg p-3 border border-primary/20 relative mb-6">
+                      {/* Header */}
+                      <div className="flex items-start gap-2 mb-3">
+                        <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center mt-0.5">
+                          {block.isComplete ? (
+                            <CheckCircle2 size={12} className="text-green-400" />
+                          ) : (
+                            <Rocket size={12} className="text-primary" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-xs font-medium text-primary">
+                            {block.isComplete ? 'Project Ready!' : `Setting up ${block.templateName || 'project'}`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Initialization Stages */}
+                      <div className="space-y-2 ml-7">
+                        {block.initializationStages?.map((stage, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            {stage.isComplete ? (
+                              <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                            ) : (
+                              <Loader2 size={10} className="text-primary animate-spin flex-shrink-0" />
+                            )}
+                            <span className={`text-[11px] leading-relaxed ${
+                              stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
+                            }`}>
+                              {stage.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                }
 
                 // Render deployment block (keep existing for now)
                 if (block.type === 'deployment') {

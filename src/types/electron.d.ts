@@ -662,6 +662,15 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
+    createInitializationBlock: (projectId: string, templateName: string, stages: Array<{ label: string; isComplete: boolean }>) => Promise<{
+      success: boolean
+      blockId?: string
+      error?: string
+    }>
+    updateInitializationBlock: (projectId: string, stages: Array<{ label: string; isComplete: boolean }>, isComplete: boolean) => Promise<{
+      success: boolean
+      error?: string
+    }>
     onBlockCreated: (callback: (projectId: string, block: ChatBlock) => void) => () => void
     onBlockUpdated: (callback: (projectId: string, block: ChatBlock) => void) => () => void
     onBlockCompleted: (callback: (projectId: string, block: ChatBlock) => void) => () => void

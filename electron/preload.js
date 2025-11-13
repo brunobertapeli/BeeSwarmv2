@@ -284,6 +284,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getHistory: (projectId, limit, offset) => ipcRenderer.invoke('chat:get-history', projectId, limit, offset),
     getBlock: (blockId) => ipcRenderer.invoke('chat:get-block', blockId),
     deleteHistory: (projectId) => ipcRenderer.invoke('chat:delete-history', projectId),
+    createInitializationBlock: (projectId, templateName, stages) => ipcRenderer.invoke('chat:create-initialization-block', projectId, templateName, stages),
+    updateInitializationBlock: (projectId, stages, isComplete) => ipcRenderer.invoke('chat:update-initialization-block', projectId, stages, isComplete),
 
     // Chat event listeners
     onBlockCreated: (callback) => {

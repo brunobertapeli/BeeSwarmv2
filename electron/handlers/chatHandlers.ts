@@ -261,4 +261,133 @@ export function registerChatHandlers(): void {
       };
     }
   });
+
+  // Create initialization block
+  ipcMain.handle('chat:create-initialization-block', async (_event, projectId: string, templateName: string, stages: Array<{ label: string; isComplete: boolean }>) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId);
+
+      // Create a special block with initialization data
+      // Store stages as JSON in the 'actions' field (we can reuse this for initialization stages)
+      const block = databaseService.createChatBlock(
+        projectId,
+        `Initializing project with template: ${templateName}`,
+        'initialization'
+      );
+
+      // Store stages in a custom format
+      const initData = {
+        type: 'initialization',
+        templateName,
+        stages
+      };
+
+      databaseService.updateChatBlock(block.id, {
+        actions: JSON.stringify(initData)
+      });
+
+      // Get updated block
+      const updatedBlock = databaseService.getChatBlock(block.id);
+
+      // Emit event to renderer
+      if (updatedBlock) {
+        emitChatEvent('chat:block-created', projectId, updatedBlock);
+      }
+
+      return {
+        success: true,
+        blockId: block.id,
+      };
+    } catch (error) {
+      console.error('❌ Error creating initialization block:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create initialization block',
+      };
+    }
+  });
+
+  // Update initialization block
+  ipcMain.handle('chat:update-initialization-block', async (_event, projectId: string, stages: Array<{ label: string; isComplete: boolean }>, isComplete: boolean) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId);
+
+      // Find the initialization block for this project (most recent one)
+      const blocks = databaseService.getChatHistory(projectId, 1, 0);
+      const initBlock = blocks.find(b => {
+        try {
+          const actions = b.actions ? JSON.parse(b.actions) : null;
+          return actions && actions.type === 'initialization';
+        } catch {
+          return false;
+        }
+      });
+
+      if (!initBlock) {
+        return {
+          success: false,
+          error: 'Initialization block not found'
+        };
+      }
+
+      // Parse existing init data
+      const existingData = JSON.parse(initBlock.actions || '{}');
+
+      // Update stages
+      const updatedData = {
+        ...existingData,
+        stages
+      };
+
+      databaseService.updateChatBlock(initBlock.id, {
+        actions: JSON.stringify(updatedData),
+        isComplete
+      });
+
+      // If complete, mark as completed
+      if (isComplete) {
+        databaseService.completeChatBlock(initBlock.id);
+      }
+
+      // Get updated block
+      const updatedBlock = databaseService.getChatBlock(initBlock.id);
+
+      // Emit appropriate event to renderer
+      if (updatedBlock) {
+        if (isComplete) {
+          emitChatEvent('chat:block-completed', projectId, updatedBlock);
+        } else {
+          emitChatEvent('chat:block-updated', projectId, updatedBlock);
+        }
+      }
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error updating initialization block:', error);
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        };
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to update initialization block',
+      };
+    }
+  });
 }

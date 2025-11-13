@@ -419,6 +419,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     const createProject = async () => {
       if (!selectedTemplate) return
 
+      let createdProjectId: string | null = null
+
       try {
         // Convert screenshot to base64 if present
         let screenshotData: string | undefined
@@ -444,7 +446,20 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           throw new Error(result?.error || 'Failed to create project')
         }
 
-        setProjectId(result.project.id)
+        createdProjectId = result.project.id
+        setProjectId(createdProjectId)
+
+        // Create initialization block to show in StatusSheet
+        await window.electronAPI?.chat.createInitializationBlock(
+          createdProjectId,
+          selectedTemplate.name,
+          [
+            { label: 'Cloning template repository', isComplete: true },
+            { label: 'Installing dependencies (npm install)', isComplete: false },
+            { label: 'Starting development server', isComplete: false },
+            { label: 'Your project is ready', isComplete: false }
+          ]
+        )
 
         // Step 2: Save environment variables if any
         if (envVariables.length > 0) {
@@ -461,6 +476,18 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
         // Step 3: Install dependencies
         setCurrentStep('installing')
 
+        // Update initialization block - installing stage
+        await window.electronAPI?.chat.updateInitializationBlock(
+          createdProjectId,
+          [
+            { label: 'Cloning template repository', isComplete: true },
+            { label: 'Installing dependencies (npm install)', isComplete: true },
+            { label: 'Starting development server', isComplete: false },
+            { label: 'Your project is ready', isComplete: false }
+          ],
+          false
+        )
+
         const installResult = await window.electronAPI?.projects.installDependencies(result.project.id)
 
         if (!installResult?.success) {
@@ -469,6 +496,18 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
         // Step 4: Initialize dev server
         setCurrentStep('initializing')
+
+        // Update initialization block - starting server stage
+        await window.electronAPI?.chat.updateInitializationBlock(
+          createdProjectId,
+          [
+            { label: 'Cloning template repository', isComplete: true },
+            { label: 'Installing dependencies (npm install)', isComplete: true },
+            { label: 'Starting development server', isComplete: true },
+            { label: 'Your project is ready', isComplete: false }
+          ],
+          false
+        )
 
         const serverResult = await window.electronAPI?.process.startDevServer(result.project.id)
 
@@ -482,17 +521,37 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           setTempImportProjectId(null)
         }
 
-        // Step 6: Complete
+        // Step 6: Complete - mark initialization as complete
+        await window.electronAPI?.chat.updateInitializationBlock(
+          createdProjectId,
+          [
+            { label: 'Cloning template repository', isComplete: true },
+            { label: 'Installing dependencies (npm install)', isComplete: true },
+            { label: 'Starting development server', isComplete: true },
+            { label: 'Your project is ready', isComplete: true }
+          ],
+          true // Mark as complete
+        )
+
         setCurrentStep('complete')
       } catch (err) {
         console.error('Project creation failed:', err)
         setError(err instanceof Error ? err.message : 'Unknown error occurred')
         setCurrentStep('error')
+
+        // If we have a project ID, mark initialization as failed
+        if (createdProjectId) {
+          await window.electronAPI?.chat.updateInitializationBlock(
+            createdProjectId,
+            [],
+            true // Mark as complete (failed)
+          )
+        }
       }
     }
 
     createProject()
-  }, [currentStep, selectedTemplate, projectName, envVariables, tempImportProjectId])
+  }, [currentStep, selectedTemplate, projectName, envVariables, tempImportProjectId, screenshotFile, importDesignOption])
 
   const handleCategorySelect = (category: ProjectCategory) => {
     if (!category.available) return
