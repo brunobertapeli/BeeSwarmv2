@@ -120,9 +120,11 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   const [keywords, setKeywords] = useState<Record<string, string>>({})
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string | string[]>>({})
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({})
+  const [overflowingMessages, setOverflowingMessages] = useState<Set<string>>(new Set())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const statusSheetRef = useRef<HTMLDivElement>(null)
   const prevLayoutStateRef = useRef<string>(layoutState)
+  const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   // Random loading phrases - use block ID for consistent selection
   const getLoadingPhrase = (blockId: string) => {
@@ -398,23 +400,27 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     }
   }
 
-  // Helper to check if a message is long (should be collapsible)
-  const isLongMessage = (content: string): boolean => {
-    const lines = content.split('\n')
-    return lines.length > 1 || content.length > 105
-  }
+  // Detect overflow for messages
+  useEffect(() => {
+    const checkOverflow = () => {
+      const newOverflowingMessages = new Set<string>()
 
-  // Helper to get truncated message
-  const getTruncatedMessage = (content: string): string => {
-    const lines = content.split('\n')
-    if (lines.length > 1) {
-      return lines[0].slice(0, 105) + '...'
+      messageRefs.current.forEach((element, messageId) => {
+        if (element && element.scrollHeight > element.clientHeight) {
+          newOverflowingMessages.add(messageId)
+        }
+      })
+
+      setOverflowingMessages(newOverflowingMessages)
     }
-    if (content.length > 105) {
-      return content.slice(0, 105) + '...'
-    }
-    return content
-  }
+
+    // Check after render and on window resize
+    checkOverflow()
+    const handleResize = () => checkOverflow()
+    window.addEventListener('resize', handleResize)
+
+    return () => window.removeEventListener('resize', handleResize)
+  }, [allBlocks, expandedMessages])
 
   // Helper: Check if block has plan mode questions
   const hasQuestions = (block: ConversationBlock): boolean => {
@@ -1537,8 +1543,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             <div className="space-y-1.5">
                               {block.messages?.filter(m => !m.content.includes('⚠️ Stopped by user')).map((message, idx) => {
                                 const messageId = `${block.id}-msg-${idx}`
-                                const isLong = isLongMessage(message.content)
                                 const isMessageExpanded = expandedMessages.has(messageId)
+                                const hasOverflow = overflowingMessages.has(messageId)
 
                                 // Check if this is the latest tool (for timer display)
                                 const toolMessages = block.messages?.filter(m => m.type === 'tool') || []
@@ -1550,19 +1556,30 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                       {message.type === 'assistant' && (
                                         <>
                                           <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
-                                          <div className="flex-1">
-                                            <span className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap">
-                                              {isLong && !isMessageExpanded ? (
-                                                getTruncatedMessage(stripQuestions(message.content))
-                                              ) : (
-                                                <KeywordHighlight
-                                                  text={stripQuestions(message.content)}
-                                                  keywords={keywords}
-                                                  blockId={block.id}
-                                                />
-                                              )}
-                                            </span>
-                                            {isLong && (
+                                          <div className="flex-1 relative">
+                                            <div
+                                              ref={(el) => {
+                                                if (el) {
+                                                  messageRefs.current.set(messageId, el)
+                                                } else {
+                                                  messageRefs.current.delete(messageId)
+                                                }
+                                              }}
+                                              className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap"
+                                              style={{
+                                                display: '-webkit-box',
+                                                WebkitBoxOrient: 'vertical',
+                                                WebkitLineClamp: !isMessageExpanded ? 3 : 'unset',
+                                                overflow: 'visible'
+                                              }}
+                                            >
+                                              <KeywordHighlight
+                                                text={stripQuestions(message.content)}
+                                                keywords={keywords}
+                                                blockId={block.id}
+                                              />
+                                            </div>
+                                            {hasOverflow && (
                                               <button
                                                 onClick={() => {
                                                   const newSet = new Set(expandedMessages)
@@ -2019,8 +2036,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                               <div className="space-y-1.5">
                                 {answerBlock.messages?.filter(m => !m.content.includes('⚠️ Stopped by user')).map((message, idx) => {
                                   const messageId = `${answerBlock.id}-msg-${idx}`
-                                  const isLong = isLongMessage(message.content)
                                   const isMessageExpanded = expandedMessages.has(messageId)
+                                  const hasOverflow = overflowingMessages.has(messageId)
                                   const toolMessages = answerBlock.messages?.filter(m => m.type === 'tool') || []
                                   const isLatestTool = message.type === 'tool' && message === toolMessages[toolMessages.length - 1]
 
@@ -2030,19 +2047,30 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                         {message.type === 'assistant' && (
                                           <>
                                             <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
-                                            <div className="flex-1">
-                                              <span className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap">
-                                                {isLong && !isMessageExpanded ? (
-                                                  getTruncatedMessage(stripQuestions(message.content))
-                                                ) : (
-                                                  <KeywordHighlight
-                                                    text={stripQuestions(message.content)}
-                                                    keywords={keywords}
-                                                    blockId={answerBlock.id}
-                                                  />
-                                                )}
-                                              </span>
-                                              {isLong && (
+                                            <div className="flex-1 relative">
+                                              <div
+                                                ref={(el) => {
+                                                  if (el) {
+                                                    messageRefs.current.set(messageId, el)
+                                                  } else {
+                                                    messageRefs.current.delete(messageId)
+                                                  }
+                                                }}
+                                                className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap"
+                                                style={{
+                                                  display: '-webkit-box',
+                                                  WebkitBoxOrient: 'vertical',
+                                                  WebkitLineClamp: !isMessageExpanded ? 3 : 'unset',
+                                                  overflow: 'visible'
+                                                }}
+                                              >
+                                                <KeywordHighlight
+                                                  text={stripQuestions(message.content)}
+                                                  keywords={keywords}
+                                                  blockId={answerBlock.id}
+                                                />
+                                              </div>
+                                              {hasOverflow && (
                                                 <button
                                                   onClick={() => {
                                                     const newSet = new Set(expandedMessages)
@@ -2196,8 +2224,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     <div className="space-y-1.5">
                                       {afterBlock.messages?.filter(m => !m.content.includes('⚠️ Stopped by user')).map((message, msgIdx) => {
                                         const messageId = `${afterBlock.id}-msg-${msgIdx}`
-                                        const isLong = isLongMessage(message.content)
                                         const isMessageExpanded = expandedMessages.has(messageId)
+                                        const hasOverflow = overflowingMessages.has(messageId)
                                         const toolMessages = afterBlock.messages?.filter(m => m.type === 'tool') || []
                                         const isLatestTool = message.type === 'tool' && message === toolMessages[toolMessages.length - 1]
 
@@ -2207,19 +2235,30 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                               {message.type === 'assistant' && (
                                                 <>
                                                   <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
-                                                  <div className="flex-1">
-                                                    <span className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap">
-                                                      {isLong && !isMessageExpanded ? (
-                                                        getTruncatedMessage(stripQuestions(message.content))
-                                                      ) : (
-                                                        <KeywordHighlight
-                                                          text={stripQuestions(message.content)}
-                                                          keywords={keywords}
-                                                          blockId={afterBlock.id}
-                                                        />
-                                                      )}
-                                                    </span>
-                                                    {isLong && (
+                                                  <div className="flex-1 relative">
+                                                    <div
+                                                      ref={(el) => {
+                                                        if (el) {
+                                                          messageRefs.current.set(messageId, el)
+                                                        } else {
+                                                          messageRefs.current.delete(messageId)
+                                                        }
+                                                      }}
+                                                      className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap"
+                                                      style={{
+                                                        display: '-webkit-box',
+                                                        WebkitBoxOrient: 'vertical',
+                                                        WebkitLineClamp: !isMessageExpanded ? 3 : 'unset',
+                                                        overflow: 'visible'
+                                                      }}
+                                                    >
+                                                      <KeywordHighlight
+                                                        text={stripQuestions(message.content)}
+                                                        keywords={keywords}
+                                                        blockId={afterBlock.id}
+                                                      />
+                                                    </div>
+                                                    {hasOverflow && (
                                                       <button
                                                         onClick={() => {
                                                           const newSet = new Set(expandedMessages)
