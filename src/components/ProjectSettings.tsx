@@ -523,13 +523,13 @@ function ProjectSettings({
                 (isSetupMode && !isSetupComplete) || isInstallingDeps
                   ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
                   : isSetupMode
-                  ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
-                  : 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
+                  ? 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
+                  : 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
               }`}
             >
               {isInstallingDeps ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin inline-block mr-2" />
+                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin inline-block mr-2" />
                   Installing Dependencies...
                 </>
               ) : isSetupMode ? 'Complete Setup' : 'Save Changes'}

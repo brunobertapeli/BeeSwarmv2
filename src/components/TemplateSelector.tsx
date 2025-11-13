@@ -485,7 +485,7 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
                   className={`w-full px-4 py-2 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all text-white shadow-lg ${
                     selectedTemplate?.requiredPlan === 'premium'
                       ? 'bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 shadow-yellow-400/20 hover:shadow-yellow-400/40'
-                      : 'bg-primary hover:bg-primary-dark shadow-primary/20 hover:shadow-primary/40'
+                      : 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-primary/20 hover:shadow-primary/40'
                   }`}
                 >
                   <Crown size={14} />
@@ -498,7 +498,7 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
                   disabled={!projectName.trim()}
                   className={`w-full px-4 py-2 rounded-lg font-medium text-sm flex items-center justify-center gap-2 transition-all ${
                     projectName.trim()
-                      ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20 hover:shadow-primary/40'
+                      ? 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20 hover:shadow-primary/40'
                       : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
                   }`}
                 >

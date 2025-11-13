@@ -273,6 +273,13 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
           timestamp: new Date(),
           isCommandList: true
         }
+      } else if (message === '/hotkeys') {
+        assistantMessage = {
+          id: `msg-${Date.now()}-assistant`,
+          type: 'assistant',
+          content: 'Keyboard Shortcuts:\n\nTAB - Cycle between views\nE - Toggle edit mode\nK - Toggle kanban board\nN - Create new sticky note',
+          timestamp: new Date()
+        }
       } else {
         // AI response placeholder
         assistantMessage = {
@@ -382,8 +389,13 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
     <>
       {/* Chat Modal */}
       {isOpen && (
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-[400px] h-[600px] animate-fadeIn">
-          <div className="bg-dark-card/95 backdrop-blur-xl border border-dark-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full relative">
+        <>
+          {/* Backdrop Overlay */}
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[150]" onClick={onClose} />
+
+          {/* Modal */}
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[151] w-[400px] h-[600px] animate-fadeIn">
+            <div className="bg-dark-card/95 backdrop-blur-xl border border-dark-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full relative">
             {/* Background Image */}
             <div
               className="absolute inset-0 opacity-10 pointer-events-none"
@@ -494,7 +506,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                   <button
                     onClick={handleSubmitBugReport}
                     disabled={!bugTitle.trim() || !bugDescription.trim() || isSubmittingBug}
-                    className="w-full py-2.5 bg-primary hover:bg-primary-dark disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                    className="w-full py-2.5 bg-primary/20 hover:bg-primary/30 border border-primary/50 disabled:bg-gray-700 disabled:border-0 disabled:cursor-not-allowed text-primary disabled:text-white text-sm font-medium rounded-lg transition-colors"
                   >
                     {isSubmittingBug ? 'Submitting...' : 'Submit Bug Report'}
                   </button>
@@ -537,7 +549,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                   <button
                     onClick={handleSubmitOfflineMessage}
                     disabled={!offlineSubject.trim() || !offlineMessage.trim() || isSubmittingOffline}
-                    className="w-full py-2.5 bg-primary hover:bg-primary-dark disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+                    className="w-full py-2.5 bg-primary/20 hover:bg-primary/30 border border-primary/50 disabled:bg-gray-700 disabled:border-0 disabled:cursor-not-allowed text-primary disabled:text-white text-sm font-medium rounded-lg transition-colors"
                   >
                     {isSubmittingOffline ? 'Sending...' : 'Send Message'}
                   </button>
@@ -594,6 +606,14 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                       </p>
                     </div>
 
+                    <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-3">
+                      <p className="text-xs text-gray-300">
+                        <span className="font-mono text-primary">/hotkeys</span>
+                        <span className="text-gray-500"> - </span>
+                        View keyboard shortcuts
+                      </p>
+                    </div>
+
                     <div className="bg-primary/10 border border-primary/30 rounded-lg p-3">
                       <p className="text-xs text-gray-300">
                         Or simply ask anything, and our AI assistant will help you!
@@ -612,7 +632,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                       <div
                         className={`${message.type === 'user' ? 'max-w-[80%]' : 'w-full'} rounded-lg ${
                           message.type === 'user'
-                            ? 'bg-primary text-white px-3 py-2'
+                            ? 'bg-primary/20 text-primary px-3 py-2'
                             : 'bg-dark-bg/50 border border-dark-border/50 text-gray-200'
                         }`}
                       >
@@ -620,7 +640,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                           // User message
                           <>
                             <p className="text-xs leading-relaxed">{message.content}</p>
-                            <p className="text-[10px] mt-1 text-white/60">
+                            <p className="text-[10px] mt-1 text-primary/60">
                               {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </p>
                           </>
@@ -709,6 +729,13 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                                     Report a bug or issue
                                   </p>
                                 </div>
+                                <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-2">
+                                  <p className="text-xs text-gray-300">
+                                    <span className="font-mono text-primary">/hotkeys</span>
+                                    <span className="text-gray-500"> - </span>
+                                    View keyboard shortcuts
+                                  </p>
+                                </div>
                               </div>
                             )}
 
@@ -755,15 +782,16 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                   <button
                     onClick={handleSend}
                     disabled={!inputMessage.trim()}
-                    className="w-10 h-10 rounded-lg bg-primary hover:bg-primary-dark disabled:bg-gray-700 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
+                    className="w-10 h-10 rounded-lg bg-primary/20 hover:bg-primary/30 border border-primary/50 disabled:bg-gray-700 disabled:border-0 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
                   >
-                    <Send size={16} className="text-white" />
+                    <Send size={16} className="text-primary" />
                   </button>
                 </div>
               </div>
             )}
           </div>
         </div>
+        </>
       )}
     </>
   )

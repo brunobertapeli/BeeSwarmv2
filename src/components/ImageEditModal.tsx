@@ -586,7 +586,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
               <button
                 onClick={handleConfirmCrop}
                 disabled={isSaving}
-                className="px-6 py-2 bg-primary hover:bg-primary/90 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                className="px-6 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 disabled:bg-gray-600 disabled:border-0 disabled:cursor-not-allowed text-primary disabled:text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
               >
                 {isSaving ? (
                   <>

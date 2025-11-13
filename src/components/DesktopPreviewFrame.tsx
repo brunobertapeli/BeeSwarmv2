@@ -653,7 +653,7 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
                   <div className="text-gray-300 text-sm mb-4">Preview failed to load</div>
                   <button
                     onClick={handleRetryPreview}
-                    className="px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
+                    className="px-4 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary rounded-lg text-sm font-medium transition-colors flex items-center gap-2 mx-auto"
                   >
                     <RotateCw size={14} />
                     Reload Preview

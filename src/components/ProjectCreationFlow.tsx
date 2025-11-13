@@ -942,7 +942,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                             : isFetchingWebsite
                             ? 'bg-primary/20 text-primary cursor-not-allowed'
                             : isValidWebsiteUrl(importUrl)
-                            ? 'bg-primary hover:bg-primary-dark text-white'
+                            ? 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary'
                             : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
                         }`}
                       >
@@ -1836,7 +1836,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                     disabled={!importDesignOption || (importDesignOption === 'screenshot' && !screenshotFile)}
                     className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
                       importDesignOption && (importDesignOption !== 'screenshot' || screenshotFile)
-                        ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
+                        ? 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
                         : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
                     }`}
                   >
@@ -1883,9 +1883,9 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                         className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
                           (importDesignOption === 'screenshot' || importDesignOption === 'ai')
                             ? projectName.trim()
-                              ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
+                              ? 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
                               : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                            : 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
+                            : 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
                         }`}
                       >
                         {importDesignOption === 'screenshot' || importDesignOption === 'ai' ? (
@@ -1923,7 +1923,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       disabled={!projectName.trim()}
                       className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
                         projectName.trim()
-                          ? 'bg-primary hover:bg-primary-dark text-white shadow-lg shadow-primary/20'
+                          ? 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
                           : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
                       }`}
                     >

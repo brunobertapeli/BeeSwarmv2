@@ -639,7 +639,7 @@ Please read the manifest to understand what my website is about, then create an 
               <p className="text-gray-400 mb-8">Create your first project to get started</p>
               <button
                 onClick={handleCreateProject}
-                className="px-6 py-3 bg-primary hover:bg-primary-dark text-white font-medium rounded-lg transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 flex items-center gap-2 mx-auto"
+                className="px-6 py-3 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary font-medium rounded-lg transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 flex items-center gap-2 mx-auto"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -698,7 +698,7 @@ Please read the manifest to understand what my website is about, then create an 
                       <div className="mt-8">
                         <button
                           onClick={startDevServer}
-                          className="px-6 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg transition-colors font-medium"
+                          className="px-6 py-2.5 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary rounded-lg transition-colors font-medium"
                         >
                           Retry
                         </button>

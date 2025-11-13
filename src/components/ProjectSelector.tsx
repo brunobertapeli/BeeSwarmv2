@@ -415,7 +415,7 @@ function ProjectSelector({
         <div className="px-4 py-3 border-t border-dark-border/50 bg-dark-bg/20 relative z-10">
           <button
             onClick={onCreateProject}
-            className="w-full px-3 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition-all"
+            className="w-full px-3 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition-all"
           >
             <Plus size={16} />
             New Project
