@@ -214,6 +214,8 @@ export interface ElectronAPI {
   receive: (channel: string, func: (...args: any[]) => void) => void
   invoke: (channel: string, ...args: any[]) => Promise<any>
   onDependencyProgress: (callback: (data: string) => void) => void
+  onEditModeToggleRequested: (callback: () => void) => () => void
+  onScreenshotRequested: (callback: () => void) => () => void
 
   auth: {
     signInWithGoogle: () => Promise<{ success: boolean; url?: string; error?: string }>

@@ -302,6 +302,42 @@ function ActionBar({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [layoutState, kanbanEnabled, editModeEnabled, setKanbanEnabled, setEditModeEnabled]) // Re-run when layout state or kanban state changes
 
+  // Listen for global shortcuts from Electron main process
+  useEffect(() => {
+    if (!window.electronAPI) return
+
+    // Listen for edit mode toggle (E key)
+    const unsubEditMode = window.electronAPI.onEditModeToggleRequested?.(() => {
+      // Only trigger if not typing in an input/textarea
+      const activeElement = document.activeElement
+      if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      if (layoutState === 'DEFAULT') {
+        toggleEditMode()
+      }
+    })
+
+    // Listen for screenshot request (P key)
+    const unsubScreenshot = window.electronAPI.onScreenshotRequested?.(() => {
+      // Only trigger if not typing in an input/textarea
+      const activeElement = document.activeElement
+      if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      if (layoutState === 'DEFAULT') {
+        handleTakeScreenshot()
+      }
+    })
+
+    return () => {
+      unsubEditMode?.()
+      unsubScreenshot?.()
+    }
+  }, [layoutState, editModeEnabled, setEditModeEnabled])
+
   // Listen for questions from Claude (plan mode)
   useEffect(() => {
     if (!projectId || !window.electronAPI?.claude) return

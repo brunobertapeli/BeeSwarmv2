@@ -72,10 +72,23 @@ class PreviewService extends EventEmitter {
     this.browserViews.set(projectId, view);
     this.devToolsOpen.set(projectId, false);
 
-    // Disable tab-cycling in BrowserView (Tab key used for layout switching)
+    // Intercept keyboard shortcuts in BrowserView
     view.webContents.on('before-input-event', (event, input) => {
+      // Tab key - used for layout switching
       if (input.key === 'Tab' && input.type === 'keyDown') {
         event.preventDefault();
+      }
+
+      // E key - toggle edit mode (no modifiers)
+      if (input.key.toLowerCase() === 'e' && input.type === 'keyDown' && !input.meta && !input.control && !input.alt) {
+        event.preventDefault();
+        this.mainWindow.webContents.send('edit-mode-toggle-requested');
+      }
+
+      // P key - take screenshot (no modifiers)
+      if (input.key.toLowerCase() === 'p' && input.type === 'keyDown' && !input.meta && !input.control && !input.alt) {
+        event.preventDefault();
+        this.mainWindow.webContents.send('screenshot-requested');
       }
     });
 

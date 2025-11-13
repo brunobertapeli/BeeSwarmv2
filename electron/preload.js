@@ -14,6 +14,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke(channel, ...args)
   },
 
+  // Global shortcut listeners
+  onEditModeToggleRequested: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('edit-mode-toggle-requested', listener)
+    return () => ipcRenderer.removeListener('edit-mode-toggle-requested', listener)
+  },
+  onScreenshotRequested: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('screenshot-requested', listener)
+    return () => ipcRenderer.removeListener('screenshot-requested', listener)
+  },
+
   // Authentication methods
   auth: {
     signInWithGoogle: () => ipcRenderer.invoke('auth:sign-in-google'),
