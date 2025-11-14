@@ -24,6 +24,7 @@
     "@heroicons/react": "^2.2.0",
     "@supabase/supabase-js": "^2.78.0",
     "@xterm/addon-fit": "^0.10.0",
+    "adm-zip": "^0.5.16",
     "ansi-to-html": "^0.7.2",
     "better-sqlite3": "^12.4.1",
     "canvas": "^3.2.0",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",
+    "@types/adm-zip": "^0.5.7",
     "@types/node": "^20.19.24",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",

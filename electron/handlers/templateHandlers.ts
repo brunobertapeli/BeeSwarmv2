@@ -1,11 +1,11 @@
 import { ipcMain } from 'electron'
-import { mongoService } from '../services/MongoService'
+import { backendService } from '../services/BackendService'
 
 export function registerTemplateHandlers() {
   // Fetch all templates
   ipcMain.handle('templates:fetch', async () => {
     try {
-      const templates = await mongoService.getTemplates()
+      const templates = await backendService.getTemplates()
 
       return {
         success: true,
@@ -23,7 +23,7 @@ export function registerTemplateHandlers() {
   // Get template by ID
   ipcMain.handle('templates:get-by-id', async (_event, templateId: string) => {
     try {
-      const template = await mongoService.getTemplateById(templateId)
+      const template = await backendService.getTemplateById(templateId)
 
       if (!template) {
         return {

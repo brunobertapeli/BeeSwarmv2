@@ -326,7 +326,7 @@ Actionable recommendations based on research with specific steps
 
 ## Sources & References
 - [Source 1](url) - Description
-- File: `path/to/file.ts:123` - What you found here
+- File: \`path/to/file.ts:123\` - What you found here
 
 Include code examples, data, diagrams, or other relevant information to support your findings.
 </FINDINGS>

@@ -2,7 +2,7 @@ import { databaseService, Project } from './DatabaseService'
 import { templateService } from './TemplateService'
 import { templateValidator } from './TemplateValidator'
 import { portService } from './PortService'
-import { Template } from './MongoService'
+import { Template } from './BackendService'
 import { getCurrentUserId } from '../main'
 import { pathValidator } from '../utils/PathValidator'
 import fs from 'fs'
@@ -16,6 +16,7 @@ class ProjectService {
    * @param templateId - Template ID
    * @param projectName - Name for the new project
    * @param template - Full template object from MongoDB
+   * @param userEmail - User email for backend plan validation
    * @returns Created project metadata
    */
   async createProject(
@@ -23,6 +24,7 @@ class ProjectService {
     templateId: string,
     projectName: string,
     template: Template,
+    userEmail: string,
     tempImportProjectId?: string,
     screenshotData?: string,
     importType?: 'template' | 'screenshot' | 'ai'
@@ -61,12 +63,13 @@ class ProjectService {
 
 
       try {
-        // Step 3: Clone template from GitHub
+        // Step 3: Download and extract template from backend
         const clonedPath = await templateService.cloneTemplate(
-          template.githubUrl,
+          templateId, // Use template ID, not GitHub URL
           projectName,
           userId,
-          project.id // Pass projectId for terminal output
+          project.id, // Pass projectId for terminal output
+          userEmail // SECURITY: Pass user email for plan validation
         )
 
 

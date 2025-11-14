@@ -26,16 +26,19 @@ import { registerClaudeMdHandlers } from './handlers/claudeMdHandlers.js'
 import { registerImageHandlers } from './handlers/imageHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { layoutManager } from './services/LayoutManager.js'
-import { mongoService } from './services/MongoService.js'
 
 // Global state for current user
 let currentUserId: string | null = null
+let currentUserEmail: string | null = null
 
 /**
  * Set current user and reinitialize user-scoped services
  */
-export function setCurrentUser(userId: string) {
+export function setCurrentUser(userId: string, userEmail?: string) {
   currentUserId = userId
+  if (userEmail) {
+    currentUserEmail = userEmail
+  }
 
   // Reinitialize database for this user
   databaseService.init(userId)
@@ -67,10 +70,18 @@ export function getCurrentUserId(): string | null {
 }
 
 /**
+ * Get current user email
+ */
+export function getCurrentUserEmail(): string | null {
+  return currentUserEmail
+}
+
+/**
  * Clear current user (on logout)
  */
 export function clearCurrentUser() {
   currentUserId = null
+  currentUserEmail = null
 }
 import { previewService } from './services/PreviewService.js'
 import { processManager } from './services/ProcessManager.js'
@@ -350,14 +361,9 @@ async function initializeApp() {
     // This must run before anything else to free ports and kill zombie processes
     await processPersistence.cleanupStaleProcesses()
 
-    // Initialize MongoDB connection early to prevent race conditions
-    // This runs in background - failures are handled gracefully
-    mongoService.connect().catch(error => {
-      console.error('⚠️  MongoDB pre-connection failed (will retry on first use):', error)
-    })
-
     // Note: Local database will be initialized after user login
     // See authHandlers.ts which calls setCurrentUser()
+    // MongoDB is now accessed via backend API instead of direct connection
 
     // Initialize chat history manager (tracks Claude events)
     chatHistoryManager.init()

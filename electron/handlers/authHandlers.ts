@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { authService } from '../services/AuthService'
-import { mongoService } from '../services/MongoService'
+import { backendService } from '../services/BackendService'
 import { setCurrentUser, clearCurrentUser } from '../main'
 
 // Helper to setup OAuth popup with race-condition-safe callback handling
@@ -143,11 +143,11 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         throw new Error('No user data returned from authentication')
       }
 
-      // Fetch or create user in MongoDB
-      let userData = await mongoService.getUserByEmail(user.email)
+      // Fetch or create user via backend
+      let userData = await backendService.getUserByEmail(user.email)
 
       if (!userData) {
-        userData = await mongoService.createUser({
+        userData = await backendService.createUser({
           email: user.email,
           name: user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
           photoUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture,
@@ -164,7 +164,7 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
       }
 
       // Set current user and initialize user-scoped services
-      setCurrentUser(user.id)
+      setCurrentUser(user.id, userData.email)
 
       return {
         success: true,
@@ -185,12 +185,12 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         throw new Error('No user data returned from authentication')
       }
 
-      // Fetch or create user in MongoDB
-      let userData = await mongoService.getUserByEmail(user.email)
+      // Fetch or create user via backend
+      let userData = await backendService.getUserByEmail(user.email)
 
       if (!userData) {
         // Create new user if doesn't exist
-        userData = await mongoService.createUser({
+        userData = await backendService.createUser({
           email: user.email,
           name: user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
           photoUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture,
@@ -207,7 +207,7 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
       }
 
       // Set current user and initialize user-scoped services
-      setCurrentUser(user.id)
+      setCurrentUser(user.id, userData.email)
 
       return {
         success: true,
@@ -228,9 +228,9 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         return { success: true, session: null, user: null }
       }
 
-      // Fetch user data from MongoDB (with retry logic built-in)
+      // Fetch user data from backend
       try {
-        const userData = await mongoService.getUserByEmail(session.user.email)
+        const userData = await backendService.getUserByEmail(session.user.email)
 
         if (!userData) {
           return { success: true, session: null, user: null }
@@ -252,10 +252,10 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
           session,
           user: userResult
         }
-      } catch (mongoError: any) {
-        console.error('⚠️  MongoDB error during session fetch, using cached session only:', mongoError)
+      } catch (backendError: any) {
+        console.error('⚠️  Backend error during session fetch, using cached session only:', backendError)
 
-        // Fallback: Return session without MongoDB user data
+        // Fallback: Return session without backend user data
         // User can still use the app, but may have stale plan data
         const userResult = {
           id: session.user.id,
@@ -271,7 +271,7 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
           success: true,
           session,
           user: userResult,
-          warning: 'Using cached session data - MongoDB unavailable'
+          warning: 'Using cached session data - Backend unavailable'
         }
       }
     } catch (error: any) {
@@ -292,23 +292,23 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
   })
 
   // Restore user session (called when session is restored from localStorage)
-  ipcMain.handle('auth:restore-session', async (_event, userId: string) => {
+  ipcMain.handle('auth:restore-session', async (_event, userId: string, userEmail?: string) => {
     try {
-      setCurrentUser(userId)
+      setCurrentUser(userId, userEmail)
       return { success: true }
     } catch (error: any) {
       return { success: false, error: error.message }
     }
   })
 
-  // Validate user plan from MongoDB (no Supabase session required)
+  // Validate user plan from backend (no Supabase session required)
   ipcMain.handle('auth:validate-user', async (_event, email: string, userId: string) => {
     try {
-      // Fetch user data directly from MongoDB (with retry logic built-in)
-      const userData = await mongoService.getUserByEmail(email)
+      // Fetch user data directly from backend
+      const userData = await backendService.getUserByEmail(email)
 
       if (!userData) {
-        console.warn('⚠️  User not found in MongoDB:', email)
+        console.warn('⚠️  User not found in backend:', email)
         // Fallback: Return cached user data instead of failing
         return {
           success: true,
@@ -319,11 +319,11 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
             photoUrl: undefined,
             plan: 'free'
           },
-          warning: 'User not found in MongoDB, using cached data'
+          warning: 'User not found in backend, using cached data'
         }
       }
 
-      // Return Supabase user ID along with fresh MongoDB data
+      // Return Supabase user ID along with fresh backend data
       const userResult = {
         id: userId, // Preserve Supabase user ID from cached data
         email: userData.email,
@@ -348,7 +348,7 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
           photoUrl: undefined,
           plan: 'free'
         },
-        warning: 'MongoDB error, using cached data: ' + error.message
+        warning: 'Backend error, using cached data: ' + error.message
       }
     }
   })

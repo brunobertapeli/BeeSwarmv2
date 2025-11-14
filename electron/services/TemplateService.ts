@@ -3,6 +3,8 @@ import path from 'path'
 import fs from 'fs'
 import { app } from 'electron'
 import { terminalAggregator } from './TerminalAggregator'
+import { backendService } from './BackendService'
+import AdmZip from 'adm-zip'
 
 class TemplateService {
   private git: SimpleGit
@@ -31,14 +33,15 @@ class TemplateService {
   }
 
   /**
-   * Clone a template from GitHub
-   * @param githubUrl - GitHub repository URL
+   * Download and extract a template from backend
+   * @param templateId - Template ID to download
    * @param projectName - Name of the project (will be sanitized for directory name)
    * @param userId - User ID for project isolation
    * @param projectId - Optional project ID for terminal output
-   * @returns Full path to the cloned project
+   * @param userEmail - User email for backend plan validation
+   * @returns Full path to the extracted project
    */
-  async cloneTemplate(githubUrl: string, projectName: string, userId: string, projectId?: string): Promise<string> {
+  async cloneTemplate(templateId: string, projectName: string, userId: string, projectId?: string, userEmail?: string): Promise<string> {
     try {
       // Ensure projects directory exists
       this.ensureProjectsDir(userId)
@@ -56,30 +59,39 @@ class TemplateService {
         throw new Error(`Project directory already exists: ${dirName}`)
       }
 
-
       // Send to terminal if projectId provided
       if (projectId) {
-        terminalAggregator.addGitLine(projectId, `Cloning template from ${githubUrl}...\n`)
+        terminalAggregator.addGitLine(projectId, `Downloading template ${templateId}...\n`)
       }
 
-      // Clone the repository
-      await this.git.clone(githubUrl, projectPath, {
-        '--depth': 1 // Shallow clone for faster cloning
-      })
+      // Download template zip to temp location
+      const tempDir = app.getPath('temp')
+      const tempZipPath = path.join(tempDir, `template-${templateId}-${Date.now()}.zip`)
 
+      // SECURITY: Pass user email for backend plan validation
+      if (!userEmail) {
+        throw new Error('User email is required for template download')
+      }
+
+      await backendService.downloadTemplate(templateId, tempZipPath, userEmail)
 
       if (projectId) {
-        terminalAggregator.addGitLine(projectId, `✓ Template cloned successfully to ${projectPath}\n`)
+        terminalAggregator.addGitLine(projectId, `✓ Template downloaded successfully\n`)
       }
 
-      // Remove .git directory to detach from template repo
-      const gitDir = path.join(projectPath, '.git')
-      if (fs.existsSync(gitDir)) {
-        fs.rmSync(gitDir, { recursive: true, force: true })
+      // Extract zip file
+      if (projectId) {
+        terminalAggregator.addGitLine(projectId, `Extracting template...\n`)
+      }
 
-        if (projectId) {
-          terminalAggregator.addGitLine(projectId, `✓ Removed template .git directory\n`)
-        }
+      const zip = new AdmZip(tempZipPath)
+      zip.extractAllTo(projectPath, true)
+
+      // Clean up temp zip file
+      fs.unlinkSync(tempZipPath)
+
+      if (projectId) {
+        terminalAggregator.addGitLine(projectId, `✓ Template extracted to ${projectPath}\n`)
       }
 
       // Initialize new git repository
@@ -92,10 +104,10 @@ class TemplateService {
 
       return projectPath
     } catch (error) {
-      console.error('❌ Failed to clone template:', error)
+      console.error('❌ Failed to download template:', error)
 
       if (projectId) {
-        terminalAggregator.addGitLine(projectId, `✗ Failed to clone template: ${error instanceof Error ? error.message : 'Unknown error'}\n`, 'stderr')
+        terminalAggregator.addGitLine(projectId, `✗ Failed to download template: ${error instanceof Error ? error.message : 'Unknown error'}\n`, 'stderr')
       }
 
       throw error

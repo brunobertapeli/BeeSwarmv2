@@ -1,10 +1,10 @@
 import { ipcMain, WebContents } from 'electron'
 import { projectService } from '../services/ProjectService'
-import { mongoService } from '../services/MongoService'
+import { backendService } from '../services/BackendService'
 import { databaseService } from '../services/DatabaseService'
 import { envService } from '../services/EnvService'
 import { dependencyService } from '../services/DependencyService'
-import { getCurrentUserId } from '../main'
+import { getCurrentUserId, getCurrentUserEmail } from '../main'
 import { requireAuth, validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware'
 import { claudeService } from '../services/ClaudeService'
 
@@ -14,6 +14,14 @@ export function registerProjectHandlers() {
     try {
       // SECURITY: Ensure user is authenticated
       const userId = requireAuth()
+      const userEmail = getCurrentUserEmail()
+
+      if (!userEmail) {
+        return {
+          success: false,
+          error: 'User email not found. Please log in again.'
+        }
+      }
 
       if (tempImportProjectId) {
       }
@@ -22,8 +30,8 @@ export function registerProjectHandlers() {
       if (importType) {
       }
 
-      // Fetch template details from MongoDB
-      const template = await mongoService.getTemplateById(templateId)
+      // Fetch template details from backend
+      const template = await backendService.getTemplateById(templateId)
 
       if (!template) {
         return {
@@ -32,8 +40,8 @@ export function registerProjectHandlers() {
         }
       }
 
-      // Create the project with userId (and optional tempImportProjectId/screenshot/importType for import)
-      const project = await projectService.createProject(userId, templateId, projectName, template, tempImportProjectId, screenshotData, importType)
+      // Create the project with userId and userEmail (and optional tempImportProjectId/screenshot/importType for import)
+      const project = await projectService.createProject(userId, templateId, projectName, template, userEmail, tempImportProjectId, screenshotData, importType)
 
       return {
         success: true,
