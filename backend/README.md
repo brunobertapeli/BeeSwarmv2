@@ -34,8 +34,16 @@ Electron App → BackendService (HTTP) → Backend API (Render) → MongoDB
 MONGODB_URI=mongodb+srv://...
 PORT=3000
 NODE_ENV=production
-ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+ALLOWED_ORIGINS=codedeck://localhost,https://code-deck-frontend.vercel.app,http://localhost:5173,http://localhost:5177,https://codedeckai.com,https://www.codedeckai.com
 ```
+
+**ALLOWED_ORIGINS Breakdown:**
+- `codedeck://localhost` - Production Electron app (custom protocol)
+- `http://localhost:5173` - Development Electron app (Vite dev server)
+- `http://localhost:5177` - Alternative dev port
+- `https://code-deck-frontend.vercel.app` - Web frontend (Vercel)
+- `https://codedeckai.com` - Production web domain
+- `https://www.codedeckai.com` - Production web domain (www)
 
 ## API Endpoints
 

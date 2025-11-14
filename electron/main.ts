@@ -3,7 +3,7 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 // Now import everything else
-import { app, BrowserWindow, Menu, shell, ipcMain, globalShortcut } from 'electron'
+import { app, BrowserWindow, Menu, shell, ipcMain, globalShortcut, protocol, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
@@ -104,7 +104,21 @@ if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 }
 
-
+// Register custom protocol for production builds
+// This allows CORS to work properly with a real origin instead of 'null'
+if (!isDev) {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'codedeck',
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true
+      }
+    }
+  ])
+}
 
 let mainWindow: BrowserWindow | null = null
 
@@ -311,14 +325,14 @@ User: ${currentUserId || 'not logged in'}
                 "frame-src 'self' http://localhost:*" // Allow iframes from localhost
               ].join('; ')
             : [
-                "default-src 'self'",
-                "script-src 'self'",
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-                "font-src 'self' https://fonts.gstatic.com",
-                "img-src 'self' https://* data:",
-                "connect-src 'self' https://*",
-                "worker-src 'self' blob:",
-                "frame-src 'self'"
+                "default-src 'self' codedeck:",
+                "script-src 'self' codedeck:",
+                "style-src 'self' codedeck: 'unsafe-inline' https://fonts.googleapis.com",
+                "font-src 'self' codedeck: https://fonts.gstatic.com",
+                "img-src 'self' codedeck: https://* data:",
+                "connect-src 'self' codedeck: https://*",
+                "worker-src 'self' codedeck: blob:",
+                "frame-src 'self' codedeck:"
               ].join('; ')
         ]
       }
@@ -329,7 +343,8 @@ User: ${currentUserId || 'not logged in'}
     mainWindow.loadURL('http://localhost:5173')
     mainWindow.webContents.openDevTools()
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+    // Use custom protocol for better CORS support
+    mainWindow.loadURL('codedeck://localhost/index.html')
   }
 
   mainWindow.on('closed', () => {
@@ -585,6 +600,17 @@ ipcMain.handle('keywords:get-all', async () => {
 app.whenReady().then(async () => {
   // Load keywords for educational tooltips (loads fresh every time app starts)
   keywordService.loadKeywords()
+
+  // Register custom protocol handler for production
+  if (!isDev) {
+    protocol.handle('codedeck', (request) => {
+      // Extract the path from the URL (e.g., codedeck://localhost/index.html -> index.html)
+      const url = request.url.replace('codedeck://localhost/', '')
+      const filePath = path.join(__dirname, '../dist', url)
+
+      return net.fetch(`file://${filePath}`)
+    })
+  }
 
   await initializeApp()
   createMenu()
