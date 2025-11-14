@@ -632,6 +632,54 @@ export interface ElectronAPI {
     }>
   }
 
+  researchAgent: {
+    start: (
+      projectId: string,
+      agentType: 'bug-finder' | 'code-auditor' | 'web-searcher' | 'api-researcher' | 'feature-planner' | 'researcher',
+      task: string,
+      model: string,
+      attachments?: Array<{ type: 'image'; data: string; mediaType: string; name?: string }>
+    ) => Promise<{
+      success: boolean
+      agentId?: string
+      error?: string
+    }>
+    stop: (agentId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    getList: (projectId: string) => Promise<{
+      success: boolean
+      agents?: Array<{
+        id: string
+        projectId: string
+        agentType: string
+        task: string
+        model: string
+        status: 'starting' | 'working' | 'finished' | 'error' | 'stopped'
+        startTime: number
+        endTime: number | null
+        result: string | null
+        briefDescription: string | null
+        summary: string | null
+        actions: any[] | null
+      }>
+      error?: string
+    }>
+    getFullHistory: (agentId: string) => Promise<{
+      success: boolean
+      fullHistory?: any
+      error?: string
+    }>
+    delete: (agentId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    onStatusChanged: (callback: (agentId: string, projectId: string, status: string, agent: any) => void) => () => void
+    onCompleted: (callback: (agentId: string, projectId: string) => void) => () => void
+    onEvent: (callback: (agentId: string, projectId: string, type: string, message: any) => void) => () => void
+  }
+
   chat: {
     createBlock: (projectId: string, userPrompt: string) => Promise<{
       success: boolean

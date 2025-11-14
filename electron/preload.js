@@ -315,6 +315,32 @@ contextBridge.exposeInMainWorld('electronAPI', {
     restoreCheckpoint: (projectId, commitHash) => ipcRenderer.invoke('git:restore-checkpoint', projectId, commitHash)
   },
 
+  // Research Agent methods
+  researchAgent: {
+    start: (projectId, agentType, task, model, attachments) => ipcRenderer.invoke('research-agent:start', projectId, agentType, task, model, attachments),
+    stop: (agentId) => ipcRenderer.invoke('research-agent:stop', agentId),
+    getList: (projectId) => ipcRenderer.invoke('research-agent:get-list', projectId),
+    getFullHistory: (agentId) => ipcRenderer.invoke('research-agent:get-full-history', agentId),
+    delete: (agentId) => ipcRenderer.invoke('research-agent:delete', agentId),
+
+    // Research Agent event listeners
+    onStatusChanged: (callback) => {
+      const listener = (_event, agentId, projectId, status, agent) => callback(agentId, projectId, status, agent)
+      ipcRenderer.on('research-agent:status-changed', listener)
+      return () => ipcRenderer.removeListener('research-agent:status-changed', listener)
+    },
+    onCompleted: (callback) => {
+      const listener = (_event, agentId, projectId) => callback(agentId, projectId)
+      ipcRenderer.on('research-agent:completed', listener)
+      return () => ipcRenderer.removeListener('research-agent:completed', listener)
+    },
+    onEvent: (callback) => {
+      const listener = (_event, agentId, projectId, type, message) => callback(agentId, projectId, type, message)
+      ipcRenderer.on('research-agent:event', listener)
+      return () => ipcRenderer.removeListener('research-agent:event', listener)
+    }
+  },
+
   // App methods
   app: {
     flashWindow: () => ipcRenderer.send('app:flash-window'),

@@ -911,14 +911,22 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setActionBarHeight(entry.target.clientHeight)
+        const newHeight = entry.target.clientHeight
+        console.log('🔍 [ActionBar ResizeObserver] Height changed:', {
+          oldHeight: actionBarHeight,
+          newHeight,
+          diff: newHeight - actionBarHeight
+        })
+        setActionBarHeight(newHeight)
       }
     })
 
     resizeObserver.observe(actionBarRef.current)
 
     // Set initial height
-    setActionBarHeight(actionBarRef.current.clientHeight)
+    const initialHeight = actionBarRef.current.clientHeight
+    console.log('🔍 [ActionBar ResizeObserver] Initial height:', initialHeight)
+    setActionBarHeight(initialHeight)
 
     return () => {
       resizeObserver.disconnect()
@@ -1037,9 +1045,26 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
   // Calculate bottom position based on action bar height
   const baseOffset = -19 // Gap between action bar and status sheet (adjusted for 5px lower action bar)
-  const bottomPosition = isVisible
-    ? (actionBarHeight > 0 ? actionBarHeight + baseOffset : 95)
-    : (actionBarHeight > 0 ? actionBarHeight - 14 : 75)
+  const bottomPosition = actionBarHeight > 0 ? actionBarHeight + baseOffset : 76
+
+  // Debug logging for position changes
+  useEffect(() => {
+    if (statusSheetRef.current) {
+      const rect = statusSheetRef.current.getBoundingClientRect()
+      console.log('📊 [StatusSheet Position Debug]', {
+        actionBarHeight,
+        bottomPosition,
+        isExpanded,
+        isVisible,
+        hasHistory,
+        allBlocksLength: allBlocks.length,
+        statusSheetHeight: statusSheetRef.current.clientHeight,
+        statusSheetOffsetHeight: statusSheetRef.current.offsetHeight,
+        actualBottom: rect.bottom,
+        actualTop: rect.top
+      })
+    }
+  }, [actionBarHeight, bottomPosition, isExpanded, isVisible, hasHistory, allBlocks.length])
 
   // Always render if has history (show collapsed or expanded based on state)
   const shouldRender = hasHistory
@@ -1082,7 +1107,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
           return (
             <div
-              className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10"
+              className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10 h-[40px] overflow-hidden"
               onClick={handleExpand}
             >
               {currentBlock.type === 'deployment' || currentBlock.type === 'initialization' ? (
@@ -1112,19 +1137,21 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                     {collapsedState.text}
                   </span>
                   {/* Stop button - only show when working on conversation */}
-                  {isWorking && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation() // Prevent expanding when clicking stop
-                        onStopClick?.()
-                      }}
-                      className="p-1.5 hover:bg-red-500/10 rounded transition-colors group"
-                      title="Stop generation"
-                    >
-                      <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
-                    </button>
-                  )}
-                  <ChevronUp size={14} className="text-gray-400" />
+                  <div className="w-[28px] flex items-center justify-center flex-shrink-0">
+                    {isWorking && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation() // Prevent expanding when clicking stop
+                          onStopClick?.()
+                        }}
+                        className="p-1.5 hover:bg-red-500/10 rounded transition-colors group"
+                        title="Stop generation"
+                      >
+                        <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
+                      </button>
+                    )}
+                  </div>
+                  <ChevronUp size={14} className="text-gray-400 flex-shrink-0" />
                 </div>
               )}
             </div>
@@ -1570,7 +1597,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                 display: '-webkit-box',
                                                 WebkitBoxOrient: 'vertical',
                                                 WebkitLineClamp: !isMessageExpanded ? 3 : 'unset',
-                                                overflow: 'visible'
+                                                overflow: 'hidden'
                                               }}
                                             >
                                               <KeywordHighlight

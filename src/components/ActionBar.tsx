@@ -1072,7 +1072,7 @@ function ActionBar({
               />
               {isClaudeWorking ? (
                 <div className="absolute right-3 bottom-2.5">
-                  <div className="relative w-[18px] h-[18px]">
+                  <div className="relative w-[18px] h-[18px] overflow-hidden">
                     {/* Pulsing outer ring */}
                     <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
                     {/* Spinning loader */}

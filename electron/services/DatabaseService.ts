@@ -111,6 +111,9 @@ class DatabaseService {
       // Create chat history table
       this.createChatHistoryTable()
 
+      // Create research agents table
+      this.createResearchAgentsTable()
+
       // Run migrations
       this.runMigrations()
 
@@ -171,6 +174,38 @@ class DatabaseService {
     // Create index for faster queries by projectId
     this.db!.exec('CREATE INDEX IF NOT EXISTS idx_chat_history_projectId ON chat_history(projectId)')
     this.db!.exec('CREATE INDEX IF NOT EXISTS idx_chat_history_blockIndex ON chat_history(projectId, blockIndex)')
+  }
+
+  /**
+   * Create research_agents table
+   */
+  private createResearchAgentsTable(): void {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS research_agents (
+        id TEXT PRIMARY KEY,
+        projectId TEXT NOT NULL,
+        agentType TEXT NOT NULL,
+        task TEXT NOT NULL,
+        model TEXT NOT NULL,
+        sessionId TEXT,
+        status TEXT NOT NULL,
+        startTime INTEGER NOT NULL,
+        endTime INTEGER,
+        result TEXT,
+        briefDescription TEXT,
+        summary TEXT,
+        actions TEXT,
+        findings TEXT,
+        fullHistory TEXT,
+        FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `
+
+    this.db!.exec(sql)
+
+    // Create index for faster queries by projectId
+    this.db!.exec('CREATE INDEX IF NOT EXISTS idx_research_agents_projectId ON research_agents(projectId)')
+    this.db!.exec('CREATE INDEX IF NOT EXISTS idx_research_agents_status ON research_agents(projectId, status)')
   }
 
   /**
@@ -286,6 +321,28 @@ class DatabaseService {
       const hasStickyNotesState = tableInfo.some(col => col.name === 'stickyNotesState')
       if (!hasStickyNotesState) {
         this.db.exec('ALTER TABLE projects ADD COLUMN stickyNotesState TEXT')
+      }
+
+      // Migration 17: Add briefDescription column to research_agents table if it doesn't exist
+      try {
+        const researchAgentsTableInfo = this.db.prepare('PRAGMA table_info(research_agents)').all() as any[]
+        const hasBriefDescription = researchAgentsTableInfo.some(col => col.name === 'briefDescription')
+        if (!hasBriefDescription) {
+          this.db.exec('ALTER TABLE research_agents ADD COLUMN briefDescription TEXT')
+        }
+      } catch (e) {
+        // research_agents table might not exist yet - that's ok
+      }
+
+      // Migration 18: Add findings column to research_agents table if it doesn't exist
+      try {
+        const researchAgentsTableInfo = this.db.prepare('PRAGMA table_info(research_agents)').all() as any[]
+        const hasFindings = researchAgentsTableInfo.some(col => col.name === 'findings')
+        if (!hasFindings) {
+          this.db.exec('ALTER TABLE research_agents ADD COLUMN findings TEXT')
+        }
+      } catch (e) {
+        // research_agents table might not exist yet - that's ok
       }
 
       // Future migrations can be added here
@@ -1150,6 +1207,175 @@ class DatabaseService {
       this.db.prepare(sql).run(projectId)
     } catch (error) {
       console.error('❌ Failed to delete chat history:', error)
+      throw error
+    }
+  }
+
+  // ==================== RESEARCH AGENT METHODS ====================
+
+  /**
+   * Create a new research agent
+   */
+  createResearchAgent(agent: any): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = `
+      INSERT INTO research_agents (
+        id, projectId, agentType, task, model, sessionId, status, startTime, endTime, result, summary, actions, fullHistory
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+
+    try {
+      this.db.prepare(sql).run(
+        agent.id,
+        agent.projectId,
+        agent.agentType,
+        agent.task,
+        agent.model,
+        agent.sessionId,
+        agent.status,
+        agent.startTime,
+        agent.endTime,
+        agent.result,
+        agent.summary,
+        agent.actions,
+        agent.fullHistory
+      )
+    } catch (error) {
+      console.error('❌ Failed to create research agent:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update research agent status
+   */
+  updateResearchAgentStatus(agentId: string, status: string): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'UPDATE research_agents SET status = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(status, agentId)
+    } catch (error) {
+      console.error('❌ Failed to update research agent status:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update research agent session ID
+   */
+  updateResearchAgentSessionId(agentId: string, sessionId: string): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'UPDATE research_agents SET sessionId = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(sessionId, agentId)
+    } catch (error) {
+      console.error('❌ Failed to update research agent session ID:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update research agent result
+   */
+  updateResearchAgentResult(agentId: string, data: {
+    result: string | null
+    briefDescription: string | null
+    summary: string | null
+    actions: string | null
+    findings: string | null
+    fullHistory: string | null
+    endTime: number | null
+  }): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = `
+      UPDATE research_agents
+      SET result = ?, briefDescription = ?, summary = ?, actions = ?, findings = ?, fullHistory = ?, endTime = ?
+      WHERE id = ?
+    `
+
+    try {
+      this.db.prepare(sql).run(
+        data.result,
+        data.briefDescription,
+        data.summary,
+        data.actions,
+        data.findings,
+        data.fullHistory,
+        data.endTime,
+        agentId
+      )
+    } catch (error) {
+      console.error('❌ Failed to update research agent result:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get all research agents for a project
+   */
+  getResearchAgentsForProject(projectId: string): any[] {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'SELECT * FROM research_agents WHERE projectId = ? ORDER BY startTime DESC'
+
+    try {
+      const rows = this.db.prepare(sql).all(projectId) as any[]
+      return rows
+    } catch (error) {
+      console.error('❌ Failed to get research agents:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get a specific research agent by ID
+   */
+  getResearchAgent(agentId: string): any | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'SELECT * FROM research_agents WHERE id = ?'
+
+    try {
+      const row = this.db.prepare(sql).get(agentId) as any
+      return row || null
+    } catch (error) {
+      console.error('❌ Failed to get research agent:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Delete all research agents for a project
+   */
+  deleteResearchAgents(projectId: string): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'DELETE FROM research_agents WHERE projectId = ?'
+
+    try {
+      this.db.prepare(sql).run(projectId)
+    } catch (error) {
+      console.error('❌ Failed to delete research agents:', error)
       throw error
     }
   }

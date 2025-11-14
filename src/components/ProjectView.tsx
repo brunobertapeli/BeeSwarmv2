@@ -54,6 +54,7 @@ function ProjectView() {
   const [showUserProfileModal, setShowUserProfileModal] = useState(false)
   const [showHelpChat, setShowHelpChat] = useState(false)
   const [helpChatFreezeReady, setHelpChatFreezeReady] = useState(false)
+  const [researchAgentStatusExpanded, setResearchAgentStatusExpanded] = useState(false)
 
   // Dev server and preview state
   const [serverStatus, setServerStatus] = useState<ProcessState>('stopped')
@@ -717,6 +718,8 @@ Please read the manifest to understand what my website is about, then create an 
         <ResearchAgentStatusSheet
           projectId={currentProjectId || undefined}
           researchAgentRef={researchAgentRef}
+          isExpanded={researchAgentStatusExpanded}
+          onToggleExpand={() => setResearchAgentStatusExpanded(!researchAgentStatusExpanded)}
         />
       )}
 
@@ -725,6 +728,7 @@ Please read the manifest to understand what my website is about, then create an 
         <ResearchAgent
           ref={researchAgentRef}
           projectId={currentProjectId || undefined}
+          onStatusClick={() => setResearchAgentStatusExpanded(!researchAgentStatusExpanded)}
         />
       )}
 

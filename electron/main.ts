@@ -17,6 +17,7 @@ import { registerShellHandlers } from './handlers/shellHandlers.js'
 import { registerTerminalHandlers, setTerminalHandlersWindow } from './handlers/terminalHandlers.js'
 import { registerClaudeHandlers, setClaudeHandlersWindow } from './handlers/claudeHandlers.js'
 import { registerChatHandlers, setChatHandlersWindow } from './handlers/chatHandlers.js'
+import { registerResearchAgentHandlers, setResearchAgentHandlersWindow } from './handlers/researchAgentHandlers.js'
 import { registerSupportHandlers } from './handlers/supportHandlers.js'
 import { registerGitHandlers, setGitHandlersWindow } from './handlers/gitHandlers.js'
 import { registerSecureStorageHandlers } from './handlers/secureStorageHandlers.js'
@@ -335,6 +336,7 @@ User: ${currentUserId || 'not logged in'}
   setTerminalHandlersWindow(mainWindow.webContents)
   setClaudeHandlersWindow(mainWindow.webContents)
   setChatHandlersWindow(mainWindow.webContents)
+  setResearchAgentHandlersWindow(mainWindow.webContents)
   setGitHandlersWindow(mainWindow.webContents)
 }
 
@@ -373,6 +375,7 @@ async function initializeApp() {
     registerTerminalHandlers()
     registerClaudeHandlers()
     registerChatHandlers()
+    registerResearchAgentHandlers()
     registerSupportHandlers()
     registerGitHandlers()
     registerWebsiteImportHandlers()
