@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, RefreshCw, Code, Server, Rocket, X, AlertCircle } from 'lucide-react'
 import { Template } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
+import noiseBgImage from '../assets/images/noise_bg.png'
 
 type WizardStep = 'cloning' | 'env-config' | 'installing' | 'initializing' | 'complete' | 'error'
 
@@ -210,11 +211,11 @@ export function ProjectCreationWizard({
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="relative w-full max-w-lg bg-dark-card border border-dark-border rounded-xl shadow-2xl mx-4 overflow-hidden"
+        className="relative w-full max-w-lg bg-dark-card border border-dark-border rounded-lg shadow-2xl mx-4 overflow-hidden"
       >
         {/* Background Image */}
         <div
-          className="absolute inset-0 opacity-10 pointer-events-none"
+          className="absolute inset-0 opacity-10 pointer-events-none z-0"
           style={{
             backgroundImage: `url(${bgImage})`,
             backgroundSize: 'cover',
@@ -222,8 +223,19 @@ export function ProjectCreationWizard({
           }}
         />
 
+        {/* Noise texture overlay */}
+        <div
+          className="absolute inset-0 opacity-50 pointer-events-none z-[1]"
+          style={{
+            backgroundImage: `url(${noiseBgImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            mixBlendMode: 'soft-light',
+          }}
+        />
+
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-border/50 relative z-10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-border relative z-10">
           <div>
             <h2 className="text-sm font-semibold text-white">Creating {projectName}</h2>
             <p className="text-[11px] text-gray-500 mt-0.5">
@@ -348,8 +360,8 @@ export function ProjectCreationWizard({
                 exit={{ opacity: 0, scale: 0.9 }}
                 className="text-center"
               >
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-500/10 rounded-full mb-5">
-                  <CheckCircle className="w-10 h-10 text-green-500" />
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-5">
+                  <CheckCircle className="w-10 h-10 text-primary" />
                 </div>
                 <h3 className="text-lg font-bold text-white mb-2">
                   Your Project is Ready!
@@ -411,7 +423,7 @@ export function ProjectCreationWizard({
 
         {/* Progress Steps Indicator */}
         {currentStep !== 'complete' && currentStep !== 'error' && (
-          <div className="border-t border-dark-border/50 px-8 py-4 bg-dark-bg/20 relative z-10">
+          <div className="border-t border-dark-border px-8 py-4 relative z-10">
             <div className="flex items-center justify-center gap-2">
               <ProgressDot active={currentStep === 'cloning'} completed={['env-config', 'installing', 'initializing'].includes(currentStep)} />
               <ProgressLine completed={['env-config', 'installing', 'initializing'].includes(currentStep)} />
@@ -469,7 +481,7 @@ function ProgressDot({ active, completed }: { active: boolean; completed: boolea
     <div
       className={`w-2 h-2 rounded-full transition-colors ${
         completed
-          ? 'bg-green-500'
+          ? 'bg-primary'
           : active
           ? 'bg-primary ring-2 ring-primary/30'
           : 'bg-gray-600'
@@ -482,7 +494,7 @@ function ProgressLine({ completed }: { completed: boolean }) {
   return (
     <div
       className={`h-0.5 w-8 transition-colors ${
-        completed ? 'bg-green-500' : 'bg-gray-600'
+        completed ? 'bg-primary' : 'bg-gray-600'
       }`}
     />
   )

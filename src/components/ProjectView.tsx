@@ -19,6 +19,8 @@ import KanbanWidget from './KanbanWidget'
 import StickyNoteWidget from './StickyNoteWidget'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
+import mainShapeImage from '../assets/images/main_shape.png'
+import noiseBgImage from '../assets/images/noise_bg.png'
 
 function ProjectView() {
   const {
@@ -485,7 +487,30 @@ Please read the manifest to understand what my website is about, then create an 
   }
 
   return (
-    <div className="w-full h-screen relative flex flex-col bg-gradient-to-br from-zinc-950 via-neutral-900 to-black">
+    <div className="w-full h-screen relative flex flex-col bg-[#0A0020] overflow-hidden">
+      {/* Fixed shape background - Behind all content */}
+      <div
+        className="fixed left-0 top-0 w-full h-full pointer-events-none opacity-60"
+        style={{
+          backgroundImage: `url(${mainShapeImage})`,
+          backgroundPosition: 'center',
+          backgroundSize: 'cover',
+          zIndex: 0
+        }}
+      />
+
+      {/* Noise texture overlay - Behind all content */}
+      <div
+        className="fixed left-0 top-0 w-full h-full opacity-70 pointer-events-none"
+        style={{
+          backgroundImage: `url(${noiseBgImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          mixBlendMode: 'soft-light',
+          zIndex: 1
+        }}
+      />
+
       {/* Top Header Bar */}
       <div className="fixed top-0 left-0 right-0 h-[40px] z-[99] border-b border-gray-700/50 bg-gray-800/50 flex items-center justify-center relative overflow-hidden" style={{ WebkitAppRegion: 'drag' } as any}>
         {/* Background image with low opacity */}
@@ -563,7 +588,7 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* User Profile Modal */}
       {showUserProfileModal && (
-        <div className="fixed top-[48px] right-2 z-[100]">
+        <div className="fixed top-[48px] right-2 z-[200]">
           <UserProfile
             onClose={() => setShowUserProfileModal(false)}
             excludeElement="[data-settings-button]"
@@ -590,161 +615,141 @@ Please read the manifest to understand what my website is about, then create an 
       />
 
       {/* Preview Area - Desktop or Mobile Mode */}
-      <div className="w-full relative overflow-hidden" style={{ height: 'calc(100vh - 40px - 187px)' }}>
+      <div className="w-full relative overflow-hidden p-[5px] border-b border-gray-700/50 z-[101]" style={{ height: 'calc(100vh - 40px - 200px)' }}>
         {loading ? (
           // Loading State
           <div className="absolute inset-0 flex items-center justify-center">
-            {/* Background Gradient */}
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-950 via-blue-950 to-black" />
-            <div className="absolute inset-0 bg-black/40" />
-
-            {/* Dot Pattern Overlay */}
-            <div
-              className="absolute inset-0 opacity-30 pointer-events-none"
-              style={{
-                backgroundImage: `radial-gradient(circle, rgba(139, 92, 246, 0.5) 1px, transparent 1px)`,
-                backgroundSize: "24px 24px",
-              }}
-            />
-
             <div className="text-center relative z-10">
-              <div className="w-16 h-16 mx-auto mb-4">
-                <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary"></div>
+              <div className="spinner">
+                <div className="rect1" />
+                <div className="rect2" />
+                <div className="rect3" />
+                <div className="rect4" />
+                <div className="rect5" />
               </div>
-              <p className="text-gray-300 text-lg">Loading your projects...</p>
+              <p className="banner-subtitle mt-8" style={{ marginBottom: '0' }}>Loading your projects...</p>
             </div>
           </div>
         ) : projects.length === 0 ? (
           // No Projects State
-          <div className="absolute inset-0 flex items-center justify-center">
-            {/* Background Gradient */}
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-950 via-blue-950 to-black" />
-            <div className="absolute inset-0 bg-black/40" />
+          <div className="absolute inset-0 flex items-center justify-center pt-[33.33vh]">
+            <div className="text-center relative z-10 max-w-4xl mx-auto px-8">
+              <h2 className="banner-title">No Projects Yet</h2>
+              <p className="banner-subtitle">Create your first project to get started</p>
 
-            {/* Dot Pattern Overlay */}
-            <div
-              className="absolute inset-0 opacity-30 pointer-events-none"
-              style={{
-                backgroundImage: `radial-gradient(circle, rgba(139, 92, 246, 0.5) 1px, transparent 1px)`,
-                backgroundSize: "24px 24px",
-              }}
-            />
-
-            <div className="text-center relative z-10">
-              <div className="w-32 h-32 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 7V17C3 18.1046 3.89543 19 5 19H19C20.1046 19 21 18.1046 21 17V9C21 7.89543 20.1046 7 19 7H13L11 5H5C3.89543 5 3 5.89543 3 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"/>
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-2">No Projects Yet</h2>
-              <p className="text-gray-400 mb-8">Create your first project to get started</p>
               <button
                 onClick={handleCreateProject}
-                className="px-6 py-3 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary font-medium rounded-lg transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 flex items-center gap-2 mx-auto"
+                className="gradient-btn gradient-btn-two"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
                 Create Project
               </button>
             </div>
           </div>
         ) : viewMode === 'mobile' ? (
           // Mobile Mode: Use MobilePreviewFrame with device emulation
-          <MobilePreviewFrame
-            port={serverPort || undefined}
-            projectId={currentProject?.id}
-          />
+          <div className="w-full h-full">
+            <MobilePreviewFrame
+              port={serverPort || undefined}
+              projectId={currentProject?.id}
+            />
+          </div>
         ) : (
           // Desktop Mode: Use DesktopPreviewFrame
-          <DesktopPreviewFrame
-            port={serverPort || undefined}
-            projectId={currentProject?.id}
-            useBrowserView={true}
-          >
-              {!(serverPort && serverStatus === 'running') && (
-                <div className="w-full h-full bg-white flex items-center justify-center">
-                  <div className="text-center px-4">
-                    <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
-                      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M32 8L16 24L32 40L48 24L32 8Z" fill="url(#grad1)" opacity="0.9"/>
-                        <path d="M32 28L20 40L32 52L44 40L32 28Z" fill="url(#grad2)" opacity="0.7"/>
-                        <defs>
-                          <linearGradient id="grad1" x1="16" y1="8" x2="48" y2="40" gradientUnits="userSpaceOnUse">
-                            <stop stopColor="#10B981"/>
-                            <stop offset="1" stopColor="#059669"/>
-                          </linearGradient>
-                          <linearGradient id="grad2" x1="20" y1="28" x2="44" y2="52" gradientUnits="userSpaceOnUse">
-                            <stop stopColor="#10B981"/>
-                            <stop offset="1" stopColor="#8B5CF6"/>
-                          </linearGradient>
-                        </defs>
-                      </svg>
+          <div className="w-full h-full">
+            <DesktopPreviewFrame
+              port={serverPort || undefined}
+              projectId={currentProject?.id}
+              useBrowserView={true}
+            >
+                {!(serverPort && serverStatus === 'running') && (
+                  <div className="w-full h-full bg-white flex items-center justify-center">
+                    <div className="text-center px-4">
+                      <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
+                        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M32 8L16 24L32 40L48 24L32 8Z" fill="url(#grad1)" opacity="0.9"/>
+                          <path d="M32 28L20 40L32 52L44 40L32 28Z" fill="url(#grad2)" opacity="0.7"/>
+                          <defs>
+                            <linearGradient id="grad1" x1="16" y1="8" x2="48" y2="40" gradientUnits="userSpaceOnUse">
+                              <stop stopColor="#10B981"/>
+                              <stop offset="1" stopColor="#059669"/>
+                            </linearGradient>
+                            <linearGradient id="grad2" x1="20" y1="28" x2="44" y2="52" gradientUnits="userSpaceOnUse">
+                              <stop stopColor="#10B981"/>
+                              <stop offset="1" stopColor="#8B5CF6"/>
+                            </linearGradient>
+                          </defs>
+                        </svg>
+                      </div>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Project Preview</h2>
+                      <p className="text-gray-600">
+                        {serverStatus === 'starting' && 'Starting dev server...'}
+                        {serverStatus === 'running' && !previewReady && 'Loading preview...'}
+                        {serverStatus === 'error' && 'Error starting server. Check console for details.'}
+                        {serverStatus === 'crashed' && 'Server crashed. Check console for details.'}
+                        {serverStatus === 'stopped' && 'Server stopped'}
+                      </p>
+                      {(serverStatus === 'starting' || (serverStatus === 'running' && !previewReady)) && (
+                        <div className="mt-8 flex items-center justify-center gap-2 text-sm text-gray-500">
+                          <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                          <span>{serverStatus === 'starting' ? 'Starting servers...' : 'Loading preview...'}</span>
+                        </div>
+                      )}
+                      {(serverStatus === 'error' || serverStatus === 'crashed') && (
+                        <div className="mt-8">
+                          <button
+                            onClick={startDevServer}
+                            className="px-6 py-2.5 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary rounded-lg transition-colors font-medium"
+                          >
+                            Retry
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Project Preview</h2>
-                    <p className="text-gray-600">
-                      {serverStatus === 'starting' && 'Starting dev server...'}
-                      {serverStatus === 'running' && !previewReady && 'Loading preview...'}
-                      {serverStatus === 'error' && 'Error starting server. Check console for details.'}
-                      {serverStatus === 'crashed' && 'Server crashed. Check console for details.'}
-                      {serverStatus === 'stopped' && 'Server stopped'}
-                    </p>
-                    {(serverStatus === 'starting' || (serverStatus === 'running' && !previewReady)) && (
-                      <div className="mt-8 flex items-center justify-center gap-2 text-sm text-gray-500">
-                        <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
-                        <span>{serverStatus === 'starting' ? 'Starting servers...' : 'Loading preview...'}</span>
-                      </div>
-                    )}
-                    {(serverStatus === 'error' || serverStatus === 'crashed') && (
-                      <div className="mt-8">
-                        <button
-                          onClick={startDevServer}
-                          className="px-6 py-2.5 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary rounded-lg transition-colors font-medium"
-                        >
-                          Retry
-                        </button>
-                      </div>
-                    )}
                   </div>
-                </div>
-              )}
-              {/* )} END OF IFRAME FALLBACK COMMENT */}
-          </DesktopPreviewFrame>
+                )}
+                {/* )} END OF IFRAME FALLBACK COMMENT */}
+            </DesktopPreviewFrame>
+          </div>
         )}
       </div>
 
-      {/* Research Agent Status Sheet */}
+      {/* Bottom Section - Split into AI Agents (left 40%) and Action Bar (right 60%) */}
       {projects.length > 0 && currentProject && (
-        <ResearchAgentStatusSheet
-          projectId={currentProjectId || undefined}
-          researchAgentRef={researchAgentRef}
-          isExpanded={researchAgentStatusExpanded}
-          onToggleExpand={() => setResearchAgentStatusExpanded(!researchAgentStatusExpanded)}
-        />
-      )}
+        <div className="fixed bottom-0 left-0 right-0 h-[200px] flex border-t border-gray-700/50 pt-[2px] z-[102]">
+          {/* Left Section: AI Agents Block */}
+          <div className="w-[40%] h-full border-r border-gray-700/50 relative">
+            {/* Research Agent Status Sheet */}
+            <ResearchAgentStatusSheet
+              projectId={currentProjectId || undefined}
+              researchAgentRef={researchAgentRef}
+              isExpanded={researchAgentStatusExpanded}
+              onToggleExpand={() => setResearchAgentStatusExpanded(!researchAgentStatusExpanded)}
+            />
 
-      {/* Research Agent - Only show when a project is loaded */}
-      {projects.length > 0 && currentProject && (
-        <ResearchAgent
-          ref={researchAgentRef}
-          projectId={currentProjectId || undefined}
-          onStatusClick={() => setResearchAgentStatusExpanded(!researchAgentStatusExpanded)}
-        />
-      )}
+            {/* Research Agent */}
+            <ResearchAgent
+              ref={researchAgentRef}
+              projectId={currentProjectId || undefined}
+              onStatusClick={() => setResearchAgentStatusExpanded(!researchAgentStatusExpanded)}
+            />
+          </div>
 
-      {/* Floating Action Bar - Only show when a project is loaded */}
-      {projects.length > 0 && currentProject && (
-        <ActionBar
-          projectId={currentProjectId || undefined}
-          onChatClick={handleChatClick}
-          onImagesClick={handleImagesClick}
-          onSettingsClick={handleSettingsClick}
-          onConsoleClick={handleConsoleClick}
-          autoOpen={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
-          autoPinned={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
-          autoMessage={websiteImportPrompt}
-          onAutoMessageSent={handleWebsiteImportPromptSent}
-        />
+          {/* Right Section: Action Bar Block */}
+          <div className="w-[60%] h-full relative">
+            {/* Action Bar */}
+            <ActionBar
+              projectId={currentProjectId || undefined}
+              onChatClick={handleChatClick}
+              onImagesClick={handleImagesClick}
+              onSettingsClick={handleSettingsClick}
+              onConsoleClick={handleConsoleClick}
+              autoOpen={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
+              autoPinned={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
+              autoMessage={websiteImportPrompt}
+              onAutoMessageSent={handleWebsiteImportPromptSent}
+            />
+          </div>
+        </div>
       )}
 
       {/* Kanban Widget */}

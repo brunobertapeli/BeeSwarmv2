@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { Template } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
+import noiseBgImage from '../assets/images/noise_bg.png'
 import TechIcon from './TechIcon'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
@@ -828,7 +829,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fadeIn"
+        className="absolute inset-0 backdrop-blur-sm animate-fadeIn"
         onClick={currentStep === 'complete' || currentStep === 'error' ? onCancel : handleCancel}
       />
 
@@ -837,11 +838,11 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="relative w-full max-w-4xl h-[64vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl mx-4 overflow-hidden flex flex-col"
+        className="relative w-full max-w-4xl h-[64vh] bg-dark-card border border-dark-border rounded-lg shadow-2xl mx-4 overflow-hidden flex flex-col"
       >
         {/* Background Image */}
         <div
-          className="absolute inset-0 opacity-10 pointer-events-none"
+          className="absolute inset-0 opacity-10 pointer-events-none z-0"
           style={{
             backgroundImage: `url(${bgImage})`,
             backgroundSize: 'cover',
@@ -849,10 +850,21 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           }}
         />
 
+        {/* Noise texture overlay */}
+        <div
+          className="absolute inset-0 opacity-50 pointer-events-none z-[1]"
+          style={{
+            backgroundImage: `url(${noiseBgImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            mixBlendMode: 'soft-light',
+          }}
+        />
+
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-border/50 relative z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-dark-border relative z-10">
           <div>
-            <h2 className="text-sm font-semibold text-white">
+            <h2 className="text-lg font-bold text-white" style={{ fontFamily: 'var(--tg-heading-font-family)' }}>
               {currentStep === 'category' && 'Create New Project'}
               {currentStep === 'templates' && 'Choose a Template'}
               {currentStep === 'details' && selectedTemplate?.name}
@@ -863,7 +875,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
               {currentStep === 'complete' && 'Project Ready!'}
               {currentStep === 'error' && 'Setup Failed'}
             </h2>
-            <p className="text-[11px] text-gray-500 mt-0.5">
+            <p className="text-sm text-white/60 mt-1" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
               {currentStep === 'category' && 'Choose how you want to start'}
               {currentStep === 'templates' && `${templates.length} templates available`}
               {currentStep === 'details' && 'Review template details'}
@@ -878,9 +890,9 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           {(currentStep === 'complete' || currentStep === 'error' || currentStep === 'category') && (
             <button
               onClick={handleCancel}
-              className="p-1.5 hover:bg-dark-bg/70 rounded-md transition-all"
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
             >
-              <X size={16} className="text-gray-400" />
+              <X size={18} className="text-white/70" />
             </button>
           )}
         </div>
@@ -997,7 +1009,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                         disabled={!isValidWebsiteUrl(importUrl) || isFetchingWebsite || fetchComplete}
                         className={`px-4 py-2.5 rounded-lg font-medium text-sm transition-all flex items-center gap-2 flex-shrink-0 ${
                           fetchComplete
-                            ? 'bg-green-500 text-white cursor-not-allowed'
+                            ? 'bg-primary text-white cursor-not-allowed'
                             : isFetchingWebsite
                             ? 'bg-primary/20 text-primary cursor-not-allowed'
                             : isValidWebsiteUrl(importUrl)
@@ -1060,7 +1072,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                                   : 'text-gray-500'
                               }`}>
                                 {['extracting', 'downloading', 'complete'].includes(fetchProgress.stage) ? (
-                                  <CheckCircle size={12} className="text-green-500" />
+                                  <CheckCircle size={12} className="text-primary" />
                                 ) : fetchProgress.stage === 'fetching' ? (
                                   <RefreshCw size={12} className="animate-spin" />
                                 ) : (
@@ -1074,7 +1086,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                                   : 'text-gray-500'
                               }`}>
                                 {['downloading', 'complete'].includes(fetchProgress.stage) ? (
-                                  <CheckCircle size={12} className="text-green-500" />
+                                  <CheckCircle size={12} className="text-primary" />
                                 ) : fetchProgress.stage === 'extracting' ? (
                                   <RefreshCw size={12} className="animate-spin" />
                                 ) : (
@@ -1088,7 +1100,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                                   : 'text-gray-500'
                               }`}>
                                 {fetchProgress.stage === 'complete' ? (
-                                  <CheckCircle size={12} className="text-green-500" />
+                                  <CheckCircle size={12} className="text-primary" />
                                 ) : fetchProgress.stage === 'downloading' ? (
                                   <RefreshCw size={12} className="animate-spin" />
                                 ) : (
@@ -1107,13 +1119,13 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        className="bg-green-500/10 border border-green-500/30 rounded-lg p-3"
+                        className="bg-primary/10 border border-primary/30 rounded-lg p-3"
                       >
                         <div className="flex items-center gap-2.5">
-                          <CheckCircle size={16} className="text-green-500 flex-shrink-0" />
+                          <CheckCircle size={16} className="text-primary flex-shrink-0" />
                           <div>
-                            <p className="text-xs font-medium text-green-400">Analysis Complete!</p>
-                            <p className="text-[10px] text-green-500/70 mt-0.5">Found content, images, and structure. Ready to proceed.</p>
+                            <p className="text-xs font-medium text-primary">Analysis Complete!</p>
+                            <p className="text-[10px] text-primary/70 mt-0.5">Found content, images, and structure. Ready to proceed.</p>
                           </div>
                         </div>
                       </motion.div>
@@ -1250,7 +1262,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                         <div className="text-center">
                           {screenshotFile ? (
                             <div className="flex items-center justify-center gap-2">
-                              <CheckCircle className="w-4 h-4 text-green-500" />
+                              <CheckCircle className="w-4 h-4 text-primary" />
                               <span className="text-xs text-white">{screenshotFile.name}</span>
                             </div>
                           ) : (
@@ -1328,7 +1340,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       const categoryTemplates = templates.filter((t) => t.category === category)
                       return (
                         <div key={category}>
-                          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                          <h3 className="text-sm font-semibold text-white/70 uppercase tracking-wider mb-3" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
                             {category}
                           </h3>
                           <div className="overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-dark-border/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-primary/40 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-primary/60 [&::-webkit-scrollbar-thumb]:transition-colors">
@@ -1418,7 +1430,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                         </label>
                         <div className="p-3 bg-dark-bg/50 border border-dark-border rounded-lg">
                           <div className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-green-500" />
+                            <CheckCircle className="w-4 h-4 text-primary" />
                             <span className="text-xs text-white">{screenshotFile.name}</span>
                           </div>
                         </div>
@@ -1462,7 +1474,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                             href={selectedTemplate.demoUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-dark-bg/70 hover:bg-dark-bg border border-dark-border hover:border-primary/50 rounded-lg text-xs text-gray-300 hover:text-white font-medium transition-all group"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-dark-bg/70 hover:bg-dark-bg border border-dark-border hover:border-primary/50 rounded-lg text-xs text-gray-300 hover:text-white font-medium transition-all group opacity-60 hover:opacity-100"
                           >
                             <Globe size={12} className="group-hover:text-primary transition-colors" />
                             View Live Demo
@@ -1485,7 +1497,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
                   {/* Tech Stack */}
                   <div>
-                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                    <h3 className="text-xs font-semibold text-white uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
                       Tech Stack
                     </h3>
                     <div className="flex flex-wrap gap-2">
@@ -1503,7 +1515,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   {selectedTemplate.requiredServices && selectedTemplate.requiredServices.length > 0 && (
                     <div>
                       <div className="flex items-center gap-1.5 mb-2">
-                        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                        <h3 className="text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
                           Required for Full Functionality
                         </h3>
                         <div className="relative group">
@@ -1531,7 +1543,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   {/* Libraries as Pills */}
                   {selectedTemplate.libraries && selectedTemplate.libraries.length > 0 && (
                     <div>
-                      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                      <h3 className="text-xs font-semibold text-white uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
                         Included Libraries
                       </h3>
                       <div className="flex flex-wrap gap-1.5">
@@ -1576,7 +1588,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 <div className="space-y-6">
                   {/* Project Name */}
                   <div>
-                    <label className="block text-sm font-semibold text-gray-300 mb-2">
+                    <label className="block text-sm font-semibold text-white/70 mb-2" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
                       Project Name
                     </label>
                     <input
@@ -1592,7 +1604,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   {/* Environment Variables */}
                   {envVariables.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-300 mb-2">
+                      <h3 className="text-sm font-semibold text-white/70 mb-2" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
                         Environment Variables
                       </h3>
                       <p className="text-xs text-gray-400 mb-4">
@@ -1731,8 +1743,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 exit={{ opacity: 0, scale: 0.9 }}
                 className="text-center py-12"
               >
-                <div className="inline-flex items-center justify-center w-20 h-20 bg-green-500/10 rounded-full mb-6">
-                  <CheckCircle className="w-12 h-12 text-green-500" />
+                <div className="inline-flex items-center justify-center w-20 h-20 bg-primary/10 rounded-full mb-6">
+                  <CheckCircle className="w-12 h-12 text-primary" />
                 </div>
                 <h3 className="text-2xl font-bold text-white mb-3">
                   Your Project is Ready!
@@ -1799,7 +1811,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
         {/* Footer - Navigation & Actions */}
         {currentStep !== 'complete' && currentStep !== 'error' && currentStep !== 'creating' && currentStep !== 'installing' && currentStep !== 'initializing' && (
-          <div className="border-t border-dark-border/50 px-6 py-4 bg-dark-bg/20 relative z-10">
+          <div className="border-t border-dark-border px-6 py-4 relative z-10">
             <div className="flex items-center justify-between min-h-[44px]">
               {/* Back Button */}
               <div className="w-24">
@@ -1873,14 +1885,9 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   <button
                     onClick={handleContinueToDesignSelection}
                     disabled={!fetchComplete}
-                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
-                      fetchComplete
-                        ? 'bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20'
-                        : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                    }`}
+                    className={fetchComplete ? 'px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2' : 'bg-gray-700/50 text-gray-500 cursor-not-allowed inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all'}
                   >
                     Continue
-                    <ArrowRight size={13} />
                   </button>
                 )}
                 {currentStep === 'import-design' && (
@@ -1893,14 +1900,13 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       // For 'template' option, navigation already handled in the button onClick above
                     }}
                     disabled={!importDesignOption || (importDesignOption === 'screenshot' && !screenshotFile)}
-                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
+                    className={
                       importDesignOption && (importDesignOption !== 'screenshot' || screenshotFile)
-                        ? 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
-                        : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                    }`}
+                        ? 'px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2'
+                        : 'bg-gray-700/50 text-gray-500 cursor-not-allowed inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all'
+                    }
                   >
                     Continue
-                    <ArrowRight size={13} />
                   </button>
                 )}
                 {currentStep === 'details' && (
@@ -1939,29 +1945,23 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                           }
                         }}
                         disabled={(importDesignOption === 'screenshot' || importDesignOption === 'ai') && !projectName.trim()}
-                        className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
+                        className={`${
                           (importDesignOption === 'screenshot' || importDesignOption === 'ai')
                             ? projectName.trim()
-                              ? 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
-                              : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                            : 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
+                              ? 'px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2'
+                              : 'bg-gray-700/50 text-gray-500 cursor-not-allowed inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all'
+                            : 'px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2'
                         }`}
                       >
                         {importDesignOption === 'screenshot' || importDesignOption === 'ai' ? (
-                          <>
-                            <Sparkles size={13} />
-                            Create Project
-                          </>
+                          'Create Project'
                         ) : isImportFlow ? (
                           <>
                             <CheckCircle size={13} />
                             Select this Design
                           </>
                         ) : (
-                          <>
-                            Continue
-                            <ArrowRight size={13} />
-                          </>
+                          'Continue'
                         )}
                       </button>
                     )}
@@ -1980,13 +1980,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                     <button
                       onClick={handleCreateProject}
                       disabled={!projectName.trim()}
-                      className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all ${
-                        projectName.trim()
-                          ? 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
-                          : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                      }`}
+                      className={projectName.trim() ? 'px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2' : 'bg-gray-700/50 text-gray-500 cursor-not-allowed inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all'}
                     >
-                      <Sparkles size={13} />
                       Create Project
                     </button>
                   </div>
@@ -1998,7 +1993,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
         {/* Progress Steps Indicator */}
         {currentStep !== 'complete' && currentStep !== 'error' && (
-          <div className="border-t border-dark-border/50 px-8 py-4 bg-dark-bg/20 relative z-10">
+          <div className="border-t border-dark-border px-8 py-4 relative z-10">
             <div className="flex items-center justify-center gap-2">
               {/* Import Flow Progress */}
               {isImportFlow ? (
@@ -2088,7 +2083,7 @@ function ProgressDot({ active, completed }: { active: boolean; completed: boolea
     <div
       className={`w-2 h-2 rounded-full transition-colors ${
         completed
-          ? 'bg-green-500'
+          ? 'bg-primary'
           : active
           ? 'bg-primary ring-2 ring-primary/30'
           : 'bg-gray-600'
@@ -2101,7 +2096,7 @@ function ProgressLine({ completed }: { completed: boolean }) {
   return (
     <div
       className={`h-0.5 w-8 transition-colors ${
-        completed ? 'bg-green-500' : 'bg-gray-600'
+        completed ? 'bg-primary' : 'bg-gray-600'
       }`}
     />
   )

@@ -2,6 +2,8 @@ import { Mail, Loader2 } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
 import { useState, useEffect } from 'react'
 import type { User } from '../types/auth'
+import mainShapeImage from '../assets/images/main_shape.png'
+import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface LoginProps {
   onLoginSuccess: (user: User) => void
@@ -98,12 +100,64 @@ function Login({ onLoginSuccess }: LoginProps) {
   }
 
   return (
-    <div className="w-full h-full bg-dark-bg flex items-center justify-center">
-      {/* Background gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-purple-500/5" />
+    <div className="w-full h-full bg-[#160042] flex items-center justify-center overflow-hidden relative">
+      {/* Fixed shape background */}
+      <div
+        className="fixed left-0 top-0 w-full h-full z-0 pointer-events-none"
+        style={{
+          backgroundImage: `url(${mainShapeImage})`,
+          backgroundPosition: 'center',
+          backgroundSize: 'cover',
+        }}
+      />
+
+      {/* Noise texture overlay */}
+      <div
+        className="fixed left-0 top-0 w-full h-full z-[1] opacity-70 pointer-events-none"
+        style={{
+          backgroundImage: `url(${noiseBgImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          mixBlendMode: 'soft-light',
+        }}
+      />
+
+      {/* SVG Gradient Shape */}
+      <div className="fixed left-0 top-0 w-full h-full z-[2] overflow-hidden pointer-events-none opacity-40">
+        <svg
+          className="absolute left-0 bottom-[-100px] w-full right-0"
+          height={1192}
+          viewBox="0 0 1920 1192"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            stroke="url(#paint0_linear_login)"
+            strokeWidth={7}
+            strokeDasharray="10 10"
+            d="M-40.9996 902C-8.39405 961.001 87.0357 1262.13 234 1171.5C385.21 1078.25 424.961 618.039 479.564 680.288C534.166 742.538 625.164 842.979 735.172 706.451C845.181 569.923 839.697 412.37 1093.03 631.043C1346.36 849.717 1371.47 413.985 1477.97 274.534C1584.48 135.083 1738.61 381.41 1830.32 343.155C1922.04 304.9 1862.93 -74.0337 2236.96 18.2495"
+          />
+          <defs>
+            <linearGradient
+              id="paint0_linear_login"
+              x1="2117.79"
+              y1="34.1404"
+              x2="83.2194"
+              y2="768.35"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop offset={0} stopColor="rgba(200, 189, 255)" />
+              <stop offset="0.13824" stopColor="#BAA6FF" />
+              <stop offset="0.337481" stopColor="#6721FF" />
+              <stop offset="0.900573" stopColor="#180048" />
+              <stop offset={1} stopColor="#00CBFF" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
 
       {/* Login Modal */}
-      <div className="relative z-10 bg-dark-card border border-dark-border rounded-2xl p-10 w-[480px] shadow-2xl">
+      <div className="relative z-10 bg-[#160042]/20 backdrop-blur-sm border border-white/20 rounded-2xl p-10 w-[480px] shadow-2xl">
         {/* Logo/Icon */}
         <div className="flex justify-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center">
@@ -115,10 +169,10 @@ function Login({ onLoginSuccess }: LoginProps) {
         </div>
 
         {/* Title */}
-        <h1 className="text-3xl font-bold text-white text-center mb-2">
+        <h1 className="banner-title" style={{ fontSize: '42px', marginBottom: '12px' }}>
           Welcome to CodeDeck
         </h1>
-        <p className="text-gray-400 text-center mb-10">
+        <p className="banner-subtitle" style={{ marginBottom: '40px' }}>
           Sign in to start building your apps
         </p>
 
@@ -193,9 +247,9 @@ function Login({ onLoginSuccess }: LoginProps) {
         {/* Terms */}
         <p className="text-xs text-gray-500 text-center mt-8 leading-relaxed">
           By continuing, you agree to CodeDeck's{' '}
-          <a href="#" className="text-primary hover:underline">Terms of Service</a>
+          <a href="https://www.codedeckai.com/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Terms of Service</a>
           {' '}and{' '}
-          <a href="#" className="text-primary hover:underline">Privacy Policy</a>
+          <a href="https://www.codedeckai.com/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</a>
         </p>
       </div>
     </div>

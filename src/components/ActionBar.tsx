@@ -31,6 +31,7 @@ import ContentEditableInput, { type ContentEditableInputRef } from './ContentEdi
 import ScreenshotModal from './ScreenshotModal'
 import type { ClaudeStatus, ClaudeContext, ClaudeModel } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
+import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface ActionBarProps {
   projectId?: string
@@ -989,14 +990,24 @@ function ActionBar({
 
       {/* Action Bar */}
       <div
-        className={`fixed right-0 z-[110] transition-all duration-500 ease-out w-2/3 ${
+        className={`absolute z-[110] transition-all duration-500 ease-out ${
           isVisible
             ? 'translate-y-0 opacity-100'
             : 'translate-y-32 opacity-0'
         }`}
-        style={{ bottom: '0px', height: '150px' }}
+        style={{ left: '5px', right: '5px', bottom: '5px', height: '150px' }}
       >
-        <div ref={actionBarRef} className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-visible w-full h-full relative action-bar-container flex flex-col">
+        <div ref={actionBarRef} className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-visible w-full h-full relative action-bar-container flex flex-col rounded-br-[10px]">
+          {/* Noise texture overlay */}
+          <div
+            className="absolute inset-0 opacity-50 pointer-events-none rounded-br-[10px]"
+            style={{
+              backgroundImage: `url(${noiseBgImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              mixBlendMode: 'soft-light',
+            }}
+          />
           {/* Top Row - Textarea with Send Icon Inside */}
           <div className="px-3 pt-3 pb-2 flex-shrink-0">
             <div className="relative flex items-start">

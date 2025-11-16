@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronUp, Bug, Shield, Globe, FileCode, Lightbulb, Search, CheckCircle2, Clock, Loader, Archive, ArrowLeft, Copy, Check } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import bgImage from '../assets/images/bg.jpg'
+import noiseBgImage from '../assets/images/noise_bg.png'
 import ReactMarkdown from 'react-markdown'
 
 interface ResearchAgentStatusSheetProps {
@@ -29,9 +30,36 @@ function ResearchAgentStatusSheet({ projectId, researchAgentRef, isExpanded = fa
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+  const [isCapturingFreeze, setIsCapturingFreeze] = useState(false)
   const statusSheetRef = useRef<HTMLDivElement>(null)
 
-  const handleToggleExpand = () => {
+  const handleToggleExpand = async () => {
+    // If collapsing, just toggle immediately
+    if (isExpanded) {
+      if (onToggleExpand) {
+        onToggleExpand()
+      }
+      return
+    }
+
+    // If expanding, show loading and capture freeze FIRST
+    setIsCapturingFreeze(true)
+
+    if (projectId && layoutState === 'DEFAULT') {
+      try {
+        const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
+        if (result?.success && result.freezeImage) {
+          setModalFreezeImage(result.freezeImage)
+          setModalFreezeActive(true)
+          await window.electronAPI?.preview.hide(projectId)
+        }
+      } catch (error) {
+        console.error('Failed to capture freeze on expand:', error)
+      }
+    }
+
+    // Now toggle (freeze is ready)
+    setIsCapturingFreeze(false)
     if (onToggleExpand) {
       onToggleExpand()
     }
@@ -248,29 +276,17 @@ function ResearchAgentStatusSheet({ projectId, researchAgentRef, isExpanded = fa
 
       // DEFAULT state: Control preview visibility based on expanded state
       if (layoutState === 'DEFAULT') {
-        if (isExpanded) {
-          // StatusSheet expanded in DEFAULT → activate freeze, hide preview
-          try {
-            const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
-
-            if (result?.success && result.freezeImage && isExpanded && layoutState === 'DEFAULT') {
-              setModalFreezeImage(result.freezeImage)
-              setModalFreezeActive(true)
-              await window.electronAPI?.preview.hide(projectId)
-            }
-          } catch (error) {
-            console.error('Failed to capture freeze image:', error)
-          }
-        } else {
+        if (!isExpanded) {
           // StatusSheet collapsed in DEFAULT → deactivate freeze, show preview
           setModalFreezeActive(false)
           await window.electronAPI?.preview.show(projectId)
         }
+        // Note: Freeze capture when expanding is now handled in handleToggleExpand() for better performance
       }
     }
 
     handlePreviewVisibility()
-  }, [layoutState, isExpanded, projectId, setModalFreezeActive, setModalFreezeImage])
+  }, [layoutState, isExpanded, projectId, setModalFreezeActive])
 
 
   // Auto-collapse when clicking outside
@@ -316,11 +332,13 @@ function ResearchAgentStatusSheet({ projectId, researchAgentRef, isExpanded = fa
     <>
       {shouldRender && (
         <div
-          className={`fixed left-0 z-[99] pointer-events-none w-1/3 ${
+          className={`absolute z-[99] pointer-events-none ${
             isVisible ? 'opacity-100' : 'opacity-0'
           }`}
           style={{
-            bottom: `${bottomPosition}px`,
+            left: '5px',
+            right: '5px',
+            bottom: `${bottomPosition + 5}px`,
             transition: 'opacity 300ms ease-out'
           }}
         >
@@ -333,7 +351,7 @@ function ResearchAgentStatusSheet({ projectId, researchAgentRef, isExpanded = fa
           >
             {/* Background Image */}
             <div
-              className="absolute inset-0 opacity-10 pointer-events-none"
+              className="absolute inset-0 opacity-10 pointer-events-none z-0"
               style={{
                 backgroundImage: `url(${bgImage})`,
                 backgroundSize: 'cover',
@@ -341,10 +359,21 @@ function ResearchAgentStatusSheet({ projectId, researchAgentRef, isExpanded = fa
               }}
             />
 
+            {/* Noise texture overlay */}
+            <div
+              className="absolute inset-0 opacity-50 pointer-events-none z-[1]"
+              style={{
+                backgroundImage: `url(${noiseBgImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                mixBlendMode: 'soft-light',
+              }}
+            />
+
             {/* Collapsed State - Single Clickable Row */}
             {!isExpanded && (
               <div
-                className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10"
+                className={`px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10 ${isCapturingFreeze ? 'opacity-50 pointer-events-none' : ''}`}
                 onClick={handleToggleExpand}
               >
                 <span className="text-xs text-gray-400 flex-1">AI Agents</span>

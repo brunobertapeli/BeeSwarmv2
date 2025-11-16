@@ -15,6 +15,7 @@ import {
 import TechIcon from './TechIcon'
 import { Project, Template } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
+import noiseBgImage from '../assets/images/noise_bg.png'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
@@ -272,18 +273,17 @@ function ProjectSelector({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fadeIn"
-        onClick={onClose}
-      />
+    <>
+      {/* Backdrop Overlay */}
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200]" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative w-[520px] max-h-[70vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden">
+      <div
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] w-[520px] max-h-[70vh] bg-dark-card border border-dark-border rounded-lg shadow-2xl animate-scaleIn overflow-hidden"
+      >
         {/* Background Image */}
         <div
-          className="absolute inset-0 rounded-xl opacity-10 pointer-events-none"
+          className="absolute inset-0 opacity-10 pointer-events-none z-0"
           style={{
             backgroundImage: `url(${bgImage})`,
             backgroundSize: 'cover',
@@ -291,19 +291,30 @@ function ProjectSelector({
           }}
         />
 
+        {/* Noise texture overlay */}
+        <div
+          className="absolute inset-0 opacity-50 pointer-events-none z-[1]"
+          style={{
+            backgroundImage: `url(${noiseBgImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            mixBlendMode: 'soft-light',
+          }}
+        />
+
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border/50 relative z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-dark-border relative z-10">
           <div>
-            <h2 className="text-sm font-semibold text-white">Projects</h2>
-            <p className="text-[11px] text-gray-500 mt-0.5">
+            <h2 className="text-lg font-bold text-white" style={{ fontFamily: 'var(--tg-heading-font-family)' }}>Projects</h2>
+            <p className="text-sm text-white/60 mt-1" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
               {projects.length} project{projects.length !== 1 ? 's' : ''}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-dark-bg/70 rounded-md transition-all"
+            className="p-2 hover:bg-white/10 rounded-lg transition-all"
           >
-            <X size={16} className="text-gray-400" />
+            <X size={18} className="text-white/70" />
           </button>
         </div>
 
@@ -337,10 +348,10 @@ function ProjectSelector({
             <>
               {/* Favorites Section */}
               {favoriteProjects.length > 0 && (
-            <div className="px-4 py-3">
-              <div className="flex items-center gap-1.5 mb-2">
-                <Star size={12} className="text-yellow-500 fill-yellow-500" />
-                <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+            <div className="px-6 py-3">
+              <div className="flex items-center gap-2 mb-3">
+                <Star size={14} className="text-yellow-500 fill-yellow-500" />
+                <h3 className="text-xs font-semibold text-white/70 uppercase tracking-wider" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
                   Favorites
                 </h3>
               </div>
@@ -370,17 +381,17 @@ function ProjectSelector({
 
           {/* Separator between Favorites and Your Projects */}
           {favoriteProjects.length > 0 && recentProjects.length > 0 && (
-            <div className="px-4">
-              <div className="border-t border-dark-border/50"></div>
+            <div className="px-6">
+              <div className="border-t border-dark-border"></div>
             </div>
           )}
 
           {/* All Projects Section */}
           {recentProjects.length > 0 && (
-            <div className="px-4 py-3">
-              <div className="flex items-center gap-1.5 mb-2">
-                <Folder size={12} className="text-gray-500" />
-                <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+            <div className="px-6 py-3">
+              <div className="flex items-center gap-2 mb-3">
+                <Folder size={14} className="text-white/70" />
+                <h3 className="text-xs font-semibold text-white/70 uppercase tracking-wider" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
                   Your Projects
                 </h3>
               </div>
@@ -412,10 +423,10 @@ function ProjectSelector({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-dark-border/50 bg-dark-bg/20 relative z-10">
+        <div className="px-6 py-4 border-t border-dark-border relative z-10">
           <button
             onClick={onCreateProject}
-            className="w-full px-3 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition-all"
+            className="w-full px-4 py-2.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all flex items-center justify-center gap-2"
           >
             <Plus size={16} />
             New Project
@@ -507,7 +518,7 @@ function ProjectSelector({
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
 
@@ -550,8 +561,8 @@ function ProjectRow({
     <div
       className={`relative group rounded-lg border transition-all cursor-pointer ${
         isActive
-          ? 'border-primary/60 bg-primary/5'
-          : 'border-transparent hover:border-dark-border hover:bg-dark-bg/30'
+          ? 'bg-primary/5 border-primary/30'
+          : 'border-transparent hover:border-dark-border hover:bg-white/5'
       }`}
       onClick={!isEditing ? onSelect : undefined}
     >
@@ -594,7 +605,7 @@ function ProjectRow({
               <h4 className="text-[13px] font-medium text-white truncate">{project.name}</h4>
             )}
             {isActive && (
-              <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse flex-shrink-0" />
+              <div className="w-1.5 h-1.5 rounded-full animate-pulse flex-shrink-0" style={{ backgroundColor: '#6721FF' }} />
             )}
             {/* Deployment Badge */}
             {project.isDeployed && (

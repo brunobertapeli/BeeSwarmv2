@@ -82,9 +82,9 @@ function StickyNoteWidget({ note }: StickyNoteWidgetProps) {
     const newPixelY = currentPixelY + dy
 
     // Apply boundaries (same as KanbanWidget)
-    const padding = 3
-    const headerHeight = 40 + padding // Top header bar height + padding (43px)
-    const bottomReservedArea = 187 // Action bar + Research Agent
+    const padding = 5
+    const headerHeight = 40 + padding // Top header bar height + padding (45px)
+    const bottomReservedArea = 200 + 2 // Action bar + Research Agent + 2px padding from separator
     const minX = padding
     const maxX = containerWidth - NOTE_SIZE - padding
     const minY = headerHeight
@@ -155,7 +155,6 @@ function StickyNoteWidget({ note }: StickyNoteWidgetProps) {
         zIndex: note.zIndex,
         backgroundColor: selectedColor.bg,
         color: selectedColor.text,
-        borderRadius: '16px',
         boxShadow: isDragging
           ? '0 10px 30px rgba(0, 0, 0, 0.3)'
           : '0 4px 12px rgba(0, 0, 0, 0.15)',
@@ -170,8 +169,8 @@ function StickyNoteWidget({ note }: StickyNoteWidgetProps) {
       <div
         onMouseDown={handleMouseDown}
         style={{
-          height: '32px',
-          minHeight: '32px',
+          height: '37px',
+          minHeight: '37px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',

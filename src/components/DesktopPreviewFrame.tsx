@@ -6,6 +6,7 @@ import HealthStatusModal from './HealthStatusModal'
 import ImageEditModal from './ImageEditModal'
 import { HealthCheckStatus } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
+import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface DesktopPreviewFrameProps {
   children: React.ReactNode
@@ -562,6 +563,16 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
         <div className="flex flex-col w-full h-full overflow-hidden shadow-2xl" style={{ boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)' }}>
         {/* Minimal top bar with controls */}
         <div className="h-10 bg-dark-card/95 backdrop-blur-xl border-t border-l border-r border-dark-border/80 flex items-center px-3 gap-2 flex-shrink-0 relative">
+          {/* Noise texture overlay */}
+          <div
+            className="absolute inset-0 opacity-25 pointer-events-none"
+            style={{
+              backgroundImage: `url(${noiseBgImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              mixBlendMode: 'soft-light',
+            }}
+          />
           {/* Browser label */}
           <div className="text-[12px] text-gray-500 font-medium px-2">
             CodeDeck Browser v.1.0
@@ -638,6 +649,16 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
           ref={contentAreaRef}
           className="flex-1 bg-dark-card/95 border border-dark-border/80 overflow-hidden relative p-1.5"
         >
+          {/* Noise texture overlay */}
+          <div
+            className="absolute inset-0 opacity-25 pointer-events-none"
+            style={{
+              backgroundImage: `url(${noiseBgImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              mixBlendMode: 'soft-light',
+            }}
+          />
           {/* Inner area for BrowserView positioning */}
           <div
             ref={browserViewRef}

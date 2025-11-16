@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Wand2, Upload, Link2, ChevronDown, ChevronUp, Loader2, CheckCircle2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
@@ -24,7 +25,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Check if original image is SVG (vector format - cannot be replaced with raster)
-  const isSVG = imagePath?.toLowerCase().endsWith('.svg') || imageSrc?.includes('svg')
+  const isSVG = imagePath?.toLowerCase().endsWith('.svg') || imageSrc?.startsWith('data:image/svg+xml')
 
   // Crop tool state
   const [cropMode, setCropMode] = useState(false)
@@ -447,8 +448,8 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
   if (cropMode && cropImage) {
     const cropArea = getCropAreaDimensions()
 
-    return (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center">
+    return createPortal(
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center">
         {/* Backdrop */}
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
 
@@ -600,13 +601,14 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
             </div>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     )
   }
 
   // Default selection view
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
 
@@ -854,7 +856,8 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
           className="hidden"
         />
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

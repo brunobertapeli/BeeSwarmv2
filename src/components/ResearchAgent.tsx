@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { ChevronDown, ChevronUp, Send, Bug, Shield, Globe, FileCode, Lightbulb, Search, Loader, CheckCircle2, Archive } from 'lucide-react'
 import bgImage from '../assets/images/bg.jpg'
+import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface ResearchAgentProps {
   projectId?: string
@@ -205,14 +206,24 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
       {/* Research Agent */}
       <div
         ref={ref}
-        className={`fixed left-0 z-[100] transition-all duration-500 ease-out w-1/3 ${
+        className={`absolute z-[100] transition-all duration-500 ease-out ${
           isVisible
             ? 'translate-y-0 opacity-100'
             : 'translate-y-32 opacity-0'
         }`}
-        style={{ bottom: '0px', height: '150px' }}
+        style={{ left: '5px', right: '5px', bottom: '5px', height: '150px' }}
       >
-        <div className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-visible w-full h-full relative flex flex-col">
+        <div className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-visible w-full h-full relative flex flex-col rounded-bl-[10px]">
+          {/* Noise texture overlay */}
+          <div
+            className="absolute inset-0 opacity-50 pointer-events-none rounded-bl-[10px]"
+            style={{
+              backgroundImage: `url(${noiseBgImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              mixBlendMode: 'soft-light',
+            }}
+          />
           {/* Top Row - Textarea with Send Icon Inside */}
           <div className="px-3 pt-3 pb-2 flex-shrink-0">
             <div className="relative flex items-start">

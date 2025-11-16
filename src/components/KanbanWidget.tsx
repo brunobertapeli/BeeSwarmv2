@@ -212,10 +212,10 @@ function KanbanWidget() {
         const newX = e.clientX - dragOffset.x
         const newY = e.clientY - dragOffset.y
 
-        // Keep widget within viewport bounds with 3px padding on all sides
-        const padding = 3
+        // Keep widget within viewport bounds with 5px padding on all sides
+        const padding = 5
         const headerHeight = 40 + padding // Top header bar height + padding
-        const bottomReservedArea = 187 // Action bar + Research Agent
+        const bottomReservedArea = 200 + 2 // Action bar + Research Agent + 2px padding from separator
         const minX = padding
         const maxX = window.innerWidth - 900 - padding
         const minY = headerHeight
@@ -230,9 +230,9 @@ function KanbanWidget() {
 
         let newHeight = resizeStart.height
         let newY = kanbanPosition.y
-        const padding = 3
+        const padding = 5
         const headerHeight = 40 + padding // Top header bar height + padding
-        const bottomReservedArea = 187 // Action bar + Research Agent
+        const bottomReservedArea = 200 + 2 // Action bar + Research Agent + 2px padding from separator
 
         // Handle vertical resize directions only
         if (resizeDirection === 's') {
@@ -280,7 +280,7 @@ function KanbanWidget() {
   return (
     <div
       ref={widgetRef}
-      className="fixed z-[95] bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 rounded-2xl shadow-2xl overflow-hidden"
+      className="fixed z-[95] bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-hidden"
       style={{
         left: `${kanbanPosition.x}px`,
         top: `${kanbanPosition.y}px`,
@@ -302,7 +302,8 @@ function KanbanWidget() {
       {/* Header */}
       <div
         ref={headerRef}
-        className="relative px-4 py-3 border-b border-dark-border/50 flex items-center justify-between cursor-move select-none"
+        className="relative px-4 border-b border-dark-border/50 flex items-center justify-between cursor-move select-none"
+        style={{ height: '37px', minHeight: '37px' }}
       >
         <h3 className="text-sm font-semibold text-gray-200">Kanban Board</h3>
         <button

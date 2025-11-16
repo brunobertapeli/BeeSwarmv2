@@ -8,6 +8,7 @@ import { KeywordHighlight } from './KeywordHighlight'
 import AnthropicIcon from '../assets/images/anthropic.svg'
 import GitIcon from '../assets/images/git.svg'
 import bgImage from '../assets/images/bg.jpg'
+import noiseBgImage from '../assets/images/noise_bg.png'
 import successSound from '../assets/sounds/success.wav'
 
 interface ConversationMessage {
@@ -105,6 +106,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   const { layoutState, statusSheetExpanded, setStatusSheetExpanded, setModalFreezeActive, setModalFreezeImage } = useLayoutStore()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
+  const [isCapturingFreeze, setIsCapturingFreeze] = useState(false)
   const [allBlocks, setAllBlocks] = useState<ConversationBlock[]>([])
   const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set())
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set())
@@ -947,29 +949,12 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
       // DEFAULT state: Control preview visibility based on StatusSheet state
       if (layoutState === 'DEFAULT') {
-        if (statusSheetExpanded) {
-          // StatusSheet expanded in DEFAULT → activate freeze, hide preview
-          try {
-            const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
-
-            // CRITICAL: Check if sheet is STILL expanded before activating freeze
-            // (it might have been collapsed while we were capturing)
-            const currentExpanded = useLayoutStore.getState().statusSheetExpanded
-            const currentLayout = useLayoutStore.getState().layoutState
-
-            if (result?.success && result.freezeImage && currentExpanded && currentLayout === 'DEFAULT') {
-              setModalFreezeImage(result.freezeImage)
-              setModalFreezeActive(true)
-              await window.electronAPI?.preview.hide(projectId)
-            }
-          } catch (error) {
-            console.error('❌ [PREVIEW VISIBILITY] Failed to capture freeze image:', error)
-          }
-        } else {
+        if (!statusSheetExpanded) {
           // StatusSheet collapsed in DEFAULT → deactivate freeze, show preview
           setModalFreezeActive(false)
           await window.electronAPI?.preview.show(projectId)
         }
+        // Note: Freeze capture when expanding is now handled in handleExpand() for better performance
       }
       // TOOLS state: Preview frame is hidden completely (no frozen background)
       else if (layoutState === 'TOOLS') {
@@ -979,15 +964,33 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     }
 
     handlePreviewVisibility()
-  }, [layoutState, statusSheetExpanded, projectId, setModalFreezeActive, setModalFreezeImage])
+  }, [layoutState, statusSheetExpanded, projectId, setModalFreezeActive])
 
   // Handler for expanding StatusSheet
-  const handleExpand = useCallback(() => {
-    // Just update the state - the useEffect will handle freeze/preview logic
+  const handleExpand = useCallback(async () => {
+    // Show loading indicator
+    setIsCapturingFreeze(true)
+
+    // Capture freeze FIRST (blocking - must complete before showing sheet)
+    if (projectId && layoutState === 'DEFAULT') {
+      try {
+        const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
+        if (result?.success && result.freezeImage) {
+          setModalFreezeImage(result.freezeImage)
+          setModalFreezeActive(true)
+          await window.electronAPI?.preview.hide(projectId)
+        }
+      } catch (error) {
+        console.error('Failed to capture freeze on expand:', error)
+      }
+    }
+
+    // Now expand the sheet (freeze is ready)
+    setIsCapturingFreeze(false)
     setIsExpanded(true)
     setStatusSheetExpanded(true)
     setShowStatusSheet(true)
-  }, [setStatusSheetExpanded, setShowStatusSheet, layoutState])
+  }, [setStatusSheetExpanded, setShowStatusSheet, layoutState, projectId, setModalFreezeActive, setModalFreezeImage])
 
   // Handler for collapsing StatusSheet
   const handleCollapse = useCallback(() => {
@@ -1073,17 +1076,19 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     <>
       {shouldRender && (
         <div
-        className={`fixed right-0 z-[99] pointer-events-none w-2/3 ${
+        className={`absolute z-[99] pointer-events-none ${
           isVisible ? 'opacity-100' : 'opacity-0'
         }`}
         style={{
-          bottom: `${bottomPosition}px`,
+          left: '5px',
+          right: '5px',
+          bottom: `${bottomPosition + 5}px`,
           transition: 'opacity 300ms ease-out'
         }}
       >
         <div
         ref={statusSheetRef}
-        className="bg-dark-card border border-dark-border shadow-2xl w-full overflow-hidden pb-4 relative pointer-events-auto"
+        className="bg-dark-card border border-dark-border shadow-2xl w-full overflow-hidden pb-4 relative pointer-events-auto rounded-br-[10px]"
         style={{
           boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
         }}
@@ -1092,11 +1097,22 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       >
         {/* Background Image */}
         <div
-          className="absolute inset-0 opacity-10 pointer-events-none"
+          className="absolute inset-0 opacity-10 pointer-events-none z-0"
           style={{
             backgroundImage: `url(${bgImage})`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
+          }}
+        />
+
+        {/* Noise texture overlay */}
+        <div
+          className="absolute inset-0 opacity-50 pointer-events-none rounded-br-[10px] z-[1]"
+          style={{
+            backgroundImage: `url(${noiseBgImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            mixBlendMode: 'soft-light',
           }}
         />
 
@@ -1107,7 +1123,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
           return (
             <div
-              className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10 h-[40px] overflow-hidden"
+              className={`px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10 h-[40px] overflow-hidden ${isCapturingFreeze ? 'opacity-50 pointer-events-none' : ''}`}
               onClick={handleExpand}
             >
               {currentBlock.type === 'deployment' || currentBlock.type === 'initialization' ? (

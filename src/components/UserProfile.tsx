@@ -4,6 +4,7 @@ import { useLayoutStore } from '../store/layoutStore'
 import { LogOut, Settings, CreditCard, User as UserIcon, MessageCircle } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
 import bgImage from '../assets/images/bg.jpg'
+import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface UserProfileProps {
   onClose: () => void
@@ -83,10 +84,12 @@ function UserProfile({ onClose, excludeElement, onOpenHelp }: UserProfileProps) 
   return (
     <div ref={dropdownRef}>
       {/* Dropdown Menu */}
-      <div className="w-64 bg-dark-card border border-dark-border rounded-lg shadow-xl overflow-hidden mt-2">
+      <div
+        className="w-72 bg-dark-card border border-dark-border rounded-lg shadow-2xl mt-2 relative overflow-hidden"
+      >
           {/* Background Image */}
           <div
-            className="absolute inset-0 opacity-10 pointer-events-none"
+            className="absolute inset-0 opacity-10 pointer-events-none z-0"
             style={{
               backgroundImage: `url(${bgImage})`,
               backgroundSize: 'cover',
@@ -94,8 +97,19 @@ function UserProfile({ onClose, excludeElement, onOpenHelp }: UserProfileProps) 
             }}
           />
 
+          {/* Noise texture overlay */}
+          <div
+            className="absolute inset-0 opacity-50 pointer-events-none z-[1]"
+            style={{
+              backgroundImage: `url(${noiseBgImage})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              mixBlendMode: 'soft-light',
+            }}
+          />
+
           {/* User Info Header */}
-          <div className="px-4 py-3 border-b border-dark-border bg-dark-bg/50 relative z-10">
+          <div className="px-6 py-4 border-b border-dark-border relative z-10">
             <div className="flex items-center gap-3">
               {user.photoUrl ? (
                 <img
@@ -129,24 +143,24 @@ function UserProfile({ onClose, excludeElement, onOpenHelp }: UserProfileProps) 
           </div>
 
           {/* Menu Items */}
-          <div className="py-1 relative z-10">
+          <div className="py-2 px-2 relative z-10">
             <button
               onClick={() => {
                 onOpenHelp?.()
                 onClose()
               }}
-              className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-dark-bg transition-colors text-sm text-gray-300 hover:text-white"
+              className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/10 rounded-lg transition-colors text-sm text-white/90 hover:text-white"
             >
-              <MessageCircle size={16} className="text-gray-400" />
-              <span>Help & Support</span>
+              <MessageCircle size={18} className="text-white/70" />
+              <span className="font-medium">Help & Support</span>
             </button>
 
             <button
               onClick={handleManageSubscription}
-              className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-dark-bg transition-colors text-sm text-gray-300 hover:text-white"
+              className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/10 rounded-lg transition-colors text-sm text-white/90 hover:text-white"
             >
-              <CreditCard size={16} className="text-gray-400" />
-              <span>Manage Subscription</span>
+              <CreditCard size={18} className="text-white/70" />
+              <span className="font-medium">Manage Subscription</span>
             </button>
 
             <button
@@ -154,20 +168,20 @@ function UserProfile({ onClose, excludeElement, onOpenHelp }: UserProfileProps) 
                 toast.info('Coming soon', 'Settings will be available soon')
                 onClose()
               }}
-              className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-dark-bg transition-colors text-sm text-gray-300 hover:text-white"
+              className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/10 rounded-lg transition-colors text-sm text-white/90 hover:text-white"
             >
-              <Settings size={16} className="text-gray-400" />
-              <span>Settings</span>
+              <Settings size={18} className="text-white/70" />
+              <span className="font-medium">Settings</span>
             </button>
 
-            <div className="border-t border-dark-border my-1"></div>
+            <div className="border-t border-white/10 my-2"></div>
 
             <button
               onClick={handleLogout}
-              className="w-full px-4 py-2.5 text-left flex items-center gap-3 hover:bg-red-500/10 transition-colors text-sm text-red-400 hover:text-red-300"
+              className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-red-500/20 rounded-lg transition-colors text-sm text-red-300 hover:text-red-200"
             >
-              <LogOut size={16} />
-              <span>Log Out</span>
+              <LogOut size={18} />
+              <span className="font-medium">Log Out</span>
             </button>
           </div>
         </div>
