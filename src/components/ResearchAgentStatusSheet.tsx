@@ -341,12 +341,24 @@ function ResearchAgentStatusSheet({ projectId, researchAgentRef, isExpanded = fa
             bottom: `${bottomPosition + 5}px`,
             transition: 'opacity 300ms ease-out'
           }}
+          onClick={(e) => {
+            console.log('[ResearchAgentStatusSheet] Click on outer container (pointer-events-none)', {
+              target: e.target,
+              isVisible
+            })
+          }}
         >
           <div
             ref={statusSheetRef}
             className="bg-dark-card border border-dark-border shadow-2xl w-full overflow-hidden pb-4 relative pointer-events-auto"
             style={{
               boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
+            }}
+            onClick={(e) => {
+              console.log('[ResearchAgentStatusSheet] Click on inner container (pointer-events-auto)', {
+                target: e.target,
+                isVisible
+              })
             }}
           >
             {/* Background Image */}

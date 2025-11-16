@@ -486,6 +486,31 @@ Please read the manifest to understand what my website is about, then create an 
     setShowCreationFlow(false)
   }
 
+  // Debug: Log all clicks in workspace mode
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (layoutState === 'TOOLS') {
+        const target = e.target as HTMLElement
+        const computedStyle = window.getComputedStyle(target)
+
+        console.log('[WORKSPACE DEBUG] Global click detected:', {
+          target: target,
+          tagName: target.tagName,
+          className: target.className,
+          zIndex: computedStyle.zIndex,
+          pointerEvents: computedStyle.pointerEvents,
+          position: computedStyle.position,
+          clickX: e.clientX,
+          clickY: e.clientY,
+          elementAtPoint: document.elementFromPoint(e.clientX, e.clientY)
+        })
+      }
+    }
+
+    document.addEventListener('click', handleGlobalClick, true)
+    return () => document.removeEventListener('click', handleGlobalClick, true)
+  }, [layoutState])
+
   return (
     <div className="w-full h-screen relative flex flex-col bg-[#0A0020] overflow-hidden">
       {/* Fixed shape background - Behind all content */}
@@ -615,7 +640,12 @@ Please read the manifest to understand what my website is about, then create an 
       />
 
       {/* Preview Area - Desktop or Mobile Mode */}
-      <div className="w-full relative overflow-hidden p-[5px] border-b border-gray-700/50 z-[101]" style={{ height: 'calc(100vh - 40px - 200px)' }}>
+      <div
+        className={`w-full relative overflow-hidden p-[5px] border-b border-gray-700/50 z-[101] ${
+          layoutState === 'TOOLS' ? 'pointer-events-none' : ''
+        }`}
+        style={{ height: 'calc(100vh - 40px - 200px)' }}
+      >
         {loading ? (
           // Loading State
           <div className="absolute inset-0 flex items-center justify-center">
