@@ -18,6 +18,7 @@ import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import bgImage from '../assets/images/bg.jpg'
+import { ModalPortal } from './ModalPortal'
 
 interface ProjectSettingsProps {
   isOpen: boolean
@@ -146,8 +147,8 @@ function ProjectSettings({
   if (!isOpen) return null
 
   return (
-    <>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <ModalPortal>
+      <div className="fixed inset-0 z-[300] flex items-center justify-center">
         {/* Backdrop */}
         <div
           className={`absolute inset-0 bg-black/${isSetupMode ? '80' : '60'} backdrop-blur-sm animate-fadeIn`}
@@ -540,7 +541,7 @@ function ProjectSettings({
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center">
+        <div className="fixed inset-0 z-[310] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setShowDeleteModal(false)}
@@ -606,7 +607,7 @@ function ProjectSettings({
           </div>
         </div>
       )}
-    </>
+    </ModalPortal>
   )
 }
 

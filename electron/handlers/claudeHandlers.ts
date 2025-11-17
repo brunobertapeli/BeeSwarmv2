@@ -650,15 +650,6 @@ function setupClaudeEventForwarding(): void {
       mainWindowContents.send('claude:model-changed', projectId, model);
     }
   });
-
-  // Handle questions from Claude (plan mode)
-  claudeService.on('claude-questions', ({ projectId, questions }: { projectId: string; questions: any }) => {
-
-    // TODO: Forward to renderer for UI display
-    if (mainWindowContents && !mainWindowContents.isDestroyed()) {
-      mainWindowContents.send('claude:questions', projectId, questions);
-    }
-  });
 }
 
 /**

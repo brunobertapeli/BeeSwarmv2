@@ -69,10 +69,8 @@ interface StatusSheetProps {
   onMouseEnter?: () => void
   onMouseLeave?: () => void
   onStopClick?: () => void
-  questions?: any // Questions from Claude
   onApprovePlan?: () => void // Callback when user approves plan
   onRejectPlan?: () => void // Callback when user rejects plan (keep planning)
-  onAnswerQuestions?: (answers: Record<string, string | string[]>, customInputs: Record<string, string>) => void
 }
 
 // Helper: Check if block has a plan waiting for approval
@@ -101,7 +99,7 @@ function hasPlanWaitingApproval(block: ConversationBlock): boolean {
   return false
 }
 
-function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, questions, onApprovePlan, onRejectPlan, onAnswerQuestions }: StatusSheetProps) {
+function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, onApprovePlan, onRejectPlan }: StatusSheetProps) {
   const { deploymentStatus, showStatusSheet, setShowStatusSheet, viewMode } = useAppStore()
   const { layoutState, statusSheetExpanded, setStatusSheetExpanded, setModalFreezeActive, setModalFreezeImage } = useLayoutStore()
   const [isExpanded, setIsExpanded] = useState(false)
@@ -120,8 +118,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   const [thinkingDots, setThinkingDots] = useState('')
   const [latestToolTimer, setLatestToolTimer] = useState<Map<string, number>>(new Map()) // blockId -> elapsed time
   const [keywords, setKeywords] = useState<Record<string, string>>({})
-  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string | string[]>>({})
-  const [customInputs, setCustomInputs] = useState<Record<string, string>>({})
   const [overflowingMessages, setOverflowingMessages] = useState<Set<string>>(new Set())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const statusSheetRef = useRef<HTMLDivElement>(null)
@@ -146,55 +142,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     return phrases[hash % phrases.length]
   }
 
-  // Helper to check if all questions are answered
-  const areAllQuestionsAnswered = (): boolean => {
-    if (!questions?.questions) return false
-    return questions.questions.every((q: any) => {
-      const answer = questionAnswers[q.id]
-      if (q.type === 'checkbox') {
-        const answerArray = Array.isArray(answer) ? answer : []
-        // If "custom" is selected, check that customInputs has a value
-        if (answerArray.includes('__CUSTOM__')) {
-          return customInputs[q.id] && customInputs[q.id].trim() !== ''
-        }
-        return answerArray.length > 0
-      }
-      if (q.type === 'radio') {
-        // If "custom" is selected, check that customInputs has a value
-        if (answer === '__CUSTOM__') {
-          return customInputs[q.id] && customInputs[q.id].trim() !== ''
-        }
-        return answer && answer !== ''
-      }
-      return answer && answer !== ''
-    })
-  }
-
-  // Helper to toggle checkbox answer
-  const toggleCheckboxAnswer = (questionId: string, option: string) => {
-    const currentAnswer = questionAnswers[questionId]
-    const currentArray = Array.isArray(currentAnswer) ? currentAnswer : []
-
-    if (currentArray.includes(option)) {
-      setQuestionAnswers({
-        ...questionAnswers,
-        [questionId]: currentArray.filter(v => v !== option)
-      })
-    } else {
-      setQuestionAnswers({
-        ...questionAnswers,
-        [questionId]: [...currentArray, option]
-      })
-    }
-  }
-
-  // Reset answers when questions change
-  useEffect(() => {
-    if (questions) {
-      setQuestionAnswers({})
-      setCustomInputs({})
-    }
-  }, [questions])
 
   // Estimate number of lines in user prompt
   const estimatePromptLines = (text: string): number => {
@@ -424,54 +371,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     return () => window.removeEventListener('resize', handleResize)
   }, [allBlocks, expandedMessages])
 
-  // Helper: Check if block has plan mode questions
-  const hasQuestions = (block: ConversationBlock): boolean => {
-    return block.messages?.some(m => m.content.includes('<QUESTIONS>')) || false
-  }
-
-  // Helper: Check if block is user answers to questions
-  const isAnswerBlock = (block: ConversationBlock): boolean => {
-    const isAnswer = block.userPrompt?.startsWith('Here are my answers to your questions') || false
-    return isAnswer
-  }
-
-  // Helper: Strip <QUESTIONS> tags from text
-  const stripQuestions = (text: string): string => {
-    return text.replace(/<QUESTIONS>[\s\S]*?<\/QUESTIONS>/g, '').trim()
-  }
-
-  // Helper: Extract questions data from text
-  const extractQuestions = (text: string): any => {
-    const match = text.match(/<QUESTIONS>([\s\S]*?)<\/QUESTIONS>/)
-    if (!match) return null
-
-    try {
-      return JSON.parse(match[1].trim())
-    } catch {
-      return null
-    }
-  }
-
-  // Helper: Extract answers from user prompt
-  const extractAnswers = (userPrompt: string): string[] => {
-    const lines = userPrompt.split('\n').filter(line => line.trim())
-    const answers: string[] = []
-
-    for (const line of lines) {
-      // Skip the first line "Here are my answers..."
-      if (line.startsWith('Here are my answers')) continue
-      if (line.startsWith('**') && line.includes('**')) {
-        // This is a question line, skip it
-        continue
-      }
-      // This is an answer line
-      if (!line.startsWith('Please proceed')) {
-        answers.push(line.trim())
-      }
-    }
-
-    return answers
-  }
 
   // Load more blocks (for infinite scroll)
   const loadMoreBlocks = async () => {
@@ -833,11 +732,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   const getCollapsedState = () => {
     if (!currentBlock) {
       return { text: '', icon: null, needsAttention: false }
-    }
-
-    // Check if Claude has questions that need answers (only show after block is complete)
-    if (questions && questions.questions && questions.questions.length > 0 && currentBlock.isComplete) {
-      return { text: 'Claude has questions for you - click to answer', icon: MessageCircle, needsAttention: true }
     }
 
     // Check if plan is ready and needs approval (use helper function)
@@ -1206,8 +1100,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                 const blockType = block.interactionType || 'unknown';
 
-                // Skip answer blocks - they're shown inline with questions
-                const isAnswers = blockType === 'answers' || isAnswerBlock(block);
+                // Skip answer blocks (legacy interaction type)
+                const isAnswers = blockType === 'answers';
                 if (isAnswers) {
                   return null;
                 }
@@ -1215,13 +1109,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                 // Get the actual index and check what comes next
                 const actualIndex = allBlocks.findIndex(b => b.id === block.id);
                 const nextBlock = actualIndex >= 0 && actualIndex < allBlocks.length - 1 ? allBlocks[actualIndex + 1] : null;
-
-                // Determine if this is a questions block
-                const isQuestions = blockType === 'questions' || hasQuestions(block);
-
-                // For questions blocks - find the answer block that follows
-                const answerBlock = (isQuestions && nextBlock && (nextBlock.interactionType === 'answers' || isAnswerBlock(nextBlock))) ? nextBlock : null;
-                const isPlanModeWithAnswers = isQuestions && answerBlock !== null;
 
                 // Determine if this is a plan ready block
                 const isPlanReady = blockType === 'plan_ready' || hasPlanWaitingApproval(block);
@@ -1361,22 +1248,13 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                     <div className="bg-white/[0.02] rounded-lg border border-white/10 p-4 relative">
                       {/* Checkpoint or Stop button (top right) - only for non-restore blocks */}
                       {!isRestoreBlock && (() => {
-                        // In plan mode with merged blocks, check both the main block and answer block for commitHash
-                        const commitHashToCheck = (isPlanModeWithAnswers && answerBlock?.commitHash)
-                          ? answerBlock.commitHash
-                          : block.commitHash;
-
-                        const blockToRestore = (isPlanModeWithAnswers && answerBlock?.commitHash)
-                          ? answerBlock
-                          : block;
-
-                        const shouldShowRestore = block.isComplete && commitHashToCheck && commitHashToCheck !== 'unknown' && commitHashToCheck.length >= 7;
+                        const shouldShowRestore = block.isComplete && block.commitHash && block.commitHash !== 'unknown' && block.commitHash.length >= 7;
 
                         return (
                         <>
                           {shouldShowRestore ? (
                             <button
-                              onClick={() => handleRestoreCheckpoint(blockToRestore)}
+                              onClick={() => handleRestoreCheckpoint(block)}
                               className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors group z-10"
                               title="Restore to this checkpoint"
                             >
@@ -1502,7 +1380,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                         <div className="absolute left-[12px] top-[12px] bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
 
                         {/* STEP 0: USER (User Prompt) - Hide for answer blocks */}
-                        {!isAnswerBlock(block) && (
+                        {!isAnswers && (
                         <div className="relative pb-4">
                           {/* Step header */}
                           <div className="flex items-center gap-3 mb-3">
@@ -1563,7 +1441,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-gray-200">
-                                  {isPlanModeWithAnswers ? 'Exploring & planning' : 'Claude:'}
+                                  Claude:
                                 </span>
                                 {block.isComplete && (
                                   <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -1584,7 +1462,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                             {/* Messages */}
                             <div className="space-y-1.5">
-                              {block.messages?.filter(m => !m.content.includes('⚠️ Stopped by user')).map((message, idx) => {
+                              {block.messages?.filter(m =>
+                                !m.content.includes('⚠️ Stopped by user') &&
+                                !(m.type === 'tool' && !m.toolName) // Filter out tool summary messages - they appear in stats section
+                              ).map((message, idx) => {
                                 const messageId = `${block.id}-msg-${idx}`
                                 const isMessageExpanded = expandedMessages.has(messageId)
                                 const hasOverflow = overflowingMessages.has(messageId)
@@ -1617,7 +1498,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                               }}
                                             >
                                               <KeywordHighlight
-                                                text={stripQuestions(message.content)}
+                                                text={message.content}
                                                 keywords={keywords}
                                                 blockId={block.id}
                                               />
@@ -1791,692 +1672,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           </div>
                         </div>
 
-                        {/* STEP: QUESTIONS (Claude needs clarification) - Show when questions exist AND block is complete AND not in plan mode merged view */}
-                        {questions && questions.questions && questions.questions.length > 0 && block.isComplete && !isPlanModeWithAnswers && (
-                          <div className="relative pb-4">
-                            {/* Step header */}
-                            <div className="flex items-center gap-3 mb-3">
-                              {/* Anthropic Icon */}
-                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6 opacity-90" />
-                              </div>
-
-                              {/* Title */}
-                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-gray-200">
-                                    Claude needs clarification
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Questions content */}
-                            <div className="ml-10 space-y-4">
-                              {questions.questions.map((q: any, index: number) => (
-                                <div key={q.id || index} className="space-y-2">
-                                  <label className="block text-[11px] font-medium text-gray-200">
-                                    {q.question}
-                                  </label>
-
-                                  {/* Text Input */}
-                                  {q.type === 'text' && (
-                                    <input
-                                      type="text"
-                                      value={(questionAnswers[q.id] as string) || ''}
-                                      onChange={(e) => setQuestionAnswers({ ...questionAnswers, [q.id]: e.target.value })}
-                                      placeholder="Type your answer..."
-                                      className="w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[11px] text-white placeholder-gray-500 outline-none focus:border-primary/50 transition-colors"
-                                    />
-                                  )}
-
-                                  {/* Radio Buttons */}
-                                  {q.type === 'radio' && (
-                                    <div className="space-y-1.5">
-                                      {q.options?.map((option: string, optIndex: number) => (
-                                        <label
-                                          key={optIndex}
-                                          className="flex items-center gap-2 p-1.5 rounded hover:bg-dark-bg/30 cursor-pointer transition-colors group"
-                                        >
-                                          <input
-                                            type="radio"
-                                            name={q.id}
-                                            value={option}
-                                            checked={questionAnswers[q.id] === option}
-                                            onChange={(e) => setQuestionAnswers({ ...questionAnswers, [q.id]: e.target.value })}
-                                            className="w-3 h-3 text-primary bg-dark-bg border-dark-border focus:ring-primary/50 focus:ring-1 cursor-pointer"
-                                          />
-                                          <span className="text-[11px] text-gray-300 group-hover:text-white transition-colors">
-                                            {option}
-                                          </span>
-                                        </label>
-                                      ))}
-
-                                      {/* Hardcoded options */}
-                                      <label className="flex items-center gap-2 p-1.5 rounded hover:bg-dark-bg/30 cursor-pointer transition-colors group">
-                                        <input
-                                          type="radio"
-                                          name={q.id}
-                                          value="__CLAUDE_DECIDE__"
-                                          checked={questionAnswers[q.id] === '__CLAUDE_DECIDE__'}
-                                          onChange={(e) => setQuestionAnswers({ ...questionAnswers, [q.id]: e.target.value })}
-                                          className="w-3 h-3 text-primary bg-dark-bg border-dark-border focus:ring-primary/50 focus:ring-1 cursor-pointer"
-                                        />
-                                        <span className="text-[11px] text-gray-300 group-hover:text-white transition-colors">
-                                          Choose what you believe is the best option.
-                                        </span>
-                                      </label>
-
-                                      <label className="flex items-start gap-2 p-1.5 rounded hover:bg-dark-bg/30 cursor-pointer transition-colors group">
-                                        <input
-                                          type="radio"
-                                          name={q.id}
-                                          value="__CUSTOM__"
-                                          checked={questionAnswers[q.id] === '__CUSTOM__'}
-                                          onChange={(e) => setQuestionAnswers({ ...questionAnswers, [q.id]: e.target.value })}
-                                          className="w-3 h-3 mt-0.5 text-primary bg-dark-bg border-dark-border focus:ring-primary/50 focus:ring-1 cursor-pointer"
-                                        />
-                                        <div className="flex-1">
-                                          <span className="text-[11px] text-gray-300 group-hover:text-white transition-colors">
-                                            Type something:
-                                          </span>
-                                          {questionAnswers[q.id] === '__CUSTOM__' && (
-                                            <input
-                                              type="text"
-                                              value={customInputs[q.id] || ''}
-                                              onChange={(e) => setCustomInputs({ ...customInputs, [q.id]: e.target.value })}
-                                              placeholder="Enter your answer..."
-                                              className="mt-1.5 w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[11px] text-white placeholder-gray-500 outline-none focus:border-primary/50 transition-colors"
-                                            />
-                                          )}
-                                        </div>
-                                      </label>
-                                    </div>
-                                  )}
-
-                                  {/* Checkboxes */}
-                                  {q.type === 'checkbox' && (
-                                    <div className="space-y-1.5">
-                                      {q.options?.map((option: string, optIndex: number) => {
-                                        const currentArray = Array.isArray(questionAnswers[q.id]) ? questionAnswers[q.id] as string[] : []
-                                        const isChecked = currentArray.includes(option)
-
-                                        return (
-                                          <label
-                                            key={optIndex}
-                                            className="flex items-center gap-2 p-1.5 rounded hover:bg-dark-bg/30 cursor-pointer transition-colors group"
-                                          >
-                                            <input
-                                              type="checkbox"
-                                              checked={isChecked}
-                                              onChange={() => toggleCheckboxAnswer(q.id, option)}
-                                              className="w-3 h-3 text-primary bg-dark-bg border-dark-border rounded focus:ring-primary/50 focus:ring-1 cursor-pointer"
-                                            />
-                                            <span className="text-[11px] text-gray-300 group-hover:text-white transition-colors">
-                                              {option}
-                                            </span>
-                                          </label>
-                                        )
-                                      })}
-
-                                      {/* Hardcoded options */}
-                                      <label className="flex items-center gap-2 p-1.5 rounded hover:bg-dark-bg/30 cursor-pointer transition-colors group">
-                                        <input
-                                          type="checkbox"
-                                          checked={((questionAnswers[q.id] as string[]) || []).includes('__CLAUDE_DECIDE__')}
-                                          onChange={() => toggleCheckboxAnswer(q.id, '__CLAUDE_DECIDE__')}
-                                          className="w-3 h-3 text-primary bg-dark-bg border-dark-border rounded focus:ring-primary/50 focus:ring-1 cursor-pointer"
-                                        />
-                                        <span className="text-[11px] text-gray-300 group-hover:text-white transition-colors">
-                                          Choose what you believe is the best option.
-                                        </span>
-                                      </label>
-
-                                      <label className="flex items-start gap-2 p-1.5 rounded hover:bg-dark-bg/30 cursor-pointer transition-colors group">
-                                        <input
-                                          type="checkbox"
-                                          checked={((questionAnswers[q.id] as string[]) || []).includes('__CUSTOM__')}
-                                          onChange={() => toggleCheckboxAnswer(q.id, '__CUSTOM__')}
-                                          className="w-3 h-3 mt-0.5 text-primary bg-dark-bg border-dark-border rounded focus:ring-primary/50 focus:ring-1 cursor-pointer"
-                                        />
-                                        <div className="flex-1">
-                                          <span className="text-[11px] text-gray-300 group-hover:text-white transition-colors">
-                                            Type something:
-                                          </span>
-                                          {((questionAnswers[q.id] as string[]) || []).includes('__CUSTOM__') && (
-                                            <input
-                                              type="text"
-                                              value={customInputs[q.id] || ''}
-                                              onChange={(e) => setCustomInputs({ ...customInputs, [q.id]: e.target.value })}
-                                              placeholder="Enter your answer..."
-                                              className="mt-1.5 w-full bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[11px] text-white placeholder-gray-500 outline-none focus:border-primary/50 transition-colors"
-                                            />
-                                          )}
-                                        </div>
-                                      </label>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-
-                              {/* Submit button */}
-                              <div className="pt-2 flex gap-2">
-                                <button
-                                  onClick={() => {
-                                    if (onAnswerQuestions) {
-                                      onAnswerQuestions(questionAnswers, customInputs)
-                                    }
-                                  }}
-                                  disabled={!areAllQuestionsAnswered()}
-                                  className="px-3 py-1.5 bg-primary/20 hover:bg-primary/30 border border-primary/50 hover:border-primary/70 rounded text-[11px] text-primary font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                  Submit Answers
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* PLAN MODE: Waiting for user input */}
-                        {isPlanModeWithAnswers && (
-                          <div className="relative pb-4">
-                            {/* Step header */}
-                            <div className="flex items-center gap-3 mb-3">
-                              {/* Anthropic Icon */}
-                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6 opacity-90" />
-                              </div>
-
-                              {/* Title + Status */}
-                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-gray-200">
-                                    Waiting for user input
-                                  </span>
-                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                    <Check size={10} className="text-green-400" />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Questions content */}
-                            <div className="ml-10">
-                              <span className="text-[11px] text-gray-400">
-                                Claude asked questions to better understand your requirements
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* PLAN MODE: User provided answers */}
-                        {isPlanModeWithAnswers && answerBlock && (
-                          <div className="relative pb-4">
-                            {/* Step header */}
-                            <div className="flex items-center gap-3 mb-3">
-                              {/* User Avatar */}
-                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                <User size={24} className="text-white opacity-90" />
-                              </div>
-
-                              {/* Title + Status */}
-                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-gray-200">
-                                    User provided answers
-                                  </span>
-                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                    <Check size={10} className="text-green-400" />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Answers content */}
-                            <div className="ml-10 space-y-1">
-                              {extractAnswers(answerBlock.userPrompt || '').map((answer, idx) => (
-                                <div key={idx} className="flex items-start gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-green-500/50 flex-shrink-0 mt-1.5" />
-                                  <span className="text-[11px] text-gray-300">{answer}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* PLAN MODE: Implementation step (from answer block - Claude's response) */}
-                        {isPlanModeWithAnswers && answerBlock && answerBlock.messages && answerBlock.messages.length > 0 && (
-                          <div className="relative pb-4">
-                            {/* Step header */}
-                            <div className="flex items-center gap-3 mb-3">
-                              {/* Anthropic Icon */}
-                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6 opacity-90" />
-                              </div>
-
-                              {/* Title + Status */}
-                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-gray-200">
-                                    Creating plan
-                                  </span>
-                                  {answerBlock.isComplete && (
-                                    <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                      <Check size={10} className="text-green-400" />
-                                    </div>
-                                  )}
-                                  {answerBlock.isComplete && answerBlock.completionStats && (
-                                    <span className="text-[10px] text-gray-500">
-                                      {answerBlock.completionStats.timeSeconds}s
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Implementation messages */}
-                            <div className="ml-10 space-y-3">
-                              <div className="space-y-1.5">
-                                {answerBlock.messages?.filter(m => !m.content.includes('⚠️ Stopped by user')).map((message, idx) => {
-                                  const messageId = `${answerBlock.id}-msg-${idx}`
-                                  const isMessageExpanded = expandedMessages.has(messageId)
-                                  const hasOverflow = overflowingMessages.has(messageId)
-                                  const toolMessages = answerBlock.messages?.filter(m => m.type === 'tool') || []
-                                  const isLatestTool = message.type === 'tool' && message === toolMessages[toolMessages.length - 1]
-
-                                  return (
-                                    <div key={idx}>
-                                      <div className="flex items-start gap-2">
-                                        {message.type === 'assistant' && (
-                                          <>
-                                            <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
-                                            <div className="flex-1 relative">
-                                              <div
-                                                ref={(el) => {
-                                                  if (el) {
-                                                    messageRefs.current.set(messageId, el)
-                                                  } else {
-                                                    messageRefs.current.delete(messageId)
-                                                  }
-                                                }}
-                                                className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap"
-                                                style={{
-                                                  display: '-webkit-box',
-                                                  WebkitBoxOrient: 'vertical',
-                                                  WebkitLineClamp: !isMessageExpanded ? 3 : 'unset',
-                                                  overflow: 'visible'
-                                                }}
-                                              >
-                                                <KeywordHighlight
-                                                  text={stripQuestions(message.content)}
-                                                  keywords={keywords}
-                                                  blockId={answerBlock.id}
-                                                />
-                                              </div>
-                                              {hasOverflow && (
-                                                <button
-                                                  onClick={() => {
-                                                    const newSet = new Set(expandedMessages)
-                                                    if (newSet.has(messageId)) {
-                                                      newSet.delete(messageId)
-                                                    } else {
-                                                      newSet.add(messageId)
-                                                    }
-                                                    setExpandedMessages(newSet)
-                                                  }}
-                                                  className="ml-1 text-[10px] text-primary hover:text-primary-light transition-colors"
-                                                >
-                                                  {isMessageExpanded ? 'Show less' : 'Show more'}
-                                                </button>
-                                              )}
-                                            </div>
-                                          </>
-                                        )}
-                                        {message.type === 'tool' && message.toolName && (
-                                          <>
-                                            <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
-                                            <span className="text-[11px] text-gray-400 leading-relaxed flex items-center gap-2">
-                                              <span>
-                                                Claude using tool{' '}
-                                                <span className="text-primary font-medium">{message.toolName}</span>
-                                                {message.content.includes('@') && (
-                                                  <> @ {message.content.split('@')[1].trim()}</>
-                                                )}
-                                              </span>
-                                              {isLatestTool && message.toolDuration === undefined && (
-                                                <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                                                  <Clock size={10} />
-                                                  <>{latestToolTimer.get(answerBlock.id)?.toFixed(1) || '0.0'}s</>
-                                                </span>
-                                              )}
-                                            </span>
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-
-                              {/* Stats for implementation block */}
-                              {answerBlock.isComplete && answerBlock.completionStats && (() => {
-                                // Extract tool usage from messages
-                                const toolUsageMessage = answerBlock.messages?.find(m => m.type === 'tool' && !m.toolName)
-                                const toolUsage = toolUsageMessage?.content || ''
-
-                                return (
-                                <div className="mt-3">
-                                  <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
-                                    {toolUsage && (
-                                      <>
-                                        <span className="text-gray-400 flex items-center gap-1">
-                                          <span className="text-gray-500">Used tools:</span>
-                                          <span className="font-mono text-gray-300">{toolUsage}</span>
-                                        </span>
-                                        <span className="text-gray-600">|</span>
-                                      </>
-                                    )}
-                                    <span className="text-gray-400 flex items-center gap-1">
-                                      <span className="text-gray-500">Tokens:</span>
-                                      <ArrowUpCircle size={10} className="text-blue-400" />
-                                      <span>{answerBlock.completionStats.inputTokens}</span>
-                                      <span className="text-gray-600">→</span>
-                                      <ArrowDownCircle size={10} className="text-green-400" />
-                                      <span>{answerBlock.completionStats.outputTokens}</span>
-                                    </span>
-                                    <span className="text-gray-600">|</span>
-                                    <span className="text-gray-400 flex items-center gap-1">
-                                      <DollarSign size={10} />
-                                      {answerBlock.completionStats.cost.toFixed(4)}
-                                    </span>
-                                  </div>
-                                </div>
-                                )
-                              })()}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* PLAN MODE: Show blocks that come AFTER the merged view (approval + implementation) */}
-                        {isPlanModeWithAnswers && answerBlock && (() => {
-                          // Find blocks that come after answerBlock
-                          const answerIndex = allBlocks.findIndex(b => b.id === answerBlock.id)
-                          const blocksAfterAnswer = answerIndex >= 0 ? allBlocks.slice(answerIndex + 1) : []
-
-                          // Only show blocks that are part of the plan mode session
-                          // Stop when we hit a new user conversation (userPrompt that's not approval)
-                          const additionalBlocks: any[] = []
-                          for (const block of blocksAfterAnswer) {
-                            // If this block has a userPrompt that's NOT an approval, it's a new conversation - stop here
-                            if (block.userPrompt && !block.userPrompt.includes('approve')) {
-                              break
-                            }
-                            additionalBlocks.push(block)
-                          }
-
-                          return additionalBlocks.length > 0 && additionalBlocks.map((afterBlock, idx) => (
-                            <div key={afterBlock.id}>
-                              {/* User approved plan */}
-                              {afterBlock.userPrompt && afterBlock.userPrompt.includes('approve') && (
-                                <div className="relative pb-4">
-                                  <div className="flex items-center gap-3 mb-3">
-                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                      <User size={24} className="text-white opacity-90" />
-                                    </div>
-                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium text-gray-200">
-                                          User approved plan
-                                        </span>
-                                        <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                          <Check size={10} className="text-green-400" />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Implementation after approval */}
-                              {afterBlock.messages && afterBlock.messages.length > 0 && (
-                                <div className="relative pb-4">
-                                  <div className="flex items-center gap-3 mb-3">
-                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                      <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6 opacity-90" />
-                                    </div>
-                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium text-gray-200">
-                                          Implementing changes
-                                        </span>
-                                        {afterBlock.isComplete && (
-                                          <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                            <Check size={10} className="text-green-400" />
-                                          </div>
-                                        )}
-                                        {afterBlock.isComplete && afterBlock.completionStats && (
-                                          <span className="text-[10px] text-gray-500">
-                                            {afterBlock.completionStats.timeSeconds}s
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="ml-10 space-y-3">
-                                    <div className="space-y-1.5">
-                                      {afterBlock.messages?.filter(m => !m.content.includes('⚠️ Stopped by user')).map((message, msgIdx) => {
-                                        const messageId = `${afterBlock.id}-msg-${msgIdx}`
-                                        const isMessageExpanded = expandedMessages.has(messageId)
-                                        const hasOverflow = overflowingMessages.has(messageId)
-                                        const toolMessages = afterBlock.messages?.filter(m => m.type === 'tool') || []
-                                        const isLatestTool = message.type === 'tool' && message === toolMessages[toolMessages.length - 1]
-
-                                        return (
-                                          <div key={msgIdx}>
-                                            <div className="flex items-start gap-2">
-                                              {message.type === 'assistant' && (
-                                                <>
-                                                  <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
-                                                  <div className="flex-1 relative">
-                                                    <div
-                                                      ref={(el) => {
-                                                        if (el) {
-                                                          messageRefs.current.set(messageId, el)
-                                                        } else {
-                                                          messageRefs.current.delete(messageId)
-                                                        }
-                                                      }}
-                                                      className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap"
-                                                      style={{
-                                                        display: '-webkit-box',
-                                                        WebkitBoxOrient: 'vertical',
-                                                        WebkitLineClamp: !isMessageExpanded ? 3 : 'unset',
-                                                        overflow: 'visible'
-                                                      }}
-                                                    >
-                                                      <KeywordHighlight
-                                                        text={stripQuestions(message.content)}
-                                                        keywords={keywords}
-                                                        blockId={afterBlock.id}
-                                                      />
-                                                    </div>
-                                                    {hasOverflow && (
-                                                      <button
-                                                        onClick={() => {
-                                                          const newSet = new Set(expandedMessages)
-                                                          if (newSet.has(messageId)) {
-                                                            newSet.delete(messageId)
-                                                          } else {
-                                                            newSet.add(messageId)
-                                                          }
-                                                          setExpandedMessages(newSet)
-                                                        }}
-                                                        className="ml-1 text-[10px] text-primary hover:text-primary-light transition-colors"
-                                                      >
-                                                        {isMessageExpanded ? 'Show less' : 'Show more'}
-                                                      </button>
-                                                    )}
-                                                  </div>
-                                                </>
-                                              )}
-                                              {message.type === 'tool' && message.toolName && (
-                                                <>
-                                                  <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
-                                                  <span className="text-[11px] text-gray-400 leading-relaxed flex items-center gap-2">
-                                                    <span>
-                                                      Claude using tool{' '}
-                                                      <span className="text-primary font-medium">{message.toolName}</span>
-                                                      {message.content.includes('@') && (
-                                                        <> @ {message.content.split('@')[1].trim()}</>
-                                                      )}
-                                                    </span>
-                                                    {isLatestTool && message.toolDuration === undefined && (
-                                                      <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                                                        <Clock size={10} />
-                                                        <>{latestToolTimer.get(afterBlock.id)?.toFixed(1) || '0.0'}s</>
-                                                      </span>
-                                                    )}
-                                                  </span>
-                                                </>
-                                              )}
-                                            </div>
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
-
-                                    {afterBlock.isComplete && afterBlock.completionStats && (() => {
-                                      // Extract tool usage from messages
-                                      const toolUsageMessage = afterBlock.messages?.find(m => m.type === 'tool' && !m.toolName)
-                                      const toolUsage = toolUsageMessage?.content || ''
-
-                                      return (
-                                      <div className="mt-3">
-                                        <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
-                                          {toolUsage && (
-                                            <>
-                                              <span className="text-gray-400 flex items-center gap-1">
-                                                <span className="text-gray-500">Used tools:</span>
-                                                <span className="font-mono text-gray-300">{toolUsage}</span>
-                                              </span>
-                                              <span className="text-gray-600">|</span>
-                                            </>
-                                          )}
-                                          <span className="text-gray-400 flex items-center gap-1">
-                                            <span className="text-gray-500">Tokens:</span>
-                                            <ArrowUpCircle size={10} className="text-blue-400" />
-                                            <span>{afterBlock.completionStats.inputTokens}</span>
-                                            <span className="text-gray-600">→</span>
-                                            <ArrowDownCircle size={10} className="text-green-400" />
-                                            <span>{afterBlock.completionStats.outputTokens}</span>
-                                          </span>
-                                          <span className="text-gray-600">|</span>
-                                          <span className="text-gray-400 flex items-center gap-1">
-                                            <DollarSign size={10} />
-                                            {afterBlock.completionStats.cost.toFixed(4)}
-                                          </span>
-                                        </div>
-                                      </div>
-                                      )
-                                    })()}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Show actions (commit, dev server) for this block */}
-                              {afterBlock.actions && afterBlock.actions.length > 0 && afterBlock.actions.map((action, actionIdx) => {
-                                if (action.type === 'git_commit' && action.status) {
-                                  return (
-                                    <div key={`git-${actionIdx}`} className="relative pb-4">
-                                      <div className="flex items-center gap-3 mb-3">
-                                        <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                          <img src={GitIcon} alt="Git" className="w-6 h-6 opacity-90" />
-                                        </div>
-                                        <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-medium text-gray-200">
-                                              {action.status === 'success' ? 'Committed successfully' : 'Committing...'}
-                                            </span>
-                                            {action.status === 'success' && action.data?.commitHash && (
-                                              <span className="font-mono text-[11px] bg-white/[0.03] border border-white/10 px-2 py-0.5 rounded text-gray-400">
-                                                {action.data.commitHash}
-                                              </span>
-                                            )}
-                                            {action.status === 'success' && action.data?.filesChanged !== undefined && (
-                                              <>
-                                                <span className="text-gray-400 text-[11px]">•</span>
-                                                <span className="text-[11px] text-gray-400">
-                                                  {action.data.filesChanged} file{action.data.filesChanged !== 1 ? 's' : ''} changed
-                                                </span>
-                                              </>
-                                            )}
-                                            {action.status === 'success' && (
-                                              <>
-                                                <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                                  <Check size={10} className="text-green-400" />
-                                                </div>
-                                                <span className="text-[10px] text-gray-500">
-                                                  0.1s
-                                                </span>
-                                              </>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )
-                                }
-                                if (action.type === 'dev_server' && action.status) {
-                                  return (
-                                    <div key={`dev-${actionIdx}`} className="relative pb-4">
-                                      <div className="flex items-center gap-3 mb-3">
-                                        <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                          <Server size={24} className="text-white opacity-90" />
-                                        </div>
-                                        <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-sm font-medium text-gray-200">
-                                              {action.status === 'success' ? 'Dev Server started successfully' : 'Starting dev server...'}
-                                            </span>
-                                            {action.status === 'success' && action.data?.url && (
-                                              <>
-                                                <span className="text-gray-400 text-[11px]">•</span>
-                                                <a
-                                                  href={action.data.url}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[11px]"
-                                                >
-                                                  <span>{action.data.url}</span>
-                                                  <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
-                                                </a>
-                                              </>
-                                            )}
-                                            {action.status === 'success' && (
-                                              <>
-                                                <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                                  <Check size={10} className="text-green-400" />
-                                                </div>
-                                                {action.data?.restartTime && (
-                                                  <span className="text-[10px] text-gray-500">
-                                                    {action.data.restartTime}s
-                                                  </span>
-                                                )}
-                                              </>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )
-                                }
-                                return null
-                              })}
-                            </div>
-                          ))
-                        })()}
-
                         {/* PLAN MODE: Plan approval (show when plan is ready) */}
                         {needsApproval && (
                           <div className="relative pb-4">
@@ -2573,7 +1768,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             <div className="ml-10">
                               {/* Implementation messages */}
                               {implementationBlock.messages && implementationBlock.messages
-                                .filter(m => m.type === 'assistant' || m.type === 'thinking' || m.type === 'tool')
+                                .filter(m =>
+                                  (m.type === 'assistant' || m.type === 'thinking' || m.type === 'tool') &&
+                                  !(m.type === 'tool' && !m.toolName) // Filter out tool summary messages
+                                )
                                 .map((msg, msgIdx) => {
                                   if (msg.type === 'thinking') {
                                     return (
@@ -2634,10 +1832,9 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           </div>
                         )}
 
-                      {/* STEP 2: GIT (GitHub Commit) - Use answer/implementation block in plan mode */}
+                      {/* STEP 2: GIT (GitHub Commit) - Use implementation block in plan mode */}
                       {(() => {
                         const gitBlockToUse =
-                          (isPlanModeWithAnswers && answerBlock) ? answerBlock :
                           (isPlanReady && implementationBlock) ? implementationBlock :
                           block
                         const git = gitBlockToUse?.actions?.find(a => a.type === 'git_commit')
@@ -2696,10 +1893,9 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                         )
                       })()}
 
-                      {/* STEP 3: DEPLOY (Dev Server) - Use answer/implementation block in plan mode */}
+                      {/* STEP 3: DEPLOY (Dev Server) - Use implementation block in plan mode */}
                       {(() => {
                         const deployBlockToUse =
-                          (isPlanModeWithAnswers && answerBlock) ? answerBlock :
                           (isPlanReady && implementationBlock) ? implementationBlock :
                           block
                         const deploy = deployBlockToUse?.actions?.find(a => a.type === 'dev_server')

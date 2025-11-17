@@ -4,6 +4,7 @@ import { CheckCircle, RefreshCw, Code, Server, Rocket, X, AlertCircle } from 'lu
 import { Template } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 import noiseBgImage from '../assets/images/noise_bg.png'
+import { ModalPortal } from './ModalPortal'
 
 type WizardStep = 'cloning' | 'env-config' | 'installing' | 'initializing' | 'complete' | 'error'
 
@@ -199,10 +200,11 @@ export function ProjectCreationWizard({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fadeIn"
+    <ModalPortal>
+      <div className="fixed inset-0 z-[300] flex items-center justify-center">
+        {/* Backdrop */}
+        <div
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-fadeIn"
         onClick={currentStep === 'complete' || currentStep === 'error' ? onCancel : undefined}
       />
 
@@ -436,7 +438,8 @@ export function ProjectCreationWizard({
           </div>
         )}
       </motion.div>
-    </div>
+      </div>
+    </ModalPortal>
   )
 }
 

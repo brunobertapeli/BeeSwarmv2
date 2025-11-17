@@ -107,12 +107,15 @@ class ChatHistoryManager extends EventEmitter {
           // IMPORTANT: Text blocks end the current thinking session
           // Complete any active thinking before adding the text
           if (activeBlock.thinkingStartTime) {
-            const activeThinking = activeBlock.claudeMessages.find(m => m.type === 'thinking' && !m.thinkingDuration);
-            if (activeThinking) {
+            // Get the last thinking message (the one currently active)
+            const thinkingMessages = activeBlock.claudeMessages.filter(m => m.type === 'thinking');
+            const activeThinking = thinkingMessages[thinkingMessages.length - 1];
+
+            if (activeThinking && !activeThinking.thinkingDuration) {
               const duration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
               activeThinking.thinkingDuration = parseInt(duration);
-              activeBlock.thinkingStartTime = null; // Reset timer
             }
+            activeBlock.thinkingStartTime = null; // Reset timer
           }
 
           activeBlock.claudeMessages.push({
@@ -124,22 +127,19 @@ class ChatHistoryManager extends EventEmitter {
 
         // Track thinking blocks
         if (block.type === 'thinking' && block.thinking) {
-          // Check if there's an active thinking message (without duration)
-          const existingThinking = activeBlock.claudeMessages.find(m => m.type === 'thinking' && !m.thinkingDuration);
+          // Get the last thinking message to check if we're in a streaming session
+          const thinkingMessages = activeBlock.claudeMessages.filter(m => m.type === 'thinking');
+          const lastThinking = thinkingMessages[thinkingMessages.length - 1];
+          const isStreamingExisting = lastThinking && !lastThinking.thinkingDuration;
 
-          if (existingThinking) {
+          if (isStreamingExisting) {
             // Update existing thinking content (streaming)
-            existingThinking.content = block.thinking;
+            lastThinking.content = block.thinking;
           } else {
-            // New thinking session - complete previous one if exists
-            if (activeBlock.thinkingStartTime) {
-              const previousThinking = activeBlock.claudeMessages
-                .filter(m => m.type === 'thinking')
-                .pop();
-              if (previousThinking && !previousThinking.thinkingDuration) {
-                const duration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
-                previousThinking.thinkingDuration = parseInt(duration);
-              }
+            // New thinking session - complete previous one if it exists
+            if (lastThinking && !lastThinking.thinkingDuration && activeBlock.thinkingStartTime) {
+              const duration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
+              lastThinking.thinkingDuration = parseInt(duration);
             }
 
             // Start new thinking session
@@ -217,16 +217,17 @@ class ChatHistoryManager extends EventEmitter {
 
       const timeSeconds = ((Date.now() - activeBlock.operationStartTime) / 1000).toFixed(1);
 
-      // Finalize ALL thinking durations that don't have one yet
+      // Finalize any active thinking session
       if (activeBlock.thinkingStartTime) {
-        const thinkingDuration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
-        // Find ALL thinking messages without durations and complete them
-        const unfinishedThinking = activeBlock.claudeMessages.filter(m => m.type === 'thinking' && !m.thinkingDuration);
-        for (const thinkingMsg of unfinishedThinking) {
-          thinkingMsg.thinkingDuration = parseInt(thinkingDuration);
+        // Get the last thinking message (the one currently active)
+        const thinkingMessages = activeBlock.claudeMessages.filter(m => m.type === 'thinking');
+        const activeThinking = thinkingMessages[thinkingMessages.length - 1];
+
+        if (activeThinking && !activeThinking.thinkingDuration) {
+          const duration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
+          activeThinking.thinkingDuration = parseInt(duration);
         }
-        if (unfinishedThinking.length > 0) {
-        }
+        activeBlock.thinkingStartTime = null;
       }
 
       // Extract completion stats
@@ -251,18 +252,8 @@ class ChatHistoryManager extends EventEmitter {
       const hasExitPlanMode = activeBlock.toolExecutions.some(t => t.toolName === 'ExitPlanMode');
       if (hasExitPlanMode) {
         interactionType = 'plan_ready';
-      }
-
-      // Check for questions in Claude's messages
-      const hasQuestions = activeBlock.claudeMessages.some(m =>
-        m.type === 'text' && m.content.includes('<QUESTIONS>')
-      );
-      if (hasQuestions) {
-        interactionType = 'questions';
-      }
-
-      // If no special type detected, it's a regular Claude response
-      if (!interactionType) {
+      } else {
+        // Regular Claude response
         interactionType = 'claude_response';
       }
 

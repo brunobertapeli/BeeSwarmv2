@@ -17,6 +17,7 @@ import MobilePreviewFrame from './MobilePreviewFrame'
 import HelpChat from './HelpChat'
 import KanbanWidget from './KanbanWidget'
 import StickyNoteWidget from './StickyNoteWidget'
+import { ModalPortal } from './ModalPortal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 import mainShapeImage from '../assets/images/main_shape.png'
@@ -613,13 +614,15 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* User Profile Modal */}
       {showUserProfileModal && (
-        <div className="fixed top-[48px] right-2 z-[200]">
-          <UserProfile
-            onClose={() => setShowUserProfileModal(false)}
-            excludeElement="[data-settings-button]"
-            onOpenHelp={() => setShowHelpChat(true)}
-          />
-        </div>
+        <ModalPortal>
+          <div className="fixed top-[48px] right-2 z-[300]">
+            <UserProfile
+              onClose={() => setShowUserProfileModal(false)}
+              excludeElement="[data-settings-button]"
+              onOpenHelp={() => setShowHelpChat(true)}
+            />
+          </div>
+        </ModalPortal>
       )}
 
       {/* Project Selector Modal */}

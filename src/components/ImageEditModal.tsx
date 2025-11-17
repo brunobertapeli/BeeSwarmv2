@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import { X, Wand2, Upload, Link2, ChevronDown, ChevronUp, Loader2, CheckCircle2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import bgImage from '../assets/images/bg.jpg'
+import { ModalPortal } from './ModalPortal'
 
 interface ImageEditModalProps {
   isOpen: boolean
@@ -448,8 +448,9 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
   if (cropMode && cropImage) {
     const cropArea = getCropAreaDimensions()
 
-    return createPortal(
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    return (
+      <ModalPortal>
+        <div className="fixed inset-0 z-[300] flex items-center justify-center">
         {/* Backdrop */}
         <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
 
@@ -601,14 +602,15 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
             </div>
           </div>
         </div>
-      </div>,
-      document.body
+        </div>
+      </ModalPortal>
     )
   }
 
   // Default selection view
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+  return (
+    <ModalPortal>
+      <div className="fixed inset-0 z-[300] flex items-center justify-center">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
 
@@ -856,8 +858,8 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
           className="hidden"
         />
       </div>
-    </div>,
-    document.body
+      </div>
+    </ModalPortal>
   )
 }
 

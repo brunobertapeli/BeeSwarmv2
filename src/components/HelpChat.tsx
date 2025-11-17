@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { MessageCircle, X, Send, Sparkles, ChevronDown, ArrowLeft, Bug, Mail } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import bgImage from '../assets/images/bg.jpg'
+import { ModalPortal } from './ModalPortal'
 
 interface FAQItem {
   question: string
@@ -389,12 +390,14 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
     <>
       {/* Chat Modal */}
       {isOpen && (
-        <>
-          {/* Backdrop Overlay */}
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[150]" onClick={onClose} />
+        <ModalPortal>
+          {/* Container with flex centering */}
+          <div className="fixed inset-0 z-[300] flex items-center justify-center">
+            {/* Backdrop Overlay */}
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-          {/* Modal */}
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[151] w-[400px] h-[600px] animate-fadeIn">
+            {/* Modal */}
+            <div className="relative w-[400px] h-[600px] animate-fadeIn">
             <div className="bg-dark-card/95 backdrop-blur-xl border border-dark-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full relative">
             {/* Background Image */}
             <div
@@ -790,8 +793,9 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
               </div>
             )}
           </div>
-        </div>
-        </>
+          </div>
+          </div>
+        </ModalPortal>
       )}
     </>
   )

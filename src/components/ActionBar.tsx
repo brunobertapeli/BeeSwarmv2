@@ -94,10 +94,6 @@ function ActionBar({
   const [thinkingEnabled, setThinkingEnabled] = useState(true)
   const [planModeToggle, setPlanModeToggle] = useState(false) // Only for next message, resets after send
   const [attachments, setAttachments] = useState<Array<{id: string, type: 'image' | 'file', name: string, preview?: string}>>([])
-  const [questions, setQuestions] = useState<any>(null)
-  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string | string[]>>({})
-  const [customInputs, setCustomInputs] = useState<Record<string, string>>({})
-  const [isProcessingAnswers, setIsProcessingAnswers] = useState(false)
   const [showScreenshotModal, setShowScreenshotModal] = useState(false)
   const [screenshotData, setScreenshotData] = useState<string | null>(null)
   const textareaRef = useRef<ContentEditableInputRef>(null)
@@ -181,11 +177,6 @@ function ActionBar({
       }
     })
 
-    const unsubQuestions = window.electronAPI.claude.onQuestions((id, questions) => {
-      if (id === projectId) {
-        // TODO: Show questions in UI
-      }
-    })
 
     // Fetch initial status and context immediately
     Promise.all([
@@ -216,7 +207,6 @@ function ActionBar({
       unsubError()
       unsubContextUpdated()
       unsubModelChanged()
-      unsubQuestions()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
@@ -339,25 +329,6 @@ function ActionBar({
     }
   }, [layoutState, editModeEnabled, setEditModeEnabled])
 
-  // Listen for questions from Claude (plan mode)
-  useEffect(() => {
-    if (!projectId || !window.electronAPI?.claude) return
-
-    const unsubQuestions = window.electronAPI.claude.onQuestions((id, questionsData) => {
-      if (id !== projectId) return
-
-      setQuestions(questionsData)
-      setQuestionAnswers({}) // Reset answers
-      setCustomInputs({}) // Reset custom inputs
-      // DON'T set isInPlanModeSession=true here - that's premature!
-      // Questions arriving doesn't mean the plan is ready for approval yet
-      // Wait for Claude to complete after answering questions
-    })
-
-    return () => {
-      unsubQuestions()
-    }
-  }, [projectId])
 
   // Auto-send message for website import
   // This needs to be after handleSend is defined, so we'll move it below
@@ -881,12 +852,8 @@ function ActionBar({
         projectId={projectId}
         actionBarRef={actionBarRef}
         onStopClick={handleStop}
-          questions={questions}
           onRejectPlan={() => {
             // User wants to refine the plan - keep conversation going with plan mode
-            setQuestions(null) // Clear questions UI
-            setQuestionAnswers({}) // Clear answers
-            setCustomInputs({}) // Clear custom inputs
             setPlanModeToggle(true) // Enable plan mode for next message
             // Focus the textarea so user can type immediately
             if (textareaRef.current) {
@@ -895,11 +862,6 @@ function ActionBar({
           }}
           onApprovePlan={async () => {
             if (!projectId) return
-
-            // Clear questions state
-            setQuestions(null)
-            setQuestionAnswers({})
-            setCustomInputs({})
 
             // Send approval message to proceed with implementation (planMode=false)
             const approvalPrompt = "I approve this plan. Please proceed with the implementation."
@@ -924,66 +886,6 @@ function ActionBar({
               )
             } catch (error) {
               console.error('Failed to send plan approval to Claude:', error)
-            }
-          }}
-          onAnswerQuestions={async (answers, customData) => {
-            if (isProcessingAnswers || !projectId) return
-            setIsProcessingAnswers(true)
-
-            // Format answers for Claude
-            const questionsData = questions
-            const answersText = questionsData.questions.map((q: any) => {
-              let answer = answers[q.id]
-              let answerStr = ''
-
-              if (answer === '__CLAUDE_DECIDE__') {
-                answerStr = 'Choose what you believe is the best option.'
-              } else if (answer === '__CUSTOM__') {
-                answerStr = customData[q.id] || ''
-              } else if (Array.isArray(answer)) {
-                // For checkbox, handle special values and custom input
-                const processedAnswers = answer.map(val => {
-                  if (val === '__CLAUDE_DECIDE__') return 'Choose what you believe is the best option.'
-                  if (val === '__CUSTOM__') return customData[q.id] || ''
-                  return val
-                }).filter(v => v)
-                answerStr = processedAnswers.join(', ')
-              } else {
-                answerStr = answer || ''
-              }
-
-              return `**${q.question}**\n${answerStr}`
-            }).join('\n\n')
-
-            const formattedPrompt = `Here are my answers to your questions:\n\n${answersText}\n\nPlease proceed with the implementation based on these answers.`
-
-            try {
-              // Create chat block for the answers
-              const blockResult = await window.electronAPI?.chat.createBlock(projectId, formattedPrompt)
-
-              if (!blockResult?.success) {
-                console.error('Failed to create chat block for answers:', blockResult?.error)
-                return
-              }
-
-              // Send answers to Claude (keep plan mode if toggle is active)
-              await window.electronAPI?.claude.sendPrompt(
-                projectId,
-                formattedPrompt,
-                undefined, // use current model
-                undefined, // no attachments
-                undefined, // thinking disabled
-                planModeToggle // Keep plan mode if still active
-              )
-
-              // Clear questions
-              setQuestions(null)
-              setQuestionAnswers({})
-              setCustomInputs({})
-            } catch (error) {
-              console.error('Failed to send answers to Claude:', error)
-            } finally {
-              setIsProcessingAnswers(false)
             }
           }}
         />

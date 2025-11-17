@@ -6,6 +6,7 @@ import 'xterm/css/xterm.css'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import bgImage from '../assets/images/bg.jpg'
+import { ModalPortal } from './ModalPortal'
 
 interface TerminalLine {
   timestamp: Date
@@ -387,7 +388,8 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center">
+    <ModalPortal>
+      <div className="fixed inset-0 z-[300] flex items-center justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fadeIn"
@@ -526,7 +528,8 @@ function TerminalModal({ isOpen, onClose, onStop, projectId, projectName }: Term
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </ModalPortal>
   )
 }
 

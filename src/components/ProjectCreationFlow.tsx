@@ -28,6 +28,7 @@ import TechIcon from './TechIcon'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
+import { ModalPortal } from './ModalPortal'
 
 type WizardStep = 'category' | 'templates' | 'details' | 'configure' | 'creating' | 'installing' | 'initializing' | 'complete' | 'error' | 'import-url' | 'import-design'
 
@@ -826,12 +827,13 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
   const templateCategories = Array.from(new Set(templates.map(t => t.category)))
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 backdrop-blur-sm animate-fadeIn"
-        onClick={currentStep === 'complete' || currentStep === 'error' ? onCancel : handleCancel}
-      />
+    <ModalPortal>
+      <div className="fixed inset-0 z-[300] flex items-center justify-center">
+        {/* Backdrop */}
+        <div
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fadeIn"
+          onClick={currentStep === 'complete' || currentStep === 'error' ? onCancel : handleCancel}
+        />
 
       {/* Modal */}
       <motion.div
@@ -2038,7 +2040,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           </div>
         )}
       </motion.div>
-    </div>
+      </div>
+    </ModalPortal>
   )
 }
 

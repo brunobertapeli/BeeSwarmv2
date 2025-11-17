@@ -19,6 +19,7 @@ import noiseBgImage from '../assets/images/noise_bg.png'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
+import { ModalPortal } from './ModalPortal'
 
 interface ProjectSelectorProps {
   isOpen: boolean
@@ -273,14 +274,16 @@ function ProjectSelector({
   if (!isOpen) return null
 
   return (
-    <>
-      {/* Backdrop Overlay */}
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200]" onClick={onClose} />
+    <ModalPortal>
+      {/* Container with flex centering */}
+      <div className="fixed inset-0 z-[300] flex items-center justify-center">
+        {/* Backdrop Overlay */}
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Modal */}
-      <div
-        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] w-[520px] max-h-[70vh] bg-dark-card border border-dark-border rounded-lg shadow-2xl animate-scaleIn overflow-hidden"
-      >
+        {/* Modal */}
+        <div
+          className="relative w-[520px] max-h-[70vh] bg-dark-card border border-dark-border rounded-lg shadow-2xl animate-scaleIn overflow-hidden"
+        >
         {/* Background Image */}
         <div
           className="absolute inset-0 opacity-10 pointer-events-none z-0"
@@ -455,7 +458,7 @@ function ProjectSelector({
 
       {/* Delete Confirmation Modal */}
       {deletingProject && (
-        <div className="absolute inset-0 z-[110] flex items-center justify-center">
+        <div className="absolute inset-0 z-[310] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => {
@@ -518,7 +521,8 @@ function ProjectSelector({
           </div>
         </div>
       )}
-    </>
+      </div>
+    </ModalPortal>
   )
 }
 
@@ -695,7 +699,7 @@ function ProjectRowMenu({
     <>
       {/* Invisible overlay to close menu */}
       <div
-        className="fixed inset-0 z-[150]"
+        className="fixed inset-0 z-[310]"
         onClick={(e) => {
           e.stopPropagation()
           onClose()
@@ -703,7 +707,7 @@ function ProjectRowMenu({
       />
       {/* Menu */}
       <div
-        className="fixed w-44 bg-dark-card border border-dark-border rounded-lg shadow-xl overflow-hidden z-[200]"
+        className="fixed w-44 bg-dark-card border border-dark-border rounded-lg shadow-xl overflow-hidden z-[320]"
         style={{ top: position.top, right: position.right }}
         onClick={(e) => e.stopPropagation()}
       >

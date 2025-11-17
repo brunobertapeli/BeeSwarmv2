@@ -247,37 +247,8 @@ class ClaudeService extends EventEmitter {
       // Build prompt - either simple string or rich content with attachments
       let queryPrompt: string | AsyncIterable<SDKUserMessage>;
 
-      // Add plan mode instructions to prompt if enabled
+      // Use prompt as-is - SDK handles plan mode automatically
       let finalPrompt = prompt;
-      if (planMode) {
-        finalPrompt = `${prompt}
-
-IMPORTANT: You are in PLAN MODE. Follow these steps:
-1. Use tools (Read, Grep, Glob, etc.) to explore the codebase and understand the structure
-2. Analyze what needs to be done
-3. If you have questions for the user, output them in this EXACT format (STRICT JSON - no trailing commas, no comments):
-
-<QUESTIONS>
-{"questions":[{"id":"q1","type":"radio","question":"Your question?","options":["A","B","C"]}]}
-</QUESTIONS>
-
-Question types:
-- "text": Free text input (no options needed)
-- "radio": Single choice radio buttons (requires options array)
-- "checkbox": Multiple choice checkboxes (requires options array)
-
-Note: For radio and checkbox types, two additional options will be automatically added:
-- "Choose what you believe is the best option." (lets you decide)
-- "Type something:" (lets user provide custom answer)
-
-Examples:
-<QUESTIONS>
-{"questions":[{"id":"q1","type":"text","question":"What should we name this feature?"},{"id":"q2","type":"radio","question":"Which framework?","options":["React","Vue","Angular"]},{"id":"q3","type":"radio","question":"Auth method?","options":["JWT","OAuth","Session"]},{"id":"q4","type":"checkbox","question":"Which features?","options":["Login","Signup","Reset Password","2FA"]}]}
-</QUESTIONS>
-
-4. When you're done exploring and ready to present your plan, call the ExitPlanMode tool with your complete plan
-5. Do NOT execute any code changes - only explore, ask questions, and present the plan`;
-      }
 
       if (attachments && attachments.length > 0) {
 
@@ -728,46 +699,6 @@ Examples:
       isError: false,
       message: msg,
     };
-
-    // Check for questions in assistant messages (plan mode)
-    if (msg.type === 'assistant' && (msg as any).message?.content) {
-      const content = (msg as any).message.content;
-
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block.type === 'text' && block.text) {
-            const text = block.text;
-
-            // Look for questions wrapped in <QUESTIONS>...</QUESTIONS>
-            const questionsMatch = text.match(/<QUESTIONS>([\s\S]*?)<\/QUESTIONS>/);
-            if (questionsMatch) {
-              try {
-                let questionsJson = questionsMatch[1].trim();
-
-                // Clean up common JSON issues
-                // Remove trailing commas before ] or }
-                questionsJson = questionsJson.replace(/,(\s*[}\]])/g, '$1');
-                // Remove comments (// or /* */)
-                questionsJson = questionsJson.replace(/\/\*[\s\S]*?\*\//g, '');
-                questionsJson = questionsJson.replace(/\/\/.*/g, '');
-                // Remove extra whitespace
-                questionsJson = questionsJson.replace(/\s+/g, ' ').trim();
-
-
-                const questionsData = JSON.parse(questionsJson);
-
-
-                // Emit questions event
-                this.emit('claude-questions', { projectId, questions: questionsData });
-              } catch (error) {
-                console.error('❌ Failed to parse questions JSON:', error);
-                console.error('Raw JSON:', questionsMatch[1]);
-              }
-            }
-          }
-        }
-      }
-    }
 
     // Emit the event for handlers to process
     this.emit('claude-event', { projectId, event });
