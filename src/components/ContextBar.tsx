@@ -398,12 +398,14 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999]"
             onClick={(e) => cancelClearContext(e)}
-            onMouseDown={(e) => e.stopPropagation()}
           />
 
           {/* Dialog */}
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-            <div className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[420px] overflow-hidden relative">
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" onClick={(e) => cancelClearContext(e)}>
+            <div
+              className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[420px] overflow-hidden relative"
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* Background Image */}
               <div
                 className="absolute inset-0 opacity-10 pointer-events-none"
@@ -473,12 +475,14 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999]"
             onClick={(e) => handleCancelAddendum(e)}
-            onMouseDown={(e) => e.stopPropagation()}
           />
 
           {/* Dialog */}
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
-            <div className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[500px] overflow-hidden relative">
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" onClick={(e) => handleCancelAddendum(e)}>
+            <div
+              className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[500px] overflow-hidden relative"
+              onClick={(e) => e.stopPropagation()}
+            >
               {/* Background Image */}
               <div
                 className="absolute inset-0 opacity-10 pointer-events-none"

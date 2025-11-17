@@ -377,15 +377,25 @@ Please read the manifest to understand what my website is about, then create an 
     }
   }, [currentProject?.id])
 
-  // Listen for Tab key from Electron (layout cycling)
+  // Listen for Tab key for layout cycling (local keyboard handler)
   useEffect(() => {
     if (!currentProject?.id) return
 
-    const unsubscribe = window.electronAPI?.layout.onCycleRequested?.(() => {
-      window.electronAPI?.layout.cycleState(currentProject.id)
-    })
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only trigger if not typing in an input/textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
 
-    return unsubscribe
+      // Tab - Cycle layout state
+      if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault()
+        window.electronAPI?.layout.cycleState(currentProject.id)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [currentProject?.id])
 
   // NEW: Listen for layout state changes from Electron

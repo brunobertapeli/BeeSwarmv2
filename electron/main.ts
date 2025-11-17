@@ -533,20 +533,10 @@ User: ${currentUserId || 'not logged in'}
   }
 })
 
-// Log when app is ready and register global shortcuts
+// Log when app is ready
 app.on('ready', () => {
-
-  // Register global Tab shortcut for layout cycling
-  const tabRegistered = globalShortcut.register('Tab', () => {
-    // Send IPC event to cycle layout (will be handled by renderer)
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('layout-cycle-requested')
-    }
-  })
-
-  if (tabRegistered) {
-  } else {
-  }
+  // Tab shortcut is now handled locally in renderer (see ProjectView.tsx)
+  // This prevents Tab from interfering with other apps when minimized
 })
 
 // Unregister shortcuts when app is quitting
