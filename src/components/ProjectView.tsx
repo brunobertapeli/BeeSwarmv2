@@ -397,14 +397,6 @@ Please read the manifest to understand what my website is about, then create an 
     return unsubscribe
   }, [])
 
-  // NEW: Set initial layout state to DEFAULT when project loads
-  useEffect(() => {
-    if (!currentProject?.id || !serverPort || serverStatus !== 'running') return
-
-    // Set to DEFAULT state on load
-    window.electronAPI?.layout.setState('DEFAULT', currentProject.id)
-  }, [currentProject?.id, serverPort, serverStatus])
-
   // Determine project name for header
   const getProjectName = () => {
     if (loading) {
