@@ -73,10 +73,14 @@ function ProjectView() {
 
   // Fetch projects and auto-open last project
   useEffect(() => {
+    let isCancelled = false
+
     const fetchProjects = async () => {
       try {
         setLoading(true)
         const result = await window.electronAPI?.projects.getAll()
+
+        if (isCancelled) return
 
         if (result?.success && result.projects) {
           setProjects(result.projects)
@@ -85,17 +89,27 @@ function ProjectView() {
           if (result.projects.length > 0 && !currentProjectId) {
             const lastProject = result.projects[0] // Already sorted by lastOpenedAt DESC
             await window.electronAPI?.process.setCurrentProject(lastProject.id)
-            setCurrentProject(lastProject.id)
+            if (!isCancelled) {
+              setCurrentProject(lastProject.id)
+            }
           }
         }
       } catch (error) {
-        console.error('Error fetching projects:', error)
+        if (!isCancelled) {
+          console.error('Error fetching projects:', error)
+        }
       } finally {
-        setLoading(false)
+        if (!isCancelled) {
+          setLoading(false)
+        }
       }
     }
 
     fetchProjects()
+
+    return () => {
+      isCancelled = true
+    }
   }, [refreshKey, isAuthenticated])
 
   const currentProject = projects.find((p) => p.id === currentProjectId)
@@ -130,11 +144,16 @@ function ProjectView() {
 
   // Handle freeze frame when UserProfile opens/closes
   useEffect(() => {
+    let isCancelled = false
+
     const handleFreezeFrame = async () => {
       if (showUserProfileModal && currentProjectId) {
         // Only freeze if in DEFAULT state (browser is visible)
         if (layoutState === 'DEFAULT') {
           const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+
+          if (isCancelled) return
+
           if (result?.success && result.freezeImage) {
             setModalFreezeImage(result.freezeImage)
             setModalFreezeActive(true)
@@ -152,15 +171,24 @@ function ProjectView() {
     }
 
     handleFreezeFrame()
+
+    return () => {
+      isCancelled = true
+    }
   }, [showUserProfileModal, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   // Handle freeze frame when HelpChat opens/closes
   useEffect(() => {
+    let isCancelled = false
+
     const handleFreezeFrame = async () => {
       if (showHelpChat && currentProjectId) {
         // Only freeze if in DEFAULT state (browser is visible)
         if (layoutState === 'DEFAULT') {
           const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
+
+          if (isCancelled) return
+
           if (result?.success && result.freezeImage) {
             setModalFreezeImage(result.freezeImage)
             setModalFreezeActive(true)
@@ -183,6 +211,10 @@ function ProjectView() {
     }
 
     handleFreezeFrame()
+
+    return () => {
+      isCancelled = true
+    }
   }, [showHelpChat, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   // Handle website import - auto-send prompt
@@ -561,11 +593,10 @@ Please read the manifest to understand what my website is about, then create an 
                     window.electronAPI?.layout.setState('DEFAULT', currentProject.id)
                   }
                 }}
-                className={`px-3 py-1 rounded-md text-[10px] font-medium transition-all ${
-                  layoutState === 'DEFAULT'
+                className={`px-3 py-1 rounded-md text-[10px] font-medium transition-all ${layoutState === 'DEFAULT'
                     ? 'bg-primary/20 text-primary'
                     : 'text-gray-400 hover:text-gray-300'
-                }`}
+                  }`}
               >
                 Browser View
               </button>
@@ -575,11 +606,10 @@ Please read the manifest to understand what my website is about, then create an 
                     window.electronAPI?.layout.setState('TOOLS', currentProject.id)
                   }
                 }}
-                className={`px-3 py-1 rounded-md text-[10px] font-medium transition-all ${
-                  layoutState === 'TOOLS'
+                className={`px-3 py-1 rounded-md text-[10px] font-medium transition-all ${layoutState === 'TOOLS'
                     ? 'bg-primary/20 text-primary'
                     : 'text-gray-400 hover:text-gray-300'
-                }`}
+                  }`}
               >
                 Workspace
               </button>
@@ -633,9 +663,8 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Preview Area - Desktop or Mobile Mode */}
       <div
-        className={`w-full relative overflow-hidden p-[5px] border-b border-gray-700/50 z-[101] ${
-          layoutState === 'TOOLS' ? 'pointer-events-none' : ''
-        }`}
+        className={`w-full relative overflow-hidden p-[5px] border-b border-gray-700/50 z-[101] ${layoutState === 'TOOLS' ? 'pointer-events-none' : ''
+          }`}
         style={{ height: 'calc(100vh - 40px - 200px)' }}
       >
         {loading ? (
@@ -683,53 +712,53 @@ Please read the manifest to understand what my website is about, then create an 
               projectId={currentProject?.id}
               useBrowserView={true}
             >
-                {!(serverPort && serverStatus === 'running') && (
-                  <div className="w-full h-full bg-white flex items-center justify-center">
-                    <div className="text-center px-4">
-                      <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
-                        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M32 8L16 24L32 40L48 24L32 8Z" fill="url(#grad1)" opacity="0.9"/>
-                          <path d="M32 28L20 40L32 52L44 40L32 28Z" fill="url(#grad2)" opacity="0.7"/>
-                          <defs>
-                            <linearGradient id="grad1" x1="16" y1="8" x2="48" y2="40" gradientUnits="userSpaceOnUse">
-                              <stop stopColor="#10B981"/>
-                              <stop offset="1" stopColor="#059669"/>
-                            </linearGradient>
-                            <linearGradient id="grad2" x1="20" y1="28" x2="44" y2="52" gradientUnits="userSpaceOnUse">
-                              <stop stopColor="#10B981"/>
-                              <stop offset="1" stopColor="#8B5CF6"/>
-                            </linearGradient>
-                          </defs>
-                        </svg>
-                      </div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Project Preview</h2>
-                      <p className="text-gray-600">
-                        {serverStatus === 'starting' && 'Starting dev server...'}
-                        {serverStatus === 'running' && !previewReady && 'Loading preview...'}
-                        {serverStatus === 'error' && 'Error starting server. Check console for details.'}
-                        {serverStatus === 'crashed' && 'Server crashed. Check console for details.'}
-                        {serverStatus === 'stopped' && 'Server stopped'}
-                      </p>
-                      {(serverStatus === 'starting' || (serverStatus === 'running' && !previewReady)) && (
-                        <div className="mt-8 flex items-center justify-center gap-2 text-sm text-gray-500">
-                          <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
-                          <span>{serverStatus === 'starting' ? 'Starting servers...' : 'Loading preview...'}</span>
-                        </div>
-                      )}
-                      {(serverStatus === 'error' || serverStatus === 'crashed') && (
-                        <div className="mt-8">
-                          <button
-                            onClick={startDevServer}
-                            className="px-6 py-2.5 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary rounded-lg transition-colors font-medium"
-                          >
-                            Retry
-                          </button>
-                        </div>
-                      )}
+              {!(serverPort && serverStatus === 'running') && (
+                <div className="w-full h-full bg-white flex items-center justify-center">
+                  <div className="text-center px-4">
+                    <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-primary/20 to-purple-500/20 border border-primary/30 flex items-center justify-center">
+                      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M32 8L16 24L32 40L48 24L32 8Z" fill="url(#grad1)" opacity="0.9" />
+                        <path d="M32 28L20 40L32 52L44 40L32 28Z" fill="url(#grad2)" opacity="0.7" />
+                        <defs>
+                          <linearGradient id="grad1" x1="16" y1="8" x2="48" y2="40" gradientUnits="userSpaceOnUse">
+                            <stop stopColor="#10B981" />
+                            <stop offset="1" stopColor="#059669" />
+                          </linearGradient>
+                          <linearGradient id="grad2" x1="20" y1="28" x2="44" y2="52" gradientUnits="userSpaceOnUse">
+                            <stop stopColor="#10B981" />
+                            <stop offset="1" stopColor="#8B5CF6" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
                     </div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Your Project Preview</h2>
+                    <p className="text-gray-600">
+                      {serverStatus === 'starting' && 'Starting dev server...'}
+                      {serverStatus === 'running' && !previewReady && 'Loading preview...'}
+                      {serverStatus === 'error' && 'Error starting server. Check console for details.'}
+                      {serverStatus === 'crashed' && 'Server crashed. Check console for details.'}
+                      {serverStatus === 'stopped' && 'Server stopped'}
+                    </p>
+                    {(serverStatus === 'starting' || (serverStatus === 'running' && !previewReady)) && (
+                      <div className="mt-8 flex items-center justify-center gap-2 text-sm text-gray-500">
+                        <div className="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+                        <span>{serverStatus === 'starting' ? 'Starting servers...' : 'Loading preview...'}</span>
+                      </div>
+                    )}
+                    {(serverStatus === 'error' || serverStatus === 'crashed') && (
+                      <div className="mt-8">
+                        <button
+                          onClick={startDevServer}
+                          className="px-6 py-2.5 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary rounded-lg transition-colors font-medium"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
                   </div>
-                )}
-                {/* )} END OF IFRAME FALLBACK COMMENT */}
+                </div>
+              )}
+              {/* )} END OF IFRAME FALLBACK COMMENT */}
             </DesktopPreviewFrame>
           </div>
         )}

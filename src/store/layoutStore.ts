@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { useAppStore } from './appStore';
 
-export type LayoutState = 'DEFAULT' | 'TOOLS';
+export type LayoutState = 'DEFAULT' | 'TOOLS' | 'BROWSER_FULL';
 
 interface LayoutStoreState {
   // Current layout state
@@ -395,29 +395,29 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
 
   bringNoteToFront: (id) => {
     const currentNotes = get().stickyNotes;
-
-    // Sort notes by current zIndex (excluding the one we're bringing to front)
-    const otherNotes = currentNotes.filter(n => n.id !== id).sort((a, b) => a.zIndex - b.zIndex);
     const targetNote = currentNotes.find(n => n.id === id);
 
     if (!targetNote) return;
 
-    // Restack notes: assign 96, 97 to oldest notes, and 98 to the front note
-    const BASE_Z = 96;
-    const MAX_Z = 98;
-    const availableSlots = MAX_Z - BASE_Z + 1; // 3 slots: 96, 97, 98
+    // Sort notes by current zIndex to preserve relative order
+    const sortedNotes = [...currentNotes].sort((a, b) => a.zIndex - b.zIndex);
 
-    set((state) => ({
-      stickyNotes: state.stickyNotes.map(note => {
-        if (note.id === id) {
-          return { ...note, zIndex: MAX_Z }; // Clicked note goes to front
-        }
-        // Reassign other notes starting from the back
-        const index = otherNotes.findIndex(n => n.id === note.id);
-        const newZ = BASE_Z + Math.max(0, index - (otherNotes.length - availableSlots + 1));
-        return { ...note, zIndex: newZ };
-      })
+    // Remove target note from the sorted list
+    const otherNotes = sortedNotes.filter(n => n.id !== id);
+
+    // Re-build the array with target note at the end (top)
+    const newSortedNotes = [...otherNotes, targetNote];
+
+    // Re-assign z-indices sequentially starting from a base value
+    // This ensures we never run out of slots or compress layers
+    const BASE_Z = 10;
+
+    const updatedNotes = newSortedNotes.map((note, index) => ({
+      ...note,
+      zIndex: BASE_Z + index
     }));
+
+    set({ stickyNotes: updatedNotes });
 
     // Save to database
     const currentProjectId = useAppStore.getState().currentProjectId;

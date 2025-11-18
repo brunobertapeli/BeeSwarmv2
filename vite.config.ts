@@ -41,6 +41,20 @@ export default defineConfig({
                 // Puppeteer optional dependencies
                 'bufferutil',
                 'utf-8-validate'
+              ],
+              plugins: [
+                {
+                  name: 'copy-prompts',
+                  writeBundle() {
+                    const src = path.resolve('electron/prompts/system-prompt.txt')
+                    const destDir = path.resolve('dist-electron/prompts')
+                    const dest = path.join(destDir, 'system-prompt.txt')
+                    if (fs.existsSync(src)) {
+                      fs.mkdirSync(destDir, { recursive: true })
+                      fs.copyFileSync(src, dest)
+                    }
+                  }
+                }
               ]
             }
           }

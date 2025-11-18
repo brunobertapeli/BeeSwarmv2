@@ -99,6 +99,17 @@ function hasPlanWaitingApproval(block: ConversationBlock): boolean {
   return false
 }
 
+// Helper: Safe JSON parse
+function safeParse(jsonString: string | null | undefined, fallback: any = null): any {
+  if (!jsonString) return fallback
+  try {
+    return JSON.parse(jsonString)
+  } catch (e) {
+    console.error('Failed to parse JSON:', e)
+    return fallback
+  }
+}
+
 function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, onApprovePlan, onRejectPlan }: StatusSheetProps) {
   const { deploymentStatus, showStatusSheet, setShowStatusSheet, viewMode } = useAppStore()
   const { layoutState, statusSheetExpanded, setStatusSheetExpanded, setModalFreezeActive, setModalFreezeImage } = useLayoutStore()
@@ -175,10 +186,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
     // Parse Claude messages
     if (block.claudeMessages) {
-      try {
-        const claudeMessages = JSON.parse(block.claudeMessages)
+      const claudeMessages = safeParse(block.claudeMessages, [])
 
-        // Handle both old format (string[]) and new format (object[])
+      // Handle both old format (string[]) and new format (object[])
+      if (Array.isArray(claudeMessages)) {
         claudeMessages.forEach((msg: any) => {
           if (typeof msg === 'string') {
             // Old format - plain string (no timestamp, will be sorted to end)
@@ -203,79 +214,73 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             })
           }
         })
-      } catch (e) {
-        console.error('Failed to parse Claude messages:', e)
       }
     }
 
     // Parse tool executions
     if (block.toolExecutions) {
-      try {
-        const toolData = JSON.parse(block.toolExecutions)
+      const toolData = safeParse(block.toolExecutions, [])
 
-        if (block.isComplete) {
-          // Completed: show grouped summary
-          if (Array.isArray(toolData)) {
-            // Group the array
-            const grouped: Record<string, number> = {}
-            toolData.forEach((tool: any) => {
-              grouped[tool.toolName] = (grouped[tool.toolName] || 0) + 1
+      if (block.isComplete) {
+        // Completed: show grouped summary
+        if (Array.isArray(toolData)) {
+          // Group the array
+          const grouped: Record<string, number> = {}
+          toolData.forEach((tool: any) => {
+            grouped[tool.toolName] = (grouped[tool.toolName] || 0) + 1
+          })
+          const toolMessages = Object.entries(grouped).map(([toolName, count]) =>
+            `${count}x ${toolName}`
+          ).join(', ')
+          // Only add tool message if there's actual content
+          if (toolMessages) {
+            timedMessages.push({
+              type: 'tool',
+              content: toolMessages,
             })
-            const toolMessages = Object.entries(grouped).map(([toolName, count]) =>
-              `${count}x ${toolName}`
-            ).join(', ')
-            // Only add tool message if there's actual content
-            if (toolMessages) {
-              timedMessages.push({
-                type: 'tool',
-                content: toolMessages,
-              })
-            }
-          } else {
-            // Already grouped
-            const toolMessages = Object.entries(toolData).map(([toolName, count]) =>
-              `${count}x ${toolName}`
-            ).join(', ')
-            // Only add tool message if there's actual content
-            if (toolMessages) {
-              timedMessages.push({
-                type: 'tool',
-                content: toolMessages,
-              })
-            }
           }
-        } else {
-          // In progress: show verbose tool executions with timestamps
-          if (Array.isArray(toolData)) {
-            toolData.forEach((tool: any) => {
-              let toolMsg = `Claude using tool ${tool.toolName}`
-              if (tool.filePath) {
-                // Extract just the filename from path
-                const fileName = tool.filePath.split('/').pop() || tool.filePath
-                toolMsg += ` @ ${fileName}`
-              } else if (tool.command) {
-                toolMsg += ` @ ${tool.command}`
-              }
-
-              // Calculate duration if tool is complete
-              let toolDuration: number | undefined
-              if (tool.endTime && tool.startTime) {
-                toolDuration = Math.round((tool.endTime - tool.startTime) / 1000)
-              }
-
-              timedMessages.push({
-                type: 'tool',
-                content: toolMsg,
-                toolName: tool.toolName,
-                toolId: tool.toolId,
-                timestamp: tool.startTime ? new Date(tool.startTime) : undefined,
-                toolDuration: toolDuration,
-              })
+        } else if (toolData && typeof toolData === 'object') {
+          // Already grouped (legacy)
+          const toolMessages = Object.entries(toolData).map(([toolName, count]) =>
+            `${count}x ${toolName}`
+          ).join(', ')
+          // Only add tool message if there's actual content
+          if (toolMessages) {
+            timedMessages.push({
+              type: 'tool',
+              content: toolMessages,
             })
           }
         }
-      } catch (e) {
-        console.error('Failed to parse tool executions:', e)
+      } else {
+        // In progress: show verbose tool executions with timestamps
+        if (Array.isArray(toolData)) {
+          toolData.forEach((tool: any) => {
+            let toolMsg = `Claude using tool ${tool.toolName}`
+            if (tool.filePath) {
+              // Extract just the filename from path
+              const fileName = tool.filePath.split('/').pop() || tool.filePath
+              toolMsg += ` @ ${fileName}`
+            } else if (tool.command) {
+              toolMsg += ` @ ${tool.command}`
+            }
+
+            // Calculate duration if tool is complete
+            let toolDuration: number | undefined
+            if (tool.endTime && tool.startTime) {
+              toolDuration = Math.round((tool.endTime - tool.startTime) / 1000)
+            }
+
+            timedMessages.push({
+              type: 'tool',
+              content: toolMsg,
+              toolName: tool.toolName,
+              toolId: tool.toolId,
+              timestamp: tool.startTime ? new Date(tool.startTime) : undefined,
+              toolDuration: toolDuration,
+            })
+          })
+        }
       }
     }
 
@@ -302,11 +307,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     // Parse completion stats
     let completionStats: CompletionStats | undefined
     if (block.completionStats) {
-      try {
-        completionStats = JSON.parse(block.completionStats)
-      } catch (e) {
-        console.error('Failed to parse completion stats:', e)
-      }
+      completionStats = safeParse(block.completionStats)
     }
 
     // Parse actions - check if this is an initialization block
@@ -316,19 +317,17 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     let blockType: 'conversation' | 'initialization' = 'conversation'
 
     if (block.actions) {
-      try {
-        const parsedActions = JSON.parse(block.actions)
+      const parsedActions = safeParse(block.actions)
 
+      if (parsedActions) {
         // Check if this is initialization data
         if (parsedActions.type === 'initialization') {
           blockType = 'initialization'
           templateName = parsedActions.templateName
           initializationStages = parsedActions.stages
-        } else {
+        } else if (Array.isArray(parsedActions)) {
           actions = parsedActions
         }
-      } catch (e) {
-        console.error('Failed to parse actions:', e)
       }
     }
 
@@ -518,19 +517,21 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       let wasInterrupted = false
       try {
         if (block.claudeMessages) {
-          const messages = JSON.parse(block.claudeMessages)
-          wasInterrupted = messages.some((m: any) => {
-            // Handle both old format (string) and new format (object)
-            if (typeof m === 'string') {
-              return m.includes('⚠️ Stopped by user')
-            } else if (m.content) {
-              return m.content.includes('⚠️ Stopped by user')
-            }
-            return false
-          })
+          const messages = safeParse(block.claudeMessages, [])
+          if (Array.isArray(messages)) {
+            wasInterrupted = messages.some((m: any) => {
+              // Handle both old format (string) and new format (object)
+              if (typeof m === 'string') {
+                return m.includes('⚠️ Stopped by user')
+              } else if (m.content) {
+                return m.content.includes('⚠️ Stopped by user')
+              }
+              return false
+            })
+          }
         }
       } catch (e) {
-        console.error('Failed to parse claude messages:', e)
+        console.error('Failed to check interruption:', e)
       }
 
       // Play success sound and flash icon if not interrupted
@@ -945,1031 +946,1028 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     <>
       {shouldRender && (
         <div
-        className={`absolute z-[99] pointer-events-none ${
-          isVisible ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={{
-          left: '5px',
-          right: '5px',
-          bottom: `${bottomPosition + 5}px`,
-          transition: 'opacity 300ms ease-out'
-        }}
-      >
-        <div
-        ref={statusSheetRef}
-        className="bg-dark-card border border-dark-border shadow-2xl w-full overflow-hidden pb-4 relative pointer-events-auto rounded-br-[10px]"
-        style={{
-          boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
-        }}
-        onMouseEnter={onMouseEnter}
-        onMouseLeave={onMouseLeave}
-      >
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 opacity-10 pointer-events-none z-0"
+          className={`absolute z-[99] pointer-events-none ${isVisible ? 'opacity-100' : 'opacity-0'
+            }`}
           style={{
-            backgroundImage: `url(${bgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            left: '5px',
+            right: '5px',
+            bottom: `${bottomPosition + 5}px`,
+            transition: 'opacity 300ms ease-out'
           }}
-        />
-
-        {/* Noise texture overlay */}
-        <div
-          className="absolute inset-0 opacity-50 pointer-events-none rounded-br-[10px] z-[1]"
-          style={{
-            backgroundImage: `url(${noiseBgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            mixBlendMode: 'soft-light',
-          }}
-        />
-
-        {/* Collapsed State - Single Clickable Row */}
-        {!isExpanded && (() => {
-          const collapsedState = getCollapsedState()
-          const IconComponent = collapsedState.icon
-
-          return (
+        >
+          <div
+            ref={statusSheetRef}
+            className="bg-dark-card border border-dark-border shadow-2xl w-full overflow-hidden pb-4 relative pointer-events-auto rounded-br-[10px]"
+            style={{
+              boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
+            }}
+            onMouseEnter={onMouseEnter}
+            onMouseLeave={onMouseLeave}
+          >
+            {/* Background Image */}
             <div
-              className={`px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10 h-[40px] overflow-hidden ${isCapturingFreeze ? 'opacity-50 pointer-events-none' : ''}`}
-              onClick={handleExpand}
-            >
-              {currentBlock.type === 'deployment' || currentBlock.type === 'initialization' ? (
-                <>
-                  {isWorking ? (
-                    <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />
-                  ) : (
+              className="absolute inset-0 opacity-10 pointer-events-none z-0"
+              style={{
+                backgroundImage: `url(${bgImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            />
+
+            {/* Noise texture overlay */}
+            <div
+              className="absolute inset-0 opacity-50 pointer-events-none rounded-br-[10px] z-[1]"
+              style={{
+                backgroundImage: `url(${noiseBgImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                mixBlendMode: 'soft-light',
+              }}
+            />
+
+            {/* Collapsed State - Single Clickable Row */}
+            {!isExpanded && (() => {
+              const collapsedState = getCollapsedState()
+              const IconComponent = collapsedState.icon
+
+              return (
+                <div
+                  className={`px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10 h-[40px] overflow-hidden ${isCapturingFreeze ? 'opacity-50 pointer-events-none' : ''}`}
+                  onClick={handleExpand}
+                >
+                  {currentBlock.type === 'deployment' || currentBlock.type === 'initialization' ? (
                     <>
-                      {currentBlock.type === 'deployment' ? (
-                        <Globe size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
+                      {isWorking ? (
+                        <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />
                       ) : (
-                        <Rocket size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
-                      )}
-                    </>
-                  )}
-                  <span className="text-xs text-gray-200 flex-1 line-clamp-1">{collapsedState.text}</span>
-                  <ChevronUp size={14} className="text-gray-400" />
-                </>
-              ) : (
-                <div className="flex items-center gap-2 flex-1">
-                  {isWorking ? (
-                    <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />
-                  ) : IconComponent ? (
-                    <IconComponent size={14} className={`flex-shrink-0 text-primary ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
-                  ) : null}
-                  <span className="text-xs text-gray-200 flex-1 line-clamp-1">
-                    {collapsedState.text}
-                  </span>
-                  {/* Stop button - only show when working on conversation */}
-                  <div className="w-[28px] flex items-center justify-center flex-shrink-0">
-                    {isWorking && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation() // Prevent expanding when clicking stop
-                          onStopClick?.()
-                        }}
-                        className="p-1.5 hover:bg-red-500/10 rounded transition-colors group"
-                        title="Stop generation"
-                      >
-                        <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
-                      </button>
-                    )}
-                  </div>
-                  <ChevronUp size={14} className="text-gray-400 flex-shrink-0" />
-                </div>
-              )}
-            </div>
-          )
-        })()}
-
-        {/* Expanded State - Conversation Blocks */}
-        {isExpanded && (
-          <div className="pb-3 relative z-10">
-            {/* Collapsible header */}
-            <div
-              className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 px-3 transition-colors"
-              onClick={handleCollapse}
-            >
-              <span className="text-xs font-medium text-gray-300">Workflow Activity</span>
-              <button className="p-1">
-                <ChevronDown size={14} className="text-gray-300" />
-              </button>
-            </div>
-
-            {/* Workflow Timeline */}
-            <div ref={scrollContainerRef} className="max-h-[500px] overflow-y-scroll pl-3 pr-3 custom-scrollbar">
-              {/* Loading spinner at top for infinite scroll */}
-              {isLoadingMore && (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 size={16} className="text-primary animate-spin" />
-                  <span className="ml-2 text-xs text-gray-400">Loading older messages...</span>
-                </div>
-              )}
-
-              {allBlocks.map((block, blockIndex) => {
-                // ============================================================
-                // NEW SIMPLIFIED LOGIC: Use interactionType to determine rendering
-                // Fall back to old detection methods if interactionType is not set
-                // ============================================================
-
-                const blockType = block.interactionType || 'unknown';
-
-                // Skip answer blocks (legacy interaction type)
-                const isAnswers = blockType === 'answers';
-                if (isAnswers) {
-                  return null;
-                }
-
-                // Get the actual index and check what comes next
-                const actualIndex = allBlocks.findIndex(b => b.id === block.id);
-                const nextBlock = actualIndex >= 0 && actualIndex < allBlocks.length - 1 ? allBlocks[actualIndex + 1] : null;
-
-                // Determine if this is a plan ready block
-                const isPlanReady = blockType === 'plan_ready' || hasPlanWaitingApproval(block);
-
-                // For plan blocks - check if user already approved (next block is plan_approval)
-                const isApprovalNext = nextBlock && (nextBlock.interactionType === 'plan_approval' || nextBlock.userPrompt === "I approve this plan. Please proceed with the implementation.");
-                const implementationBlock = isApprovalNext ? nextBlock : null;
-
-                // Skip plan_approval blocks - they're shown inline with the plan
-                const isPlanApproval = blockType === 'plan_approval' || block.userPrompt === "I approve this plan. Please proceed with the implementation.";
-                if (isPlanApproval) {
-                  return null;
-                }
-
-                // Check if implementation already happened inline (Claude continued without waiting)
-                const hasGitCommitInline = block.actions?.some(a => a.type === 'git_commit');
-
-                // Check if we need approval buttons
-                // Only show if: plan is ready, complete, no approval block next, and no implementation happened inline
-                const needsApproval = isPlanReady && block.isComplete && !isApprovalNext && !hasGitCommitInline;
-
-                // Stop button logic - show on last incomplete block
-                const isLastBlock = blockIndex === allBlocks.length - 1;
-                const showStopButton = isLastBlock && !block.isComplete
-
-                // Render initialization block
-                if (block.type === 'initialization') {
-                  return (
-                    <div key={block.id} className="bg-primary/5 rounded-lg p-3 border border-primary/20 relative mb-6">
-                      {/* Header */}
-                      <div className="flex items-start gap-2 mb-3">
-                        <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center mt-0.5">
-                          {block.isComplete ? (
-                            <CheckCircle2 size={12} className="text-green-400" />
-                          ) : (
-                            <Rocket size={12} className="text-primary" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <span className="text-xs font-medium text-primary">
-                            {block.isComplete ? 'Project Ready!' : `Setting up ${block.templateName || 'project'}`}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Initialization Stages */}
-                      <div className="space-y-2 ml-7">
-                        {block.initializationStages?.map((stage, idx) => (
-                          <div key={idx} className="flex items-center gap-2">
-                            {stage.isComplete ? (
-                              <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
-                            ) : (
-                              <Loader2 size={10} className="text-primary animate-spin flex-shrink-0" />
-                            )}
-                            <span className={`text-[11px] leading-relaxed ${
-                              stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
-                            }`}>
-                              {stage.label}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                }
-
-                // Render deployment block (keep existing for now)
-                if (block.type === 'deployment') {
-                  return (
-                    <div key={block.id} className="bg-primary/5 rounded-lg p-3 border border-primary/20 relative">
-                      {/* Header */}
-                      <div className="flex items-start gap-2 mb-3">
-                        <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center mt-0.5">
-                          {block.isComplete ? (
-                            <Globe size={12} className="text-primary" />
-                          ) : (
-                            <Rocket size={12} className="text-primary" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <span className="text-xs font-medium text-primary">
-                            {block.isComplete ? 'Deployment Complete' : 'Deploying to Netlify'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Deployment Stages */}
-                      <div className="space-y-2 ml-7">
-                        {block.deploymentStages?.map((stage, idx) => (
-                          <div key={idx} className="flex items-center gap-2">
-                            {stage.isComplete ? (
-                              <div className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                            ) : (
-                              <Loader2 size={10} className="text-primary animate-spin flex-shrink-0" />
-                            )}
-                            <span className={`text-[11px] leading-relaxed ${
-                              stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
-                            }`}>
-                              {stage.label}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Deployment URL - show when complete */}
-                      {block.isComplete && block.deploymentUrl && (
-                        <div className="mt-3 pt-3 border-t border-primary/20">
-                          <a
-                            href={block.deploymentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 text-[11px] text-primary hover:text-primary-dark transition-colors group"
-                          >
-                            <Globe size={11} />
-                            <span className="font-medium">{block.deploymentUrl}</span>
-                            <ExternalLink size={9} className="opacity-60 group-hover:opacity-100 transition-opacity" />
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  )
-                }
-
-                // Render conversation block with timeline workflow
-                const hasGitAction = block.actions?.some(a => a.type === 'git_commit')
-                const hasDeployAction = block.actions?.some(a => a.type === 'dev_server')
-                const hasRestoreAction = block.actions?.some(a => a.type === 'checkpoint_restore')
-                const gitAction = block.actions?.find(a => a.type === 'git_commit')
-                const deployAction = block.actions?.find(a => a.type === 'dev_server')
-                const restoreAction = block.actions?.find(a => a.type === 'checkpoint_restore')
-                const isRestoreBlock = hasRestoreAction || block.userPrompt?.startsWith('Restore to checkpoint')
-                const wasInterrupted = block.messages?.some(m => m.content.includes('⚠️ Stopped by user'))
-
-                return (
-                  <div key={block.id} className="mb-6">
-                    {/* Workflow Block Container */}
-                    <div className="bg-white/[0.02] rounded-lg border border-white/10 p-4 relative">
-                      {/* Checkpoint or Stop button (top right) - only for non-restore blocks */}
-                      {!isRestoreBlock && (() => {
-                        const shouldShowRestore = block.isComplete && block.commitHash && block.commitHash !== 'unknown' && block.commitHash.length >= 7;
-
-                        return (
                         <>
-                          {shouldShowRestore ? (
-                            <button
-                              onClick={() => handleRestoreCheckpoint(block)}
-                              className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors group z-10"
-                              title="Restore to this checkpoint"
-                            >
-                              <RotateCcw size={12} className="text-gray-400 group-hover:text-primary transition-colors" />
-                            </button>
-                          ) : showStopButton ? (
-                            <button
-                              onClick={onStopClick}
-                              className="absolute top-3 right-3 p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group z-10"
-                              title="Stop generation"
-                            >
-                              <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
-                            </button>
-                          ) : null}
+                          {currentBlock.type === 'deployment' ? (
+                            <Globe size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
+                          ) : (
+                            <Rocket size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
+                          )}
                         </>
-                        )
-                      })()}
+                      )}
+                      <span className="text-xs text-gray-200 flex-1 line-clamp-1">{collapsedState.text}</span>
+                      <ChevronUp size={14} className="text-gray-400" />
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2 flex-1">
+                      {isWorking ? (
+                        <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />
+                      ) : IconComponent ? (
+                        <IconComponent size={14} className={`flex-shrink-0 text-primary ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
+                      ) : null}
+                      <span className="text-xs text-gray-200 flex-1 line-clamp-1">
+                        {collapsedState.text}
+                      </span>
+                      {/* Stop button - only show when working on conversation */}
+                      <div className="w-[28px] flex items-center justify-center flex-shrink-0">
+                        {isWorking && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation() // Prevent expanding when clicking stop
+                              onStopClick?.()
+                            }}
+                            className="p-1.5 hover:bg-red-500/10 rounded transition-colors group"
+                            title="Stop generation"
+                          >
+                            <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
+                          </button>
+                        )}
+                      </div>
+                      <ChevronUp size={14} className="text-gray-400 flex-shrink-0" />
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
-                      {/* RESTORE BLOCK - Timeline design matching other blocks */}
-                      {isRestoreBlock ? (
-                        <div className="relative pr-8">
-                          {/* Continuous dotted line */}
-                          <div className="absolute left-[12px] top-[12px] bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
+            {/* Expanded State - Conversation Blocks */}
+            {isExpanded && (
+              <div className="pb-3 relative z-10">
+                {/* Collapsible header */}
+                <div
+                  className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 px-3 transition-colors"
+                  onClick={handleCollapse}
+                >
+                  <span className="text-xs font-medium text-gray-300">Workflow Activity</span>
+                  <button className="p-1">
+                    <ChevronDown size={14} className="text-gray-300" />
+                  </button>
+                </div>
 
-                          {/* Git Restore Step */}
-                          <div className="relative pb-4">
-                            {/* Step header */}
-                            <div className="flex items-center gap-3 mb-3">
-                              {/* Git Icon */}
-                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                <img src={GitIcon} alt="Git" className="w-6 h-6 opacity-90" />
-                              </div>
+                {/* Workflow Timeline */}
+                <div ref={scrollContainerRef} className="max-h-[500px] overflow-y-scroll pl-3 pr-3 custom-scrollbar">
+                  {/* Loading spinner at top for infinite scroll */}
+                  {isLoadingMore && (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 size={16} className="text-primary animate-spin" />
+                      <span className="ml-2 text-xs text-gray-400">Loading older messages...</span>
+                    </div>
+                  )}
 
-                              {/* Title + Status */}
-                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-gray-200">
-                                    {restoreAction?.status === 'in_progress'
-                                      ? 'Restoring checkpoint...'
-                                      : restoreAction?.status === 'success'
-                                      ? `Restored to checkpoint #${restoreAction?.data?.commitHash || ''}`
-                                      : 'Restore failed'
-                                    }
-                                  </span>
-                                  {restoreAction?.status === 'success' && (
-                                    <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                      <Check size={10} className="text-green-400" />
-                                    </div>
-                                  )}
-                                  {restoreAction?.status === 'success' && (
-                                    <span className="text-[10px] text-gray-500">
-                                      0.1s
-                                    </span>
-                                  )}
-                                  {restoreAction?.status === 'in_progress' && (
-                                    <Loader2 size={12} className="text-primary animate-spin" />
-                                  )}
-                                </div>
-                              </div>
+                  {allBlocks.map((block, blockIndex) => {
+                    // ============================================================
+                    // NEW SIMPLIFIED LOGIC: Use interactionType to determine rendering
+                    // Fall back to old detection methods if interactionType is not set
+                    // ============================================================
+
+                    const blockType = block.interactionType || 'unknown';
+
+                    // Skip answer blocks (legacy interaction type)
+                    const isAnswers = blockType === 'answers';
+                    if (isAnswers) {
+                      return null;
+                    }
+
+                    // Get the actual index and check what comes next
+                    const actualIndex = allBlocks.findIndex(b => b.id === block.id);
+                    const nextBlock = actualIndex >= 0 && actualIndex < allBlocks.length - 1 ? allBlocks[actualIndex + 1] : null;
+
+                    // Determine if this is a plan ready block
+                    const isPlanReady = blockType === 'plan_ready' || hasPlanWaitingApproval(block);
+
+                    // For plan blocks - check if user already approved (next block is plan_approval)
+                    const isApprovalNext = nextBlock && (nextBlock.interactionType === 'plan_approval' || nextBlock.userPrompt === "I approve this plan. Please proceed with the implementation.");
+                    const implementationBlock = isApprovalNext ? nextBlock : null;
+
+                    // Skip plan_approval blocks - they're shown inline with the plan
+                    const isPlanApproval = blockType === 'plan_approval' || block.userPrompt === "I approve this plan. Please proceed with the implementation.";
+                    if (isPlanApproval) {
+                      return null;
+                    }
+
+                    // Check if implementation already happened inline (Claude continued without waiting)
+                    const hasGitCommitInline = block.actions?.some(a => a.type === 'git_commit');
+
+                    // Check if we need approval buttons
+                    // Only show if: plan is ready, complete, no approval block next, and no implementation happened inline
+                    const needsApproval = isPlanReady && block.isComplete && !isApprovalNext && !hasGitCommitInline;
+
+                    // Stop button logic - show on last incomplete block
+                    const isLastBlock = blockIndex === allBlocks.length - 1;
+                    const showStopButton = isLastBlock && !block.isComplete
+
+                    // Render initialization block
+                    if (block.type === 'initialization') {
+                      return (
+                        <div key={block.id} className="bg-primary/5 rounded-lg p-3 border border-primary/20 relative mb-6">
+                          {/* Header */}
+                          <div className="flex items-start gap-2 mb-3">
+                            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center mt-0.5">
+                              {block.isComplete ? (
+                                <CheckCircle2 size={12} className="text-green-400" />
+                              ) : (
+                                <Rocket size={12} className="text-primary" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <span className="text-xs font-medium text-primary">
+                                {block.isComplete ? 'Project Ready!' : `Setting up ${block.templateName || 'project'}`}
+                              </span>
                             </div>
                           </div>
 
-                          {/* Dev Server Step */}
-                          {hasDeployAction && deployAction && (
-                            <div className="relative">
-                              {/* Step header */}
-                              <div className="flex items-center gap-3 mb-3">
-                                {/* Server Icon */}
-                                <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                  <Server size={24} className="text-white opacity-90" />
-                                </div>
+                          {/* Initialization Stages */}
+                          <div className="space-y-2 ml-7">
+                            {block.initializationStages?.map((stage, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                {stage.isComplete ? (
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                                ) : (
+                                  <Loader2 size={10} className="text-primary animate-spin flex-shrink-0" />
+                                )}
+                                <span className={`text-[11px] leading-relaxed ${stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
+                                  }`}>
+                                  {stage.label}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    }
 
-                                {/* Title + Status */}
-                                <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-sm font-medium text-gray-200">
-                                      {deployAction.status === 'in_progress'
-                                        ? 'Starting dev server...'
-                                        : deployAction.status === 'success'
-                                        ? 'Dev Server started successfully'
-                                        : 'Failed to start dev server'
-                                      }
-                                    </span>
-                                    {deployAction.status === 'success' && deployAction.data?.url && (
-                                      <>
-                                        <span className="text-gray-400 text-[11px]">•</span>
-                                        <a
-                                          href={deployAction.data.url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[11px]"
-                                        >
-                                          <span>{deployAction.data.url}</span>
-                                          <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
-                                        </a>
-                                      </>
-                                    )}
-                                    {deployAction.status === 'success' && (
-                                      <>
+                    // Render deployment block (keep existing for now)
+                    if (block.type === 'deployment') {
+                      return (
+                        <div key={block.id} className="bg-primary/5 rounded-lg p-3 border border-primary/20 relative">
+                          {/* Header */}
+                          <div className="flex items-start gap-2 mb-3">
+                            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center mt-0.5">
+                              {block.isComplete ? (
+                                <Globe size={12} className="text-primary" />
+                              ) : (
+                                <Rocket size={12} className="text-primary" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <span className="text-xs font-medium text-primary">
+                                {block.isComplete ? 'Deployment Complete' : 'Deploying to Netlify'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Deployment Stages */}
+                          <div className="space-y-2 ml-7">
+                            {block.deploymentStages?.map((stage, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                {stage.isComplete ? (
+                                  <div className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
+                                ) : (
+                                  <Loader2 size={10} className="text-primary animate-spin flex-shrink-0" />
+                                )}
+                                <span className={`text-[11px] leading-relaxed ${stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
+                                  }`}>
+                                  {stage.label}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Deployment URL - show when complete */}
+                          {block.isComplete && block.deploymentUrl && (
+                            <div className="mt-3 pt-3 border-t border-primary/20">
+                              <a
+                                href={block.deploymentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 text-[11px] text-primary hover:text-primary-dark transition-colors group"
+                              >
+                                <Globe size={11} />
+                                <span className="font-medium">{block.deploymentUrl}</span>
+                                <ExternalLink size={9} className="opacity-60 group-hover:opacity-100 transition-opacity" />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+
+                    // Render conversation block with timeline workflow
+                    const hasGitAction = block.actions?.some(a => a.type === 'git_commit')
+                    const hasDeployAction = block.actions?.some(a => a.type === 'dev_server')
+                    const hasRestoreAction = block.actions?.some(a => a.type === 'checkpoint_restore')
+                    const gitAction = block.actions?.find(a => a.type === 'git_commit')
+                    const deployAction = block.actions?.find(a => a.type === 'dev_server')
+                    const restoreAction = block.actions?.find(a => a.type === 'checkpoint_restore')
+                    const isRestoreBlock = hasRestoreAction || block.userPrompt?.startsWith('Restore to checkpoint')
+                    const wasInterrupted = block.messages?.some(m => m.content.includes('⚠️ Stopped by user'))
+
+                    return (
+                      <div key={block.id} className="mb-6">
+                        {/* Workflow Block Container */}
+                        <div className="bg-white/[0.02] rounded-lg border border-white/10 p-4 relative">
+                          {/* Checkpoint or Stop button (top right) - only for non-restore blocks */}
+                          {!isRestoreBlock && (() => {
+                            const shouldShowRestore = block.isComplete && block.commitHash && block.commitHash !== 'unknown' && block.commitHash.length >= 7;
+
+                            return (
+                              <>
+                                {shouldShowRestore ? (
+                                  <button
+                                    onClick={() => handleRestoreCheckpoint(block)}
+                                    className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors group z-10"
+                                    title="Restore to this checkpoint"
+                                  >
+                                    <RotateCcw size={12} className="text-gray-400 group-hover:text-primary transition-colors" />
+                                  </button>
+                                ) : showStopButton ? (
+                                  <button
+                                    onClick={onStopClick}
+                                    className="absolute top-3 right-3 p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group z-10"
+                                    title="Stop generation"
+                                  >
+                                    <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
+                                  </button>
+                                ) : null}
+                              </>
+                            )
+                          })()}
+
+                          {/* RESTORE BLOCK - Timeline design matching other blocks */}
+                          {isRestoreBlock ? (
+                            <div className="relative pr-8">
+                              {/* Continuous dotted line */}
+                              <div className="absolute left-[12px] top-[12px] bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
+
+                              {/* Git Restore Step */}
+                              <div className="relative pb-4">
+                                {/* Step header */}
+                                <div className="flex items-center gap-3 mb-3">
+                                  {/* Git Icon */}
+                                  <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                    <img src={GitIcon} alt="Git" className="w-6 h-6 opacity-90" />
+                                  </div>
+
+                                  {/* Title + Status */}
+                                  <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium text-gray-200">
+                                        {restoreAction?.status === 'in_progress'
+                                          ? 'Restoring checkpoint...'
+                                          : restoreAction?.status === 'success'
+                                            ? `Restored to checkpoint #${restoreAction?.data?.commitHash || ''}`
+                                            : 'Restore failed'
+                                        }
+                                      </span>
+                                      {restoreAction?.status === 'success' && (
                                         <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
                                           <Check size={10} className="text-green-400" />
                                         </div>
-                                        {deployAction.data?.restartTime && (
-                                          <span className="text-[10px] text-gray-500">
-                                            {deployAction.data.restartTime}s
-                                          </span>
-                                        )}
-                                      </>
-                                    )}
-                                    {deployAction.status === 'in_progress' && (
-                                      <Loader2 size={12} className="text-primary animate-spin" />
-                                    )}
+                                      )}
+                                      {restoreAction?.status === 'success' && (
+                                        <span className="text-[10px] text-gray-500">
+                                          0.1s
+                                        </span>
+                                      )}
+                                      {restoreAction?.status === 'in_progress' && (
+                                        <Loader2 size={12} className="text-primary animate-spin" />
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        /* Timeline Workflow */
-                        <div className="relative pr-8">
-                        {/* Continuous dotted line from top to bottom - behind icons */}
-                        <div className="absolute left-[12px] top-[12px] bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
 
-                        {/* STEP 0: USER (User Prompt) - Hide for answer blocks */}
-                        {!isAnswers && (
-                        <div className="relative pb-4">
-                          {/* Step header */}
-                          <div className="flex items-center gap-3 mb-3">
-                            {/* User Avatar */}
-                            <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                              <User size={24} className="text-white opacity-90" />
-                            </div>
-
-                            {/* Title */}
-                            <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                              {(() => {
-                                const prompt = block.userPrompt || 'User request'
-                                const lineCount = estimatePromptLines(prompt)
-                                const fontSize = getPromptFontSize(lineCount)
-                                const needsExpansion = lineCount > 10
-                                const isExpanded = expandedUserPrompts.has(block.id)
-                                const maxLines = 3
-
-                                return (
-                                  <div>
-                                    <div className={`${fontSize} font-medium text-gray-200 ${needsExpansion && !isExpanded ? 'line-clamp-3' : ''}`}>
-                                      {prompt}
+                              {/* Dev Server Step */}
+                              {hasDeployAction && deployAction && (
+                                <div className="relative">
+                                  {/* Step header */}
+                                  <div className="flex items-center gap-3 mb-3">
+                                    {/* Server Icon */}
+                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                      <Server size={24} className="text-white opacity-90" />
                                     </div>
-                                    {needsExpansion && (
+
+                                    {/* Title + Status */}
+                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-sm font-medium text-gray-200">
+                                          {deployAction.status === 'in_progress'
+                                            ? 'Starting dev server...'
+                                            : deployAction.status === 'success'
+                                              ? 'Dev Server started successfully'
+                                              : 'Failed to start dev server'
+                                          }
+                                        </span>
+                                        {deployAction.status === 'success' && deployAction.data?.url && (
+                                          <>
+                                            <span className="text-gray-400 text-[11px]">•</span>
+                                            <a
+                                              href={deployAction.data.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[11px]"
+                                            >
+                                              <span>{deployAction.data.url}</span>
+                                              <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
+                                            </a>
+                                          </>
+                                        )}
+                                        {deployAction.status === 'success' && (
+                                          <>
+                                            <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                              <Check size={10} className="text-green-400" />
+                                            </div>
+                                            {deployAction.data?.restartTime && (
+                                              <span className="text-[10px] text-gray-500">
+                                                {deployAction.data.restartTime}s
+                                              </span>
+                                            )}
+                                          </>
+                                        )}
+                                        {deployAction.status === 'in_progress' && (
+                                          <Loader2 size={12} className="text-primary animate-spin" />
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            /* Timeline Workflow */
+                            <div className="relative pr-8">
+                              {/* Continuous dotted line from top to bottom - behind icons */}
+                              <div className="absolute left-[12px] top-[12px] bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
+
+                              {/* STEP 0: USER (User Prompt) - Hide for answer blocks */}
+                              {!isAnswers && (
+                                <div className="relative pb-4">
+                                  {/* Step header */}
+                                  <div className="flex items-center gap-3 mb-3">
+                                    {/* User Avatar */}
+                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                      <User size={24} className="text-white opacity-90" />
+                                    </div>
+
+                                    {/* Title */}
+                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                      {(() => {
+                                        const prompt = block.userPrompt || 'User request'
+                                        const lineCount = estimatePromptLines(prompt)
+                                        const fontSize = getPromptFontSize(lineCount)
+                                        const needsExpansion = lineCount > 10
+                                        const isExpanded = expandedUserPrompts.has(block.id)
+                                        const maxLines = 3
+
+                                        return (
+                                          <div>
+                                            <div className={`${fontSize} font-medium text-gray-200 ${needsExpansion && !isExpanded ? 'line-clamp-3' : ''}`}>
+                                              {prompt}
+                                            </div>
+                                            {needsExpansion && (
+                                              <button
+                                                onClick={() => {
+                                                  const newSet = new Set(expandedUserPrompts)
+                                                  if (newSet.has(block.id)) {
+                                                    newSet.delete(block.id)
+                                                  } else {
+                                                    newSet.add(block.id)
+                                                  }
+                                                  setExpandedUserPrompts(newSet)
+                                                }}
+                                                className="mt-1 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                              >
+                                                {isExpanded ? 'Show less' : 'Show more'}
+                                              </button>
+                                            )}
+                                          </div>
+                                        )
+                                      })()}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* STEP 1: ANTHROPIC (Code Editing) */}
+                              <div className="relative pb-4">
+                                {/* Step header */}
+                                <div className="flex items-center gap-3 mb-3">
+                                  {/* Icon - Adjust left/right positioning here */}
+                                  <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                    <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6 opacity-90" />
+                                  </div>
+
+                                  {/* Title + Status */}
+                                  <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium text-gray-200">
+                                        Claude:
+                                      </span>
+                                      {block.isComplete && (
+                                        <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                          <Check size={10} className="text-green-400" />
+                                        </div>
+                                      )}
+                                      {block.isComplete && block.completionStats && (
+                                        <span className="text-[10px] text-gray-500">
+                                          {block.completionStats.timeSeconds}s
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Anthropic step content (always visible) */}
+                                <div className="ml-10 space-y-3">
+
+                                  {/* Messages */}
+                                  <div className="space-y-1.5">
+                                    {block.messages?.filter(m =>
+                                      !m.content.includes('⚠️ Stopped by user') &&
+                                      !(m.type === 'tool' && !m.toolName) // Filter out tool summary messages - they appear in stats section
+                                    ).map((message, idx) => {
+                                      const messageId = `${block.id}-msg-${idx}`
+                                      const isMessageExpanded = expandedMessages.has(messageId)
+                                      const hasOverflow = overflowingMessages.has(messageId)
+
+                                      // Check if this is the latest tool (for timer display)
+                                      const toolMessages = block.messages?.filter(m => m.type === 'tool') || []
+                                      const isLatestTool = message.type === 'tool' && message === toolMessages[toolMessages.length - 1]
+
+                                      return (
+                                        <div key={idx}>
+                                          <div className="flex items-start gap-2">
+                                            {message.type === 'assistant' && (
+                                              <>
+                                                <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
+                                                <div className="flex-1 relative">
+                                                  <div
+                                                    ref={(el) => {
+                                                      if (el) {
+                                                        messageRefs.current.set(messageId, el)
+                                                      } else {
+                                                        messageRefs.current.delete(messageId)
+                                                      }
+                                                    }}
+                                                    className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap"
+                                                    style={{
+                                                      display: '-webkit-box',
+                                                      WebkitBoxOrient: 'vertical',
+                                                      WebkitLineClamp: !isMessageExpanded ? 3 : 'unset',
+                                                      overflow: 'hidden'
+                                                    }}
+                                                  >
+                                                    <KeywordHighlight
+                                                      text={message.content}
+                                                      keywords={keywords}
+                                                      blockId={block.id}
+                                                    />
+                                                  </div>
+                                                  {hasOverflow && (
+                                                    <button
+                                                      onClick={() => {
+                                                        const newSet = new Set(expandedMessages)
+                                                        if (newSet.has(messageId)) {
+                                                          newSet.delete(messageId)
+                                                        } else {
+                                                          newSet.add(messageId)
+                                                        }
+                                                        setExpandedMessages(newSet)
+                                                      }}
+                                                      className="ml-1 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                                    >
+                                                      {isMessageExpanded ? 'Show less' : 'Show more'}
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </>
+                                            )}
+                                            {message.type === 'tool' && message.toolName && (
+                                              <>
+                                                <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
+                                                <span className="text-[11px] text-gray-400 leading-relaxed flex items-center gap-2">
+                                                  <span>
+                                                    Claude using tool{' '}
+                                                    <span className="text-primary font-medium">{message.toolName}</span>
+                                                    {message.content.includes('@') && (
+                                                      <> @ {message.content.split('@')[1].trim()}</>
+                                                    )}
+                                                  </span>
+                                                  {isLatestTool && message.toolDuration === undefined && (
+                                                    // Only show timer for the latest active tool
+                                                    <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                      <Clock size={10} />
+                                                      <>{latestToolTimer.get(block.id)?.toFixed(1) || '0.0'}s</>
+                                                    </span>
+                                                  )}
+                                                </span>
+                                              </>
+                                            )}
+                                            {message.type === 'thinking' && (
+                                              <>
+                                                {message.thinkingDuration !== undefined ? (
+                                                  // Complete thinking - expandable
+                                                  <div className="flex-1">
+                                                    <button
+                                                      onClick={() => {
+                                                        const newSet = new Set(expandedThinking)
+                                                        if (newSet.has(messageId)) {
+                                                          newSet.delete(messageId)
+                                                        } else {
+                                                          newSet.add(messageId)
+                                                        }
+                                                        setExpandedThinking(newSet)
+                                                      }}
+                                                      className="flex items-center gap-2 text-[11px] text-purple-400 hover:text-purple-300 transition-colors"
+                                                    >
+                                                      <Brain size={9} className="flex-shrink-0" style={{ marginLeft: '1px' }} />
+                                                      <span className="font-medium">
+                                                        Thought for {message.thinkingDuration}s
+                                                      </span>
+                                                      <ChevronDown
+                                                        size={10}
+                                                        className={`transition-transform ${expandedThinking.has(messageId) ? 'rotate-180' : ''}`}
+                                                      />
+                                                    </button>
+                                                    {expandedThinking.has(messageId) && (
+                                                      <div className="mt-2 pl-6 text-[10px] text-gray-400 leading-relaxed whitespace-pre-wrap border-l-2 border-purple-500/30">
+                                                        {message.content}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                ) : (
+                                                  // Active thinking - animated
+                                                  <div className="flex items-center gap-2">
+                                                    <Brain size={9} className="flex-shrink-0 text-purple-400" style={{ marginLeft: '1px' }} />
+                                                    <span className="text-[11px] text-purple-400 font-medium">
+                                                      Thinking{thinkingDots}
+                                                    </span>
+                                                    <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                      <Clock size={10} />
+                                                      {thinkingTimers.get(block.id)?.toFixed(1) || '0.0'}s
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+
+                                  {/* Completion Stats */}
+                                  {block.completionStats && (() => {
+                                    // Extract tool usage from messages
+                                    const toolUsageMessage = block.messages?.find(m => m.type === 'tool' && !m.toolName)
+                                    const toolUsage = toolUsageMessage?.content || ''
+
+                                    return (
+                                      <div className="mt-3">
+                                        <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
+                                          {toolUsage && (
+                                            <>
+                                              <span className="text-gray-400 flex items-center gap-1">
+                                                <span className="text-gray-500">Used tools:</span>
+                                                <span className="font-mono text-gray-300">{toolUsage}</span>
+                                              </span>
+                                              <span className="text-gray-600">|</span>
+                                            </>
+                                          )}
+                                          <span className="text-gray-400 flex items-center gap-1">
+                                            <span className="text-gray-500">Tokens:</span>
+                                            <ArrowUpCircle size={10} className="text-blue-400" />
+                                            <span>{block.completionStats.inputTokens}</span>
+                                            <span className="text-gray-600">→</span>
+                                            <ArrowDownCircle size={10} className="text-green-400" />
+                                            <span>{block.completionStats.outputTokens}</span>
+                                          </span>
+                                          <span className="text-gray-600">|</span>
+                                          <span className="text-gray-400 flex items-center gap-1">
+                                            <DollarSign size={10} />
+                                            {block.completionStats.cost.toFixed(4)}
+                                            <div className="group/info relative flex items-center">
+                                              <Info size={10} className="text-gray-500 cursor-help" />
+                                              <div className="absolute right-0 bottom-full mb-2 bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[9px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/info:opacity-100 transition-opacity z-[150] shadow-xl">
+                                                Billed to API users only.<br />
+                                                Included in Max plans.
+                                              </div>
+                                            </div>
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )
+                                  })()}
+
+                                  {/* Collapsible Summary */}
+                                  {block.summary && (
+                                    <div className="mt-2">
                                       <button
                                         onClick={() => {
-                                          const newSet = new Set(expandedUserPrompts)
+                                          const newSet = new Set(expandedSummaries)
                                           if (newSet.has(block.id)) {
                                             newSet.delete(block.id)
                                           } else {
                                             newSet.add(block.id)
                                           }
-                                          setExpandedUserPrompts(newSet)
+                                          setExpandedSummaries(newSet)
                                         }}
-                                        className="mt-1 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                        className="flex items-center gap-1.5 text-[10px] text-primary hover:text-primary-light transition-colors"
                                       >
-                                        {isExpanded ? 'Show less' : 'Show more'}
+                                        {expandedSummaries.has(block.id) ? (
+                                          <ChevronUp size={10} />
+                                        ) : (
+                                          <ChevronDown size={10} />
+                                        )}
+                                        <span className="font-medium">Summary</span>
                                       </button>
-                                    )}
-                                  </div>
-                                )
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-                        )}
 
-                        {/* STEP 1: ANTHROPIC (Code Editing) */}
-                        <div className="relative pb-4">
-                          {/* Step header */}
-                          <div className="flex items-center gap-3 mb-3">
-                            {/* Icon - Adjust left/right positioning here */}
-                            <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                              <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6 opacity-90" />
-                            </div>
-
-                            {/* Title + Status */}
-                            <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-gray-200">
-                                  Claude:
-                                </span>
-                                {block.isComplete && (
-                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                    <Check size={10} className="text-green-400" />
-                                  </div>
-                                )}
-                                {block.isComplete && block.completionStats && (
-                                  <span className="text-[10px] text-gray-500">
-                                    {block.completionStats.timeSeconds}s
-                                  </span>
-                                )}
+                                      {expandedSummaries.has(block.id) && (
+                                        <div className="mt-2 pl-4 text-[10px] text-gray-300 leading-relaxed whitespace-pre-wrap">
+                                          {block.summary}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          </div>
 
-                          {/* Anthropic step content (always visible) */}
-                          <div className="ml-10 space-y-3">
+                              {/* PLAN MODE: Plan approval (show when plan is ready) */}
+                              {needsApproval && (
+                                <div className="relative pb-4">
+                                  {/* Step header */}
+                                  <div className="flex items-center gap-3 mb-3">
+                                    {/* User Avatar */}
+                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                      <User size={24} className="text-white opacity-90" />
+                                    </div>
 
-                            {/* Messages */}
-                            <div className="space-y-1.5">
-                              {block.messages?.filter(m =>
-                                !m.content.includes('⚠️ Stopped by user') &&
-                                !(m.type === 'tool' && !m.toolName) // Filter out tool summary messages - they appear in stats section
-                              ).map((message, idx) => {
-                                const messageId = `${block.id}-msg-${idx}`
-                                const isMessageExpanded = expandedMessages.has(messageId)
-                                const hasOverflow = overflowingMessages.has(messageId)
+                                    {/* Title */}
+                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-gray-200">
+                                          Plan ready for approval
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
 
-                                // Check if this is the latest tool (for timer display)
-                                const toolMessages = block.messages?.filter(m => m.type === 'tool') || []
-                                const isLatestTool = message.type === 'tool' && message === toolMessages[toolMessages.length - 1]
+                                  {/* Approval content */}
+                                  <div className="ml-10">
+                                    <p className="text-[11px] text-gray-300 mb-3">
+                                      Review Claude's plan above. Choose an action below:
+                                    </p>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => {
+                                          if (onApprovePlan) {
+                                            onApprovePlan()
+                                          }
+                                        }}
+                                        className="px-4 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 hover:border-primary/70 rounded text-[11px] text-primary font-medium transition-all"
+                                      >
+                                        Yes, confirm
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          if (onRejectPlan) {
+                                            onRejectPlan()
+                                          }
+                                        }}
+                                        className="px-4 py-2 bg-gray-500/20 hover:bg-gray-500/30 border border-gray-500/50 hover:border-gray-500/70 rounded text-[11px] text-gray-300 font-medium transition-all"
+                                      >
+                                        No, keep planning
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
 
-                                return (
-                                  <div key={idx}>
-                                    <div className="flex items-start gap-2">
-                                      {message.type === 'assistant' && (
-                                        <>
-                                          <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
-                                          <div className="flex-1 relative">
-                                            <div
-                                              ref={(el) => {
-                                                if (el) {
-                                                  messageRefs.current.set(messageId, el)
-                                                } else {
-                                                  messageRefs.current.delete(messageId)
-                                                }
-                                              }}
-                                              className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap"
-                                              style={{
-                                                display: '-webkit-box',
-                                                WebkitBoxOrient: 'vertical',
-                                                WebkitLineClamp: !isMessageExpanded ? 3 : 'unset',
-                                                overflow: 'hidden'
-                                              }}
-                                            >
-                                              <KeywordHighlight
-                                                text={message.content}
-                                                keywords={keywords}
-                                                blockId={block.id}
-                                              />
+                              {/* PLAN MODE: User approval indicator */}
+                              {isPlanReady && implementationBlock && (
+                                <div className="relative pb-4">
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10">
+                                      <User size={24} className="text-white opacity-90" />
+                                    </div>
+                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-gray-200">
+                                          User approved plan
+                                        </span>
+                                        <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                          <Check size={10} className="text-green-400" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* PLAN MODE: Show implementation (Claude executing the plan) */}
+                              {isPlanReady && implementationBlock && (
+                                <div className="relative pb-4">
+                                  {/* Claude header */}
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10">
+                                      <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6" />
+                                    </div>
+                                    <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap" style={{ marginTop: '3px' }}>
+                                      <span className="text-sm font-medium text-gray-200">
+                                        Claude:
+                                      </span>
+                                      {implementationBlock.isComplete && implementationBlock.completionStats && (
+                                        <span className="text-[10px] text-gray-500">
+                                          {implementationBlock.completionStats.timeSeconds}s
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Implementation content */}
+                                  <div className="ml-10">
+                                    {/* Implementation messages */}
+                                    {implementationBlock.messages && implementationBlock.messages
+                                      .filter(m =>
+                                        (m.type === 'assistant' || m.type === 'thinking' || m.type === 'tool') &&
+                                        !(m.type === 'tool' && !m.toolName) // Filter out tool summary messages
+                                      )
+                                      .map((msg, msgIdx) => {
+                                        if (msg.type === 'thinking') {
+                                          return (
+                                            <div key={`impl-thinking-${msgIdx}`} className="mb-2 text-[11px] text-gray-500 italic">
+                                              Thought for {msg.thinkingDuration || '...'}s
                                             </div>
-                                            {hasOverflow && (
-                                              <button
-                                                onClick={() => {
-                                                  const newSet = new Set(expandedMessages)
-                                                  if (newSet.has(messageId)) {
-                                                    newSet.delete(messageId)
-                                                  } else {
-                                                    newSet.add(messageId)
-                                                  }
-                                                  setExpandedMessages(newSet)
-                                                }}
-                                                className="ml-1 text-[10px] text-primary hover:text-primary-light transition-colors"
-                                              >
-                                                {isMessageExpanded ? 'Show less' : 'Show more'}
-                                              </button>
-                                            )}
+                                          )
+                                        }
+
+                                        if (msg.type === 'tool') {
+                                          return null // Tools shown separately in stats
+                                        }
+
+                                        return (
+                                          <div key={`impl-msg-${msgIdx}`} className="mb-3">
+                                            <div className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
+                                              {msg.content}
+                                            </div>
                                           </div>
-                                        </>
-                                      )}
-                                      {message.type === 'tool' && message.toolName && (
-                                        <>
-                                          <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
-                                          <span className="text-[11px] text-gray-400 leading-relaxed flex items-center gap-2">
-                                            <span>
-                                              Claude using tool{' '}
-                                              <span className="text-primary font-medium">{message.toolName}</span>
-                                              {message.content.includes('@') && (
-                                                <> @ {message.content.split('@')[1].trim()}</>
-                                              )}
-                                            </span>
-                                            {isLatestTool && message.toolDuration === undefined && (
-                                              // Only show timer for the latest active tool
-                                              <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                                                <Clock size={10} />
-                                                <>{latestToolTimer.get(block.id)?.toFixed(1) || '0.0'}s</>
-                                              </span>
-                                            )}
-                                          </span>
-                                        </>
-                                      )}
-                                      {message.type === 'thinking' && (
-                                        <>
-                                          {message.thinkingDuration !== undefined ? (
-                                            // Complete thinking - expandable
-                                            <div className="flex-1">
-                                              <button
-                                                onClick={() => {
-                                                  const newSet = new Set(expandedThinking)
-                                                  if (newSet.has(messageId)) {
-                                                    newSet.delete(messageId)
-                                                  } else {
-                                                    newSet.add(messageId)
-                                                  }
-                                                  setExpandedThinking(newSet)
-                                                }}
-                                                className="flex items-center gap-2 text-[11px] text-purple-400 hover:text-purple-300 transition-colors"
-                                              >
-                                                <Brain size={9} className="flex-shrink-0" style={{ marginLeft: '1px' }} />
-                                                <span className="font-medium">
-                                                  Thought for {message.thinkingDuration}s
+                                        )
+                                      })}
+
+                                    {/* Implementation stats */}
+                                    {implementationBlock.completionStats && (() => {
+                                      const toolUsageMessage = implementationBlock.messages?.find(m => m.type === 'tool' && !m.toolName)
+                                      const toolUsage = toolUsageMessage?.content || ''
+
+                                      return (
+                                        <div className="mt-3">
+                                          <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
+                                            {toolUsage && (
+                                              <>
+                                                <span className="text-gray-400 flex items-center gap-1">
+                                                  <span className="text-gray-500">Used tools:</span>
+                                                  <span className="font-mono text-gray-300">{toolUsage}</span>
                                                 </span>
-                                                <ChevronDown
-                                                  size={10}
-                                                  className={`transition-transform ${expandedThinking.has(messageId) ? 'rotate-180' : ''}`}
-                                                />
-                                              </button>
-                                              {expandedThinking.has(messageId) && (
-                                                <div className="mt-2 pl-6 text-[10px] text-gray-400 leading-relaxed whitespace-pre-wrap border-l-2 border-purple-500/30">
-                                                  {message.content}
-                                                </div>
-                                              )}
-                                            </div>
-                                          ) : (
-                                            // Active thinking - animated
-                                            <div className="flex items-center gap-2">
-                                              <Brain size={9} className="flex-shrink-0 text-purple-400" style={{ marginLeft: '1px' }} />
-                                              <span className="text-[11px] text-purple-400 font-medium">
-                                                Thinking{thinkingDots}
-                                              </span>
-                                              <span className="text-[10px] text-gray-500 flex items-center gap-1">
-                                                <Clock size={10} />
-                                                {thinkingTimers.get(block.id)?.toFixed(1) || '0.0'}s
-                                              </span>
-                                            </div>
-                                          )}
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
-
-                            {/* Completion Stats */}
-                            {block.completionStats && (() => {
-                              // Extract tool usage from messages
-                              const toolUsageMessage = block.messages?.find(m => m.type === 'tool' && !m.toolName)
-                              const toolUsage = toolUsageMessage?.content || ''
-
-                              return (
-                              <div className="mt-3">
-                                <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
-                                  {toolUsage && (
-                                    <>
-                                      <span className="text-gray-400 flex items-center gap-1">
-                                        <span className="text-gray-500">Used tools:</span>
-                                        <span className="font-mono text-gray-300">{toolUsage}</span>
-                                      </span>
-                                      <span className="text-gray-600">|</span>
-                                    </>
-                                  )}
-                                  <span className="text-gray-400 flex items-center gap-1">
-                                    <span className="text-gray-500">Tokens:</span>
-                                    <ArrowUpCircle size={10} className="text-blue-400" />
-                                    <span>{block.completionStats.inputTokens}</span>
-                                    <span className="text-gray-600">→</span>
-                                    <ArrowDownCircle size={10} className="text-green-400" />
-                                    <span>{block.completionStats.outputTokens}</span>
-                                  </span>
-                                  <span className="text-gray-600">|</span>
-                                  <span className="text-gray-400 flex items-center gap-1">
-                                    <DollarSign size={10} />
-                                    {block.completionStats.cost.toFixed(4)}
-                                    <div className="group/info relative flex items-center">
-                                      <Info size={10} className="text-gray-500 cursor-help" />
-                                      <div className="absolute right-0 bottom-full mb-2 bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[9px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/info:opacity-100 transition-opacity z-[150] shadow-xl">
-                                        Billed to API users only.<br />
-                                        Included in Max plans.
-                                      </div>
-                                    </div>
-                                  </span>
-                                </div>
-                              </div>
-                              )
-                            })()}
-
-                            {/* Collapsible Summary */}
-                            {block.summary && (
-                              <div className="mt-2">
-                                <button
-                                  onClick={() => {
-                                    const newSet = new Set(expandedSummaries)
-                                    if (newSet.has(block.id)) {
-                                      newSet.delete(block.id)
-                                    } else {
-                                      newSet.add(block.id)
-                                    }
-                                    setExpandedSummaries(newSet)
-                                  }}
-                                  className="flex items-center gap-1.5 text-[10px] text-primary hover:text-primary-light transition-colors"
-                                >
-                                  {expandedSummaries.has(block.id) ? (
-                                    <ChevronUp size={10} />
-                                  ) : (
-                                    <ChevronDown size={10} />
-                                  )}
-                                  <span className="font-medium">Summary</span>
-                                </button>
-
-                                {expandedSummaries.has(block.id) && (
-                                  <div className="mt-2 pl-4 text-[10px] text-gray-300 leading-relaxed whitespace-pre-wrap">
-                                    {block.summary}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* PLAN MODE: Plan approval (show when plan is ready) */}
-                        {needsApproval && (
-                          <div className="relative pb-4">
-                            {/* Step header */}
-                            <div className="flex items-center gap-3 mb-3">
-                              {/* User Avatar */}
-                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                <User size={24} className="text-white opacity-90" />
-                              </div>
-
-                              {/* Title */}
-                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-gray-200">
-                                    Plan ready for approval
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Approval content */}
-                            <div className="ml-10">
-                              <p className="text-[11px] text-gray-300 mb-3">
-                                Review Claude's plan above. Choose an action below:
-                              </p>
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => {
-                                    if (onApprovePlan) {
-                                      onApprovePlan()
-                                    }
-                                  }}
-                                  className="px-4 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 hover:border-primary/70 rounded text-[11px] text-primary font-medium transition-all"
-                                >
-                                  Yes, confirm
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    if (onRejectPlan) {
-                                      onRejectPlan()
-                                    }
-                                  }}
-                                  className="px-4 py-2 bg-gray-500/20 hover:bg-gray-500/30 border border-gray-500/50 hover:border-gray-500/70 rounded text-[11px] text-gray-300 font-medium transition-all"
-                                >
-                                  No, keep planning
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* PLAN MODE: User approval indicator */}
-                        {isPlanReady && implementationBlock && (
-                          <div className="relative pb-4">
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10">
-                                <User size={24} className="text-white opacity-90" />
-                              </div>
-                              <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-medium text-gray-200">
-                                    User approved plan
-                                  </span>
-                                  <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                    <Check size={10} className="text-green-400" />
+                                                <span className="text-gray-600">|</span>
+                                              </>
+                                            )}
+                                            <span className="text-gray-400 flex items-center gap-1">
+                                              <span className="text-gray-500">Tokens:</span>
+                                              <ArrowUpCircle size={10} className="text-blue-400" />
+                                              <span>{implementationBlock.completionStats.inputTokens}</span>
+                                              <span className="text-gray-600">→</span>
+                                              <ArrowDownCircle size={10} className="text-green-400" />
+                                              <span>{implementationBlock.completionStats.outputTokens}</span>
+                                            </span>
+                                            <span className="text-gray-600">|</span>
+                                            <span className="text-gray-400 flex items-center gap-1">
+                                              <DollarSign size={10} />
+                                              {implementationBlock.completionStats.cost.toFixed(4)}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      )
+                                    })()}
                                   </div>
                                 </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
+                              )}
 
-                        {/* PLAN MODE: Show implementation (Claude executing the plan) */}
-                        {isPlanReady && implementationBlock && (
-                          <div className="relative pb-4">
-                            {/* Claude header */}
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="flex-shrink-0 bg-white/[0.02] relative z-10">
-                                <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6" />
-                              </div>
-                              <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap" style={{ marginTop: '3px' }}>
-                                <span className="text-sm font-medium text-gray-200">
-                                  Claude:
-                                </span>
-                                {implementationBlock.isComplete && implementationBlock.completionStats && (
-                                  <span className="text-[10px] text-gray-500">
-                                    {implementationBlock.completionStats.timeSeconds}s
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Implementation content */}
-                            <div className="ml-10">
-                              {/* Implementation messages */}
-                              {implementationBlock.messages && implementationBlock.messages
-                                .filter(m =>
-                                  (m.type === 'assistant' || m.type === 'thinking' || m.type === 'tool') &&
-                                  !(m.type === 'tool' && !m.toolName) // Filter out tool summary messages
-                                )
-                                .map((msg, msgIdx) => {
-                                  if (msg.type === 'thinking') {
-                                    return (
-                                      <div key={`impl-thinking-${msgIdx}`} className="mb-2 text-[11px] text-gray-500 italic">
-                                        Thought for {msg.thinkingDuration || '...'}s
+                              {/* STEP 2: GIT (GitHub Commit) - Use implementation block in plan mode */}
+                              {(() => {
+                                const gitBlockToUse =
+                                  (isPlanReady && implementationBlock) ? implementationBlock :
+                                    block
+                                const git = gitBlockToUse?.actions?.find(a => a.type === 'git_commit')
+                                // Only show if git action exists AND has started
+                                const shouldShowGit = git && git.status
+                                return shouldShowGit && (
+                                  <div className="relative pb-4">
+                                    {/* Step header */}
+                                    <div className="flex items-center gap-3 mb-3">
+                                      {/* Icon - Adjust left/right positioning here */}
+                                      <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                        <img src={GitIcon} alt="Git" className="w-6 h-6 opacity-90" />
                                       </div>
-                                    )
-                                  }
 
-                                  if (msg.type === 'tool') {
-                                    return null // Tools shown separately in stats
-                                  }
-
-                                  return (
-                                    <div key={`impl-msg-${msgIdx}`} className="mb-3">
-                                      <div className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
-                                        {msg.content}
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-
-                              {/* Implementation stats */}
-                              {implementationBlock.completionStats && (() => {
-                                const toolUsageMessage = implementationBlock.messages?.find(m => m.type === 'tool' && !m.toolName)
-                                const toolUsage = toolUsageMessage?.content || ''
-
-                                return (
-                                  <div className="mt-3">
-                                    <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
-                                      {toolUsage && (
-                                        <>
-                                          <span className="text-gray-400 flex items-center gap-1">
-                                            <span className="text-gray-500">Used tools:</span>
-                                            <span className="font-mono text-gray-300">{toolUsage}</span>
+                                      {/* Title + Status */}
+                                      <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="text-sm font-medium text-gray-200">
+                                            {git.status === 'in_progress'
+                                              ? 'Committing and pushing to GitHub...'
+                                              : git.status === 'success'
+                                                ? 'Committed successfully'
+                                                : 'Commit failed'
+                                            }
                                           </span>
-                                          <span className="text-gray-600">|</span>
-                                        </>
-                                      )}
-                                      <span className="text-gray-400 flex items-center gap-1">
-                                        <span className="text-gray-500">Tokens:</span>
-                                        <ArrowUpCircle size={10} className="text-blue-400" />
-                                        <span>{implementationBlock.completionStats.inputTokens}</span>
-                                        <span className="text-gray-600">→</span>
-                                        <ArrowDownCircle size={10} className="text-green-400" />
-                                        <span>{implementationBlock.completionStats.outputTokens}</span>
-                                      </span>
-                                      <span className="text-gray-600">|</span>
-                                      <span className="text-gray-400 flex items-center gap-1">
-                                        <DollarSign size={10} />
-                                        {implementationBlock.completionStats.cost.toFixed(4)}
-                                      </span>
+                                          {git.status === 'success' && git.data?.commitHash && (
+                                            <span className="font-mono text-[11px] bg-white/[0.03] border border-white/10 px-2 py-0.5 rounded text-gray-400">
+                                              {git.data.commitHash}
+                                            </span>
+                                          )}
+                                          {git.status === 'success' && git.data?.filesChanged !== undefined && (
+                                            <>
+                                              <span className="text-gray-400 text-[11px]">•</span>
+                                              <span className="text-[11px] text-gray-400">
+                                                {git.data.filesChanged} file{git.data.filesChanged !== 1 ? 's' : ''} changed
+                                              </span>
+                                            </>
+                                          )}
+                                          {git.status === 'success' && (
+                                            <>
+                                              <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                                <Check size={10} className="text-green-400" />
+                                              </div>
+                                              <span className="text-[10px] text-gray-500">
+                                                0.1s
+                                              </span>
+                                            </>
+                                          )}
+                                          {git.status === 'in_progress' && (
+                                            <Loader2 size={12} className="text-primary animate-spin" />
+                                          )}
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
                                 )
                               })()}
-                            </div>
-                          </div>
-                        )}
 
-                      {/* STEP 2: GIT (GitHub Commit) - Use implementation block in plan mode */}
-                      {(() => {
-                        const gitBlockToUse =
-                          (isPlanReady && implementationBlock) ? implementationBlock :
-                          block
-                        const git = gitBlockToUse?.actions?.find(a => a.type === 'git_commit')
-                        // Only show if git action exists AND has started
-                        const shouldShowGit = git && git.status
-                        return shouldShowGit && (
-                        <div className="relative pb-4">
-                          {/* Step header */}
-                          <div className="flex items-center gap-3 mb-3">
-                            {/* Icon - Adjust left/right positioning here */}
-                            <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                              <img src={GitIcon} alt="Git" className="w-6 h-6 opacity-90" />
-                            </div>
+                              {/* STEP 3: DEPLOY (Dev Server) - Use implementation block in plan mode */}
+                              {(() => {
+                                const deployBlockToUse =
+                                  (isPlanReady && implementationBlock) ? implementationBlock :
+                                    block
+                                const deploy = deployBlockToUse?.actions?.find(a => a.type === 'dev_server')
+                                // Only show if deploy action exists AND has started
+                                const shouldShowDeploy = deploy && deploy.status
+                                return shouldShowDeploy && (
+                                  <div className="relative">
+                                    {/* Step header */}
+                                    <div className="flex items-center gap-3 mb-3">
+                                      {/* Server Icon */}
+                                      <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                        <Server size={24} className="text-white opacity-90" />
+                                      </div>
 
-                            {/* Title + Status */}
-                            <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-medium text-gray-200">
-                                  {git.status === 'in_progress'
-                                    ? 'Committing and pushing to GitHub...'
-                                    : git.status === 'success'
-                                    ? 'Committed successfully'
-                                    : 'Commit failed'
-                                  }
-                                </span>
-                                {git.status === 'success' && git.data?.commitHash && (
-                                  <span className="font-mono text-[11px] bg-white/[0.03] border border-white/10 px-2 py-0.5 rounded text-gray-400">
-                                    {git.data.commitHash}
-                                  </span>
-                                )}
-                                {git.status === 'success' && git.data?.filesChanged !== undefined && (
-                                  <>
-                                    <span className="text-gray-400 text-[11px]">•</span>
-                                    <span className="text-[11px] text-gray-400">
-                                      {git.data.filesChanged} file{git.data.filesChanged !== 1 ? 's' : ''} changed
-                                    </span>
-                                  </>
-                                )}
-                                {git.status === 'success' && (
-                                  <>
-                                    <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                      <Check size={10} className="text-green-400" />
+                                      {/* Title + Status */}
+                                      <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="text-sm font-medium text-gray-200">
+                                            {deploy.status === 'in_progress'
+                                              ? 'Starting dev server...'
+                                              : deploy.status === 'success'
+                                                ? 'Dev Server started successfully'
+                                                : 'Failed to start dev server'
+                                            }
+                                          </span>
+                                          {deploy.status === 'success' && deploy.data?.url && (
+                                            <>
+                                              <span className="text-gray-400 text-[11px]">•</span>
+                                              <a
+                                                href={deploy.data.url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[11px]"
+                                              >
+                                                <span>{deploy.data.url}</span>
+                                                <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
+                                              </a>
+                                            </>
+                                          )}
+                                          {deploy.status === 'success' && (
+                                            <>
+                                              <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
+                                                <Check size={10} className="text-green-400" />
+                                              </div>
+                                              {deploy.data?.restartTime && (
+                                                <span className="text-[10px] text-gray-500">
+                                                  {deploy.data.restartTime}s
+                                                </span>
+                                              )}
+                                            </>
+                                          )}
+                                          {deploy.status === 'in_progress' && (
+                                            <Loader2 size={12} className="text-primary animate-spin" />
+                                          )}
+                                        </div>
+                                      </div>
                                     </div>
-                                    <span className="text-[10px] text-gray-500">
-                                      0.1s
-                                    </span>
-                                  </>
-                                )}
-                                {git.status === 'in_progress' && (
-                                  <Loader2 size={12} className="text-primary animate-spin" />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        )
-                      })()}
+                                  </div>
+                                )
+                              })()}
 
-                      {/* STEP 3: DEPLOY (Dev Server) - Use implementation block in plan mode */}
-                      {(() => {
-                        const deployBlockToUse =
-                          (isPlanReady && implementationBlock) ? implementationBlock :
-                          block
-                        const deploy = deployBlockToUse?.actions?.find(a => a.type === 'dev_server')
-                        // Only show if deploy action exists AND has started
-                        const shouldShowDeploy = deploy && deploy.status
-                        return shouldShowDeploy && (
-                        <div className="relative">
-                          {/* Step header */}
-                          <div className="flex items-center gap-3 mb-3">
-                            {/* Server Icon */}
-                            <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                              <Server size={24} className="text-white opacity-90" />
-                            </div>
-
-                            {/* Title + Status */}
-                            <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-medium text-gray-200">
-                                  {deploy.status === 'in_progress'
-                                    ? 'Starting dev server...'
-                                    : deploy.status === 'success'
-                                    ? 'Dev Server started successfully'
-                                    : 'Failed to start dev server'
-                                  }
-                                </span>
-                                {deploy.status === 'success' && deploy.data?.url && (
-                                  <>
-                                    <span className="text-gray-400 text-[11px]">•</span>
-                                    <a
-                                      href={deploy.data.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[11px]"
-                                    >
-                                      <span>{deploy.data.url}</span>
-                                      <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
-                                    </a>
-                                  </>
-                                )}
-                                {deploy.status === 'success' && (
-                                  <>
-                                    <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                      <Check size={10} className="text-green-400" />
+                              {/* STEP: INTERRUPTED (Stopped by user) */}
+                              {wasInterrupted && (
+                                <div className="relative">
+                                  {/* Step header */}
+                                  <div className="flex items-center gap-3 mb-3">
+                                    {/* X Icon */}
+                                    <div className="flex-shrink-0 bg-red-500/10 rounded-full p-1 relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                      <X size={14} className="text-red-400" />
                                     </div>
-                                    {deploy.data?.restartTime && (
-                                      <span className="text-[10px] text-gray-500">
-                                        {deploy.data.restartTime}s
-                                      </span>
-                                    )}
-                                  </>
-                                )}
-                                {deploy.status === 'in_progress' && (
-                                  <Loader2 size={12} className="text-primary animate-spin" />
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        )
-                      })()}
 
-                      {/* STEP: INTERRUPTED (Stopped by user) */}
-                      {wasInterrupted && (
-                        <div className="relative">
-                          {/* Step header */}
-                          <div className="flex items-center gap-3 mb-3">
-                            {/* X Icon */}
-                            <div className="flex-shrink-0 bg-red-500/10 rounded-full p-1 relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                              <X size={14} className="text-red-400" />
-                            </div>
-
-                            {/* Title + Status */}
-                            <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-gray-200">
-                                  Stopped by user
-                                </span>
-                                <div className="flex-shrink-0 w-4 h-4 rounded-full bg-red-500/20 flex items-center justify-center">
-                                  <Check size={10} className="text-red-400" />
+                                    {/* Title + Status */}
+                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-gray-200">
+                                          Stopped by user
+                                        </span>
+                                        <div className="flex-shrink-0 w-4 h-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                                          <Check size={10} className="text-red-400" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
+                              )}
+
                             </div>
-                          </div>
-                        </div>
-                      )}
+                          )}
 
                         </div>
-                      )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Custom styles */}
-        <style>{`
+            {/* Custom styles */}
+            <style>{`
           .custom-scrollbar {
             scrollbar-width: thin;
             scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
@@ -2012,8 +2010,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             }
           }
         `}</style>
-      </div>
-    </div>
+          </div>
+        </div>
       )}
     </>
   )

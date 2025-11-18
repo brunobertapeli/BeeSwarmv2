@@ -2,8 +2,12 @@ import { EventEmitter } from 'events';
 import { query, type SDKMessage, type Query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { execSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
 import * as path from 'path';
 import { databaseService } from './DatabaseService';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Attachment for multimodal inputs
@@ -82,15 +86,32 @@ class ClaudeService extends EventEmitter {
    * This is the general prompt that applies to all projects
    * Individual projects can extend this with their .claude/CLAUDE.md files
    */
+
   private loadSystemPrompt(): string {
     if (this.systemPrompt) {
       return this.systemPrompt;
     }
 
     try {
-      const promptPath = path.join(__dirname, '../prompts/system-prompt.txt');
-      this.systemPrompt = readFileSync(promptPath, 'utf-8');
-      return this.systemPrompt;
+      // Try multiple locations for the system prompt
+      const candidates = [
+        // 1. Production: Copied to dist-electron/prompts
+        path.join(__dirname, 'prompts/system-prompt.txt'),
+        // 2. Dev: Relative to source file (electron/services/../prompts)
+        path.join(__dirname, '../prompts/system-prompt.txt'),
+        // 3. Dev fallback: Relative to dist-electron root (dist-electron/../electron/prompts)
+        path.join(__dirname, '../electron/prompts/system-prompt.txt')
+      ];
+
+      for (const promptPath of candidates) {
+        if (existsSync(promptPath)) {
+          this.systemPrompt = readFileSync(promptPath, 'utf-8');
+          return this.systemPrompt;
+        }
+      }
+
+      console.warn('⚠️ System prompt file not found. Checked:', candidates);
+      return '';
     } catch (error) {
       console.warn('⚠️ Failed to load system prompt, using empty prompt:', error);
       return '';
@@ -226,15 +247,18 @@ class ClaudeService extends EventEmitter {
     const options = {
       cwd: projectPath, // Current working directory
       permissionMode, // Plan mode for exploration, bypass for execution
-      maxTurns: 30, // Increased from 10 to allow more tool usage with thinking
+      maxTurns: 50, // Increased to allow more tool usage with thinking
       signal: abortController.signal,
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(), // Path to claude CLI
       model: effectiveModel, // Always set model
-      systemPrompt: { type: 'preset', preset: 'claude_code' }, // Use Claude Code preset
-      // systemPrompt: systemPromptText, // Custom system prompt (commented for now)
+      systemPrompt: {
+        type: 'preset' as const,
+        preset: 'claude_code' as const,
+        append: this.loadSystemPrompt() // Append custom system prompt
+      },
       settingSources: ['project' as const], // Load .claude/CLAUDE.md files from projects
       ...(sessionId && { resume: sessionId }), // Resume if we have session ID
-      ...(thinkingEnabled && { maxThinkingTokens: 5000 }), // Enable extended thinking (5k tokens = ~3750 words)
+      ...(thinkingEnabled && { maxThinkingTokens: 16000 }), // Enable extended thinking (16k tokens)
     };
 
     if (thinkingEnabled) {
@@ -287,7 +311,7 @@ class ClaudeService extends EventEmitter {
         });
 
         // Create async iterator with single message
-        queryPrompt = (async function*() {
+        queryPrompt = (async function* () {
           const userMessage = {
             type: 'user' as const,
             message: {
