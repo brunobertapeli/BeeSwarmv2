@@ -57,17 +57,8 @@ class LayoutManager extends EventEmitter {
    * Set layout state and update BrowserView bounds
    */
   async setState(state: LayoutState, projectId: string): Promise<void> {
-    console.log('🔍 [LAYOUT MANAGER] setState() called:', {
-      currentState: this.currentState,
-      newState: state,
-      projectId,
-      isTransitioning: this.isTransitioning,
-      timestamp: new Date().toISOString()
-    });
-
     // Guard against overlapping transitions
     if (this.isTransitioning) {
-      console.warn('⚠️ [LAYOUT MANAGER] Transition already in progress, ignoring setState');
       return;
     }
 
@@ -79,19 +70,15 @@ class LayoutManager extends EventEmitter {
 
       // Calculate and apply bounds for new state
       const bounds = this.calculateBounds(state);
-      console.log('🔍 [LAYOUT MANAGER] Calculated bounds for state:', state, bounds);
 
       if (state === 'TOOLS') {
         // TOOLS state: Hide preview, show ActionBar + StatusSheet
-        console.log('🔍 [LAYOUT MANAGER] TOOLS state - hiding preview for project:', projectId);
         previewService.hide(projectId);
 
         // Emit state change to renderer
         this.emit('state-changed', state, previousState);
-        console.log('✅ [LAYOUT MANAGER] Transitioned to TOOLS state');
       } else if (state === 'BROWSER_FULL') {
         // BROWSER_FULL: Show preview in fullscreen
-        console.log('🔍 [LAYOUT MANAGER] BROWSER_FULL state - hiding then showing preview');
         previewService.hide(projectId);
 
         // Emit state change event to renderer first (so DOM can update)
@@ -102,10 +89,8 @@ class LayoutManager extends EventEmitter {
 
         // Show BrowserView - bounds will be set by DesktopPreviewFrame
         previewService.show(projectId);
-        console.log('✅ [LAYOUT MANAGER] Transitioned to BROWSER_FULL state');
       } else if (state === 'DEFAULT') {
         // DEFAULT: Show preview (StatusSheet component may hide it temporarily if expanded)
-        console.log('🔍 [LAYOUT MANAGER] DEFAULT state - showing preview for project:', projectId);
 
         // Emit state change event to renderer first
         this.emit('state-changed', state, previousState);
@@ -115,12 +100,10 @@ class LayoutManager extends EventEmitter {
 
         // Show BrowserView - ensures it's visible when switching back to DEFAULT
         previewService.show(projectId);
-        console.log('✅ [LAYOUT MANAGER] Transitioned to DEFAULT state');
       }
     } finally {
       // Always clear the transition flag
       this.isTransitioning = false;
-      console.log('🔍 [LAYOUT MANAGER] Transition complete, flag cleared');
     }
   }
 
@@ -130,16 +113,8 @@ class LayoutManager extends EventEmitter {
    * Note: BROWSER_FULL is only accessible via fullscreen icon, not Tab cycling
    */
   async cycleState(projectId: string): Promise<void> {
-    console.log('🔍 [LAYOUT MANAGER] cycleState() called:', {
-      currentState: this.currentState,
-      projectId,
-      isTransitioning: this.isTransitioning,
-      timestamp: new Date().toISOString()
-    });
-
     // Guard against rapid Tab presses (setState also has guard, this provides early exit)
     if (this.isTransitioning) {
-      console.warn('⚠️ [LAYOUT MANAGER] Transition in progress, ignoring Tab press');
       return;
     }
 
@@ -160,7 +135,6 @@ class LayoutManager extends EventEmitter {
         nextState = 'DEFAULT';
     }
 
-    console.log('🔍 [LAYOUT MANAGER] Cycling from', this.currentState, 'to', nextState);
     await this.setState(nextState, projectId);
   }
 

@@ -77,36 +77,23 @@ function ProjectSelector({
   useEffect(() => {
     const activeProjectId = currentProjectId || appCurrentProjectId
 
-    console.log('🔍 [PROJECT SELECTOR] Freeze frame effect triggered:', {
-      isOpen,
-      activeProjectId,
-      currentProjectId,
-      appCurrentProjectId,
-      layoutState,
-      timestamp: new Date().toISOString()
-    })
-
     const handleFreezeFrame = async () => {
       if (isOpen && activeProjectId) {
         // Only freeze if in DEFAULT state (browser is visible)
         if (layoutState === 'DEFAULT') {
-          console.log('🔍 [PROJECT SELECTOR] Capturing freeze and hiding preview for project:', activeProjectId)
           const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
           if (result?.success && result.freezeImage) {
             setModalFreezeImage(result.freezeImage)
             setModalFreezeActive(true)
             await window.electronAPI?.preview.hide(activeProjectId)
-            console.log('✅ [PROJECT SELECTOR] Preview hidden for project:', activeProjectId)
           }
         }
       } else {
         // Closing project selector - deactivate freeze frame
-        console.log('🔍 [PROJECT SELECTOR] Closing - showing preview for project:', activeProjectId)
         setModalFreezeActive(false)
         // Only show browser back if in DEFAULT state
         if (activeProjectId && layoutState === 'DEFAULT') {
           await window.electronAPI?.preview.show(activeProjectId)
-          console.log('✅ [PROJECT SELECTOR] Preview shown for project:', activeProjectId)
         }
       }
     }

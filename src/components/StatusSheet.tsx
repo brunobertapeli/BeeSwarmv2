@@ -462,11 +462,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   useEffect(() => {
     if (!projectId || !window.electronAPI?.chat) return
 
-    console.log('🔍 [STATUS SHEET] Loading chat history for project:', {
-      projectId,
-      timestamp: new Date().toISOString()
-    })
-
     // Reset state
     setAllBlocks([])
     setCurrentOffset(0)
@@ -478,16 +473,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
         const conversationBlocks = result.blocks
           .map((block: any) => transformBlock(block))
           .reverse() // Reverse to show oldest first
-
-        console.log('🔍 [STATUS SHEET] Loaded chat history:', {
-          projectId,
-          blockCount: conversationBlocks.length,
-          blocks: conversationBlocks.map(b => ({
-            id: b.id,
-            projectId: b.projectId,
-            userPrompt: b.userPrompt?.substring(0, 50)
-          }))
-        })
 
         setAllBlocks(conversationBlocks)
         setCurrentOffset(0)
@@ -823,11 +808,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const newHeight = entry.target.clientHeight
-        console.log('🔍 [ActionBar ResizeObserver] Height changed:', {
-          oldHeight: actionBarHeight,
-          newHeight,
-          diff: newHeight - actionBarHeight
-        })
         setActionBarHeight(newHeight)
       }
     })
@@ -836,7 +816,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
     // Set initial height
     const initialHeight = actionBarRef.current.clientHeight
-    console.log('🔍 [ActionBar ResizeObserver] Initial height:', initialHeight)
     setActionBarHeight(initialHeight)
 
     return () => {
@@ -851,16 +830,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
   // Handle preview visibility based on layout state and StatusSheet expanded state
   useEffect(() => {
-    console.log('🔍 [STATUS SHEET] Preview visibility effect triggered:', {
-      layoutState,
-      statusSheetExpanded,
-      projectId,
-      timestamp: new Date().toISOString()
-    });
-
     const handlePreviewVisibility = async () => {
       if (!projectId) {
-        console.log('🔍 [STATUS SHEET] No projectId, skipping preview visibility');
         return
       }
 
@@ -868,18 +839,14 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       if (layoutState === 'DEFAULT') {
         if (!statusSheetExpanded) {
           // StatusSheet collapsed in DEFAULT → deactivate freeze, show preview
-          console.log('🔍 [STATUS SHEET] DEFAULT + collapsed → showing preview');
           setModalFreezeActive(false)
           await window.electronAPI?.preview.show(projectId)
-        } else {
-          console.log('🔍 [STATUS SHEET] DEFAULT + expanded → preview handled by handleExpand');
         }
         // Note: Freeze capture when expanding is now handled in handleExpand() for better performance
       }
       // TOOLS state: Preview frame is hidden completely (no frozen background)
       else if (layoutState === 'TOOLS') {
         // No freeze effect in TOOLS state - just empty space
-        console.log('🔍 [STATUS SHEET] TOOLS state → deactivating freeze only (no hide/show)');
         setModalFreezeActive(false)
       }
     }
@@ -970,25 +937,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   // Calculate bottom position based on action bar height
   const baseOffset = -19 // Gap between action bar and status sheet (adjusted for 5px lower action bar)
   const bottomPosition = actionBarHeight > 0 ? actionBarHeight + baseOffset : 76
-
-  // Debug logging for position changes
-  useEffect(() => {
-    if (statusSheetRef.current) {
-      const rect = statusSheetRef.current.getBoundingClientRect()
-      console.log('📊 [StatusSheet Position Debug]', {
-        actionBarHeight,
-        bottomPosition,
-        isExpanded,
-        isVisible,
-        hasHistory,
-        allBlocksLength: allBlocks.length,
-        statusSheetHeight: statusSheetRef.current.clientHeight,
-        statusSheetOffsetHeight: statusSheetRef.current.offsetHeight,
-        actualBottom: rect.bottom,
-        actualTop: rect.top
-      })
-    }
-  }, [actionBarHeight, bottomPosition, isExpanded, isVisible, hasHistory, allBlocks.length])
 
   // Always render if has history (show collapsed or expanded based on state)
   const shouldRender = hasHistory

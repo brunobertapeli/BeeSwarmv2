@@ -196,21 +196,11 @@ function KanbanWidget() {
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    console.log('[Kanban] Mouse down on widget', {
-      target: e.target,
-      currentTarget: e.currentTarget,
-      isHeader: headerRef.current?.contains(e.target as Node),
-      position: kanbanPosition,
-      zIndex: '95'
-    })
-
     // Only allow dragging from the header
     if (!headerRef.current?.contains(e.target as Node)) {
-      console.log('[Kanban] Not dragging - click not on header')
       return
     }
 
-    console.log('[Kanban] Starting drag')
     setIsDragging(true)
     setDragOffset({
       x: e.clientX - kanbanPosition.x,
@@ -300,12 +290,6 @@ function KanbanWidget() {
         height: `${kanbanSize.height}px`
       }}
       onMouseDown={handleMouseDown}
-      onClick={(e) => {
-        console.log('[Kanban] Click on widget container', {
-          target: e.target,
-          position: kanbanPosition
-        })
-      }}
     >
       {/* Background image */}
       <div

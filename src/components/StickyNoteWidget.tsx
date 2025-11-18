@@ -49,17 +49,9 @@ function StickyNoteWidget({ note }: StickyNoteWidgetProps) {
 
   // Handle mouse down on header (start drag)
   const handleMouseDown = (e: React.MouseEvent) => {
-    console.log('[StickyNote] Mouse down on header', {
-      noteId: note.id,
-      target: e.target,
-      currentTarget: e.currentTarget,
-      zIndex: note.zIndex
-    })
-
     // Only allow dragging from header, not from buttons
     const target = e.target as HTMLElement
     if (target.closest('button')) {
-      console.log('[StickyNote] Click was on button, ignoring drag')
       return
     }
 
@@ -156,20 +148,8 @@ function StickyNoteWidget({ note }: StickyNoteWidgetProps) {
     <div
       ref={noteRef}
       className="fixed"
-      onClick={(e) => {
-        console.log('[StickyNote] Click on note container', {
-          noteId: note.id,
-          target: e.target,
-          zIndex: note.zIndex
-        })
+      onClick={() => {
         bringNoteToFront(note.id)
-      }}
-      onMouseDown={(e) => {
-        console.log('[StickyNote] Mouse down on note container', {
-          noteId: note.id,
-          target: e.target,
-          zIndex: note.zIndex
-        })
       }}
       style={{
         left: `${note.position.x * 100}%`,

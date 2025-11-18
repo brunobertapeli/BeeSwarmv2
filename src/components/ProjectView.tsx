@@ -316,13 +316,6 @@ Please read the manifest to understand what my website is about, then create an 
   useEffect(() => {
     if (!currentProject) return
 
-    console.log('🔍 [PROJECT LOAD] Effect triggered for project:', {
-      projectId: currentProject.id,
-      projectName: currentProject.name,
-      projectPath: currentProject.path,
-      timestamp: new Date().toISOString()
-    })
-
     startDevServer()
 
     // Setup process event listeners
@@ -457,34 +450,22 @@ Please read the manifest to understand what my website is about, then create an 
 
   const handleSelectProject = async (projectId: string) => {
     const project = projects.find((p) => p.id === projectId)
-    console.log('🔍 [PROJECT SWITCH] Starting project selection:', {
-      newProjectId: projectId,
-      newProjectName: project?.name,
-      previousProjectId: currentProjectId,
-      timestamp: new Date().toISOString()
-    })
 
     // Update lastOpenedAt in database
     await window.electronAPI?.projects.updateLastOpened(projectId)
-    console.log('🔍 [PROJECT SWITCH] Updated lastOpenedAt for project:', projectId)
 
     // Set as current project in ProcessManager to prevent accidental server stops
     await window.electronAPI?.process.setCurrentProject(projectId)
-    console.log('🔍 [PROJECT SWITCH] Set current project in ProcessManager:', projectId)
 
     // Ensure layout state is reset to DEFAULT for new project
     await window.electronAPI?.layout.setState('DEFAULT', projectId)
     useLayoutStore.getState().setLayoutState('DEFAULT')
-    console.log('🔍 [PROJECT SWITCH] Reset layout state to DEFAULT for project:', projectId)
 
     setCurrentProject(projectId)
-    console.log('🔍 [PROJECT SWITCH] Updated React state - currentProjectId:', projectId)
-
     setShowProjectSelector(false)
     if (project) {
       toast.success('Project switched', `Now viewing ${project.name}`)
     }
-    console.log('🔍 [PROJECT SWITCH] Project switch complete:', projectId)
   }
 
   const handleCreateProject = () => {
@@ -512,20 +493,7 @@ Please read the manifest to understand what my website is about, then create an 
   useEffect(() => {
     const handleGlobalClick = (e: MouseEvent) => {
       if (layoutState === 'TOOLS') {
-        const target = e.target as HTMLElement
-        const computedStyle = window.getComputedStyle(target)
-
-        console.log('[WORKSPACE DEBUG] Global click detected:', {
-          target: target,
-          tagName: target.tagName,
-          className: target.className,
-          zIndex: computedStyle.zIndex,
-          pointerEvents: computedStyle.pointerEvents,
-          position: computedStyle.position,
-          clickX: e.clientX,
-          clickY: e.clientY,
-          elementAtPoint: document.elementFromPoint(e.clientX, e.clientY)
-        })
+        // Handle workspace clicks if needed
       }
     }
 

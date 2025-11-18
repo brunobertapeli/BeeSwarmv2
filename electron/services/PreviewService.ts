@@ -45,15 +45,6 @@ class PreviewService extends EventEmitter {
       throw new Error('Main window not set. Call setMainWindow first.');
     }
 
-    console.log('🔍 [PREVIEW SERVICE] createPreview() called:', {
-      projectId,
-      url,
-      bounds,
-      existingView: this.browserViews.has(projectId),
-      allProjects: Array.from(this.browserViews.keys()),
-      timestamp: new Date().toISOString()
-    });
-
     // Destroy existing preview if any
     this.destroyPreview(projectId);
 
@@ -70,20 +61,11 @@ class PreviewService extends EventEmitter {
     // Set bounds
     view.setBounds(bounds);
 
-    // Attach to main window - CRITICAL: This sets the ACTIVE BrowserView
-    // Electron only shows ONE BrowserView at a time!
-    const previouslySetView = this.mainWindow.getBrowserView();
-    console.log('🔍 [PREVIEW SERVICE] Current BrowserView before switch:', {
-      hasPreviousView: !!previouslySetView,
-      newProjectId: projectId
-    });
-
+    // Attach to main window
     this.mainWindow.setBrowserView(view);
-    console.log('🔍 [PREVIEW SERVICE] Attached BrowserView to main window for project:', projectId);
 
     // Load URL
     view.webContents.loadURL(url);
-    console.log('🔍 [PREVIEW SERVICE] Loading URL in BrowserView:', url);
 
     // Store reference
     this.browserViews.set(projectId, view);
@@ -92,7 +74,6 @@ class PreviewService extends EventEmitter {
     // CRITICAL FIX: Mark as NOT hidden when creating a new view
     // The view is created on-screen with real bounds, so it's visible
     this.isHidden.set(projectId, false);
-    console.log('✅ [PREVIEW SERVICE] Created and stored BrowserView for project:', projectId, '(marked as visible)');
 
     // Intercept keyboard shortcuts in BrowserView
     view.webContents.on('before-input-event', (event, input) => {
@@ -311,12 +292,8 @@ class PreviewService extends EventEmitter {
    * @param projectId - Unique project identifier
    */
   destroyPreview(projectId: string): void {
-    console.log('🔍 [PREVIEW SERVICE] destroyPreview() called for project:', projectId);
     const view = this.browserViews.get(projectId);
-    if (!view) {
-      console.log('🔍 [PREVIEW SERVICE] No view to destroy');
-      return;
-    }
+    if (!view) return;
 
     // Close DevTools if open
     if (this.devToolsOpen.get(projectId)) {
@@ -346,7 +323,6 @@ class PreviewService extends EventEmitter {
     this.hiddenBounds.delete(projectId);
 
     this.emit('preview-destroyed', projectId);
-    console.log('✅ [PREVIEW SERVICE] Preview destroyed for project:', projectId);
   }
 
   /**
@@ -419,22 +395,12 @@ class PreviewService extends EventEmitter {
    * @param projectId - Unique project identifier
    */
   hide(projectId: string): void {
-    console.log('🔍 [PREVIEW SERVICE] hide() called for project:', projectId, {
-      hasView: this.browserViews.has(projectId),
-      isAlreadyHidden: this.isHidden.get(projectId),
-      timestamp: new Date().toISOString()
-    });
-
     const view = this.browserViews.get(projectId);
-    if (!view || this.isHidden.get(projectId)) {
-      console.log('🔍 [PREVIEW SERVICE] Skipping hide - no view or already hidden');
-      return;
-    }
+    if (!view || this.isHidden.get(projectId)) return;
 
     // Store current bounds
     const currentBounds = view.getBounds();
     this.hiddenBounds.set(projectId, currentBounds);
-    console.log('🔍 [PREVIEW SERVICE] Stored current bounds:', currentBounds);
 
     // Move off-screen (far to the right)
     view.setBounds({
@@ -446,7 +412,6 @@ class PreviewService extends EventEmitter {
 
     this.isHidden.set(projectId, true);
     this.emit('preview-hidden', projectId);
-    console.log('✅ [PREVIEW SERVICE] Preview hidden (moved off-screen)');
   }
 
   /**
@@ -454,43 +419,23 @@ class PreviewService extends EventEmitter {
    * @param projectId - Unique project identifier
    */
   show(projectId: string): void {
-    console.log('🔍 [PREVIEW SERVICE] show() called for project:', projectId, {
-      hasView: this.browserViews.has(projectId),
-      isCurrentlyHidden: this.isHidden.get(projectId),
-      allProjects: Array.from(this.browserViews.keys()),
-      timestamp: new Date().toISOString()
-    });
-
     const view = this.browserViews.get(projectId);
-    if (!view) {
-      console.warn('⚠️ [PREVIEW SERVICE] No BrowserView found for project:', projectId);
-      return;
-    }
+    if (!view) return;
 
     // CRITICAL FIX: Always set as active BrowserView when showing
     // Even if not hidden, we need to ensure this view is the active one
     if (this.mainWindow) {
-      const currentActiveView = this.mainWindow.getBrowserView();
-      console.log('🔍 [PREVIEW SERVICE] Current active BrowserView:', {
-        isCorrectView: currentActiveView === view,
-        requestedProjectId: projectId,
-      });
-
-      // Set this view as the active one
       this.mainWindow.setBrowserView(view);
-      console.log('✅ [PREVIEW SERVICE] Set BrowserView as active for project:', projectId);
     }
 
-    // If already visible, restore bounds and we're done
+    // If already visible, we're done
     if (!this.isHidden.get(projectId)) {
-      console.log('🔍 [PREVIEW SERVICE] Preview already visible for project:', projectId);
       this.emit('preview-shown', projectId);
       return;
     }
 
     // Restore previous bounds if available
     const previousBounds = this.hiddenBounds.get(projectId);
-    console.log('🔍 [PREVIEW SERVICE] Restoring bounds for project:', projectId, previousBounds);
 
     // Mark as visible BEFORE setting bounds (so updateBounds doesn't skip)
     this.isHidden.set(projectId, false);
@@ -498,13 +443,9 @@ class PreviewService extends EventEmitter {
 
     if (previousBounds) {
       view.setBounds(previousBounds);
-      console.log('🔍 [PREVIEW SERVICE] Set bounds to:', previousBounds);
-    } else {
-      console.warn('⚠️ [PREVIEW SERVICE] No previous bounds found for project:', projectId);
     }
 
     this.emit('preview-shown', projectId);
-    console.log('✅ [PREVIEW SERVICE] Preview shown for project:', projectId);
   }
 
   /**
