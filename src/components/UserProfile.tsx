@@ -13,7 +13,7 @@ interface UserProfileProps {
 }
 
 function UserProfile({ onClose, excludeElement, onOpenHelp }: UserProfileProps) {
-  const { user, logout } = useAppStore()
+  const { user, session, logout, setAwaitingSubscriptionUpdate } = useAppStore()
   const dropdownRef = useRef<HTMLDivElement>(null)
   const toast = useToast()
 
@@ -54,8 +54,32 @@ function UserProfile({ onClose, excludeElement, onOpenHelp }: UserProfileProps) 
     onClose()
   }
 
-  const handleManageSubscription = () => {
-    toast.info('Coming soon', 'Subscription management will be available soon')
+  const handleManageSubscription = async () => {
+    if (user.plan === 'free') {
+      // Set flag to refresh subscription on next focus
+      setAwaitingSubscriptionUpdate(true)
+
+      // Redirect to pricing page in system browser
+      await window.electronAPI?.shell?.openExternal('https://www.codedeckai.com/#pricing')
+      onClose()
+      return
+    }
+
+    // For plus/premium users, open Stripe portal in system browser
+    try {
+      const result = await window.electronAPI?.auth.createStripePortal(session)
+
+      if (result?.success && result.url) {
+        // Set flag to refresh subscription on next focus
+        setAwaitingSubscriptionUpdate(true)
+
+        await window.electronAPI?.shell?.openExternal(result.url)
+      } else {
+        toast.error('Portal Error', result?.error || 'Failed to open subscription portal')
+      }
+    } catch (error: any) {
+      toast.error('Portal Error', error.message || 'An error occurred')
+    }
     onClose()
   }
 
@@ -160,7 +184,9 @@ function UserProfile({ onClose, excludeElement, onOpenHelp }: UserProfileProps) 
               className="w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-white/10 rounded-lg transition-colors text-sm text-white/90 hover:text-white"
             >
               <CreditCard size={18} className="text-white/70" />
-              <span className="font-medium">Manage Subscription</span>
+              <span className="font-medium">
+                {user.plan === 'free' ? 'Upgrade to Pro' : 'Manage Subscription'}
+              </span>
             </button>
 
             <button

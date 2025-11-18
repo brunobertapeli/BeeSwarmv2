@@ -109,7 +109,7 @@ class BackendService {
 
       return response.user
     } catch (error: any) {
-      if (error.message.includes('404')) {
+      if (error.message.includes('404') || error.message.includes('User not found')) {
         return null
       }
       console.error('Error fetching user from backend:', error)
@@ -261,6 +261,102 @@ class BackendService {
             }
           })
         }
+      })
+
+      req.on('error', (error) => {
+        reject(error)
+      })
+
+      req.end()
+    })
+  }
+
+  async loginWithSupabaseToken(supabaseToken: string): Promise<{ token: string; user: UserData }> {
+    this.init()
+
+    return new Promise((resolve, reject) => {
+      const url = new URL('/api/v1/auth/login', this.baseUrl)
+      const isHttps = url.protocol === 'https:'
+      const client = isHttps ? https : http
+
+      const payload = JSON.stringify({
+        supabaseToken: supabaseToken
+      })
+
+      const options = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+
+      const req = client.request(url, options, (res) => {
+        let data = ''
+
+        res.on('data', (chunk) => {
+          data += chunk
+        })
+
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data)
+
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              resolve({ token: parsed.token, user: parsed.user })
+            } else {
+              reject(new Error(parsed.error || `HTTP ${res.statusCode}`))
+            }
+          } catch (error) {
+            reject(new Error('Invalid JSON response'))
+          }
+        })
+      })
+
+      req.on('error', (error) => {
+        reject(error)
+      })
+
+      req.write(payload)
+      req.end()
+    })
+  }
+
+  async createStripePortalSession(token: string): Promise<{ url: string }> {
+    this.init()
+
+    return new Promise((resolve, reject) => {
+      const url = new URL('/api/v1/stripe/create-portal-session', this.baseUrl)
+      const isHttps = url.protocol === 'https:'
+      const client = isHttps ? https : http
+
+      const options = {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+
+      const req = client.request(url, options, (res) => {
+        let data = ''
+
+        res.on('data', (chunk) => {
+          data += chunk
+        })
+
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data)
+
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              resolve({ url: parsed.url })
+            } else {
+              reject(new Error(parsed.error || `HTTP ${res.statusCode}`))
+            }
+          } catch (error) {
+            reject(new Error('Invalid JSON response'))
+          }
+        })
       })
 
       req.on('error', (error) => {

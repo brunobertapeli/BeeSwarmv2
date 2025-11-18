@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     signOut: () => ipcRenderer.invoke('auth:sign-out'),
     restoreSession: (userId, userEmail) => ipcRenderer.invoke('auth:restore-session', userId, userEmail),
     validateUser: (email, userId) => ipcRenderer.invoke('auth:validate-user', email, userId),
+    createStripePortal: (sessionData) => ipcRenderer.invoke('auth:create-stripe-portal', sessionData),
     onCallback: (callback) => {
       const listener = (event, url) => callback(url)
       ipcRenderer.on('auth:callback', listener)

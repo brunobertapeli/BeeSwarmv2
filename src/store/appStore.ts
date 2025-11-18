@@ -21,7 +21,11 @@ interface AppState {
   // Auth
   isAuthenticated: boolean
   user: User | null
+  session: any | null
+  awaitingSubscriptionUpdate: boolean
   setUser: (user: User | null) => void
+  setSession: (session: any | null) => void
+  setAwaitingSubscriptionUpdate: (awaiting: boolean) => void
   logout: () => Promise<void>
 
   // Projects
@@ -66,14 +70,18 @@ export const useAppStore = create<AppState>((set) => ({
   // Auth state
   isAuthenticated: false, // Will check secure storage on init
   user: null,
+  session: null,
+  awaitingSubscriptionUpdate: false,
   setUser: (user) => set({ user, isAuthenticated: !!user }),
+  setSession: (session) => set({ session }),
+  setAwaitingSubscriptionUpdate: (awaiting) => set({ awaitingSubscriptionUpdate: awaiting }),
   logout: async () => {
     // Clear secure storage
     localStorage.removeItem('codedeck_auth_encrypted')
     localStorage.removeItem('codedeck_auth_fallback')
     localStorage.removeItem('codedeck_currentProjectId') // Clear current project
     localStorage.removeItem('beeswarm_auth') // Legacy - remove on logout
-    set({ user: null, isAuthenticated: false, currentProjectId: null })
+    set({ user: null, session: null, isAuthenticated: false, currentProjectId: null, awaitingSubscriptionUpdate: false })
   },
 
   // Project state
@@ -140,7 +148,7 @@ export const initAuth = async () => {
       const result = await window.electronAPI.secureStorage.get(encryptedAuth, isFallback)
 
       if (result.success && result.value) {
-        const { user, timestamp } = JSON.parse(result.value)
+        const { user, session, timestamp } = JSON.parse(result.value)
 
         // Validate user data structure
         if (!user || !user.plan || !user.email || !user.id) {
@@ -168,6 +176,7 @@ export const initAuth = async () => {
             // Update secure storage with fresh data from MongoDB
             const freshAuthData = JSON.stringify({
               user: validationResult.user,
+              session, // Keep existing session
               timestamp: Date.now()
             })
 
@@ -184,15 +193,15 @@ export const initAuth = async () => {
               }
             }
 
-            // Set state with validated data from MongoDB
-            useAppStore.setState({ user: validationResult.user, isAuthenticated: true })
+            // Set state with validated data from MongoDB and session
+            useAppStore.setState({ user: validationResult.user, session, isAuthenticated: true })
           } else {
             // Fallback to cached data if validation fails
-            useAppStore.setState({ user, isAuthenticated: true })
+            useAppStore.setState({ user, session, isAuthenticated: true })
           }
         } catch (validationError) {
           // Fallback to cached data on error
-          useAppStore.setState({ user, isAuthenticated: true })
+          useAppStore.setState({ user, session, isAuthenticated: true })
         }
       } else {
         localStorage.removeItem('codedeck_auth_encrypted')

@@ -739,12 +739,11 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     setCurrentStep('import-design')
   }
 
-  const handleUpgrade = () => {
+  const handleUpgrade = async () => {
     if (!selectedTemplate) return
 
-    // Open subscription page in browser
-    const upgradeUrl = `https://codedeck.app/upgrade?plan=${selectedTemplate.requiredPlan}`
-    window.open(upgradeUrl, '_blank')
+    // Open subscription page in system browser
+    await window.electronAPI?.shell?.openExternal('https://www.codedeckai.com/#pricing')
 
     // Set flag to check user plan on next focus
     pendingUpgradeCheckRef.current = true

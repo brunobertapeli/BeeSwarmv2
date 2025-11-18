@@ -143,17 +143,10 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         throw new Error('No user data returned from authentication')
       }
 
-      // Fetch or create user via backend
-      let userData = await backendService.getUserByEmail(user.email)
-
-      if (!userData) {
-        userData = await backendService.createUser({
-          email: user.email,
-          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
-          photoUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture,
-          authProvider: user.app_metadata?.provider as any || 'google'
-        })
-      }
+      // Exchange Supabase token for backend JWT
+      const { token: backendToken, user: userData } = await backendService.loginWithSupabaseToken(
+        session.access_token
+      )
 
       const userResult = {
         id: user.id,
@@ -163,13 +156,19 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         plan: userData.plan
       }
 
+      // Create modified session with backend JWT
+      const backendSession = {
+        ...session,
+        access_token: backendToken // Replace Supabase token with backend JWT
+      }
+
       // Set current user and initialize user-scoped services
       setCurrentUser(user.id, userData.email)
 
       return {
         success: true,
         user: userResult,
-        session
+        session: backendSession
       }
     } catch (error: any) {
       return { success: false, error: error.message }
@@ -178,45 +177,7 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
 
   // Handle auth callback (called when user is redirected back)
   ipcMain.handle('auth:handle-callback', async (event, url: string) => {
-    try {
-      const { session, user } = await authService.handleAuthCallback(url)
-
-      if (!user || !user.email) {
-        throw new Error('No user data returned from authentication')
-      }
-
-      // Fetch or create user via backend
-      let userData = await backendService.getUserByEmail(user.email)
-
-      if (!userData) {
-        // Create new user if doesn't exist
-        userData = await backendService.createUser({
-          email: user.email,
-          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
-          photoUrl: user.user_metadata?.avatar_url || user.user_metadata?.picture,
-          authProvider: user.app_metadata?.provider as any || 'google'
-        })
-      }
-
-      const userResult = {
-        id: user.id,
-        email: userData.email,
-        name: userData.name,
-        photoUrl: userData.photoUrl,
-        plan: userData.plan
-      }
-
-      // Set current user and initialize user-scoped services
-      setCurrentUser(user.id, userData.email)
-
-      return {
-        success: true,
-        user: userResult,
-        session
-      }
-    } catch (error: any) {
-      return { success: false, error: error.message }
-    }
+    return handleAuthCallback(url)
   })
 
   // Get current session
@@ -350,6 +311,30 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         },
         warning: 'Backend error, using cached data: ' + error.message
       }
+    }
+  })
+
+  // Create Stripe portal session
+  ipcMain.handle('auth:create-stripe-portal', async (_event, sessionData?: any) => {
+    try {
+      console.log('🔍 Received session data:', {
+        hasSessionData: !!sessionData,
+        hasAccessToken: !!sessionData?.access_token
+      })
+
+      if (!sessionData || !sessionData.access_token) {
+        console.error('❌ No session data or access token provided')
+        return { success: false, error: 'No active session' }
+      }
+
+      console.log('📞 Calling backend to create Stripe portal session...')
+      const { url } = await backendService.createStripePortalSession(sessionData.access_token)
+
+      console.log('✅ Stripe portal URL received:', url.substring(0, 50) + '...')
+      return { success: true, url }
+    } catch (error: any) {
+      console.error('❌ Error creating Stripe portal session:', error)
+      return { success: false, error: error.message }
     }
   })
 }

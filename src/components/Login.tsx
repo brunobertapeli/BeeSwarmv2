@@ -6,7 +6,7 @@ import mainShapeImage from '../assets/images/main_shape.png'
 import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface LoginProps {
-  onLoginSuccess: (user: User) => void
+  onLoginSuccess: (user: User, session?: any) => void
 }
 
 function Login({ onLoginSuccess }: LoginProps) {
@@ -21,7 +21,7 @@ function Login({ onLoginSuccess }: LoginProps) {
         setIsLoading(false)
         setLoadingProvider(null)
         toast.success('Welcome!', `Successfully logged in as ${result.user.name}`)
-        onLoginSuccess(result.user)
+        onLoginSuccess(result.user, result.session)
       })
 
       const cleanupError = window.electronAPI.auth.onAuthError((result: { error?: string }) => {
