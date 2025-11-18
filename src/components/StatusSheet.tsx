@@ -462,6 +462,11 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   useEffect(() => {
     if (!projectId || !window.electronAPI?.chat) return
 
+    console.log('🔍 [STATUS SHEET] Loading chat history for project:', {
+      projectId,
+      timestamp: new Date().toISOString()
+    })
+
     // Reset state
     setAllBlocks([])
     setCurrentOffset(0)
@@ -473,6 +478,16 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
         const conversationBlocks = result.blocks
           .map((block: any) => transformBlock(block))
           .reverse() // Reverse to show oldest first
+
+        console.log('🔍 [STATUS SHEET] Loaded chat history:', {
+          projectId,
+          blockCount: conversationBlocks.length,
+          blocks: conversationBlocks.map(b => ({
+            id: b.id,
+            projectId: b.projectId,
+            userPrompt: b.userPrompt?.substring(0, 50)
+          }))
+        })
 
         setAllBlocks(conversationBlocks)
         setCurrentOffset(0)
@@ -836,8 +851,16 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
   // Handle preview visibility based on layout state and StatusSheet expanded state
   useEffect(() => {
+    console.log('🔍 [STATUS SHEET] Preview visibility effect triggered:', {
+      layoutState,
+      statusSheetExpanded,
+      projectId,
+      timestamp: new Date().toISOString()
+    });
+
     const handlePreviewVisibility = async () => {
       if (!projectId) {
+        console.log('🔍 [STATUS SHEET] No projectId, skipping preview visibility');
         return
       }
 
@@ -845,14 +868,18 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       if (layoutState === 'DEFAULT') {
         if (!statusSheetExpanded) {
           // StatusSheet collapsed in DEFAULT → deactivate freeze, show preview
+          console.log('🔍 [STATUS SHEET] DEFAULT + collapsed → showing preview');
           setModalFreezeActive(false)
           await window.electronAPI?.preview.show(projectId)
+        } else {
+          console.log('🔍 [STATUS SHEET] DEFAULT + expanded → preview handled by handleExpand');
         }
         // Note: Freeze capture when expanding is now handled in handleExpand() for better performance
       }
       // TOOLS state: Preview frame is hidden completely (no frozen background)
       else if (layoutState === 'TOOLS') {
         // No freeze effect in TOOLS state - just empty space
+        console.log('🔍 [STATUS SHEET] TOOLS state → deactivating freeze only (no hide/show)');
         setModalFreezeActive(false)
       }
     }
