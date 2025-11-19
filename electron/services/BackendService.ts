@@ -32,6 +32,7 @@ export interface Template {
   }>
   deployServices?: string[]
   imagePath?: string
+  screenshot?: string
 }
 
 class BackendService {

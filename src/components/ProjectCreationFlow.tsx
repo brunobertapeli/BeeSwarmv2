@@ -264,6 +264,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     message: string
     progress: number
   }>({ stage: 'fetching', message: 'Starting...', progress: 0 })
+  const [showSkipWarning, setShowSkipWarning] = useState(false)
 
   const categories: ProjectCategory[] = [
     {
@@ -370,6 +371,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
       setIsFetchingWebsite(false)
       setFetchComplete(false)
       setFetchProgress({ stage: 'fetching', message: 'Starting...', progress: 0 })
+      setShowSkipWarning(false)
       hasStartedRef.current = false
     }
   }, [isOpen])
@@ -606,12 +608,36 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     setCurrentStep('configure')
   }
 
-  const handleCreateProject = () => {
+  const handleCreateProject = (skipValidation = false) => {
     if (!projectName.trim()) {
       toast.error('Please enter a project name')
       return
     }
+
+    // If not skipping validation, check for filled but invalid credentials
+    if (!skipValidation && envVariables.length > 0) {
+      // Check if any field has a value that is invalid
+      const hasInvalidCredentials = envVariables.some((env) => {
+        const isValid = keyValidation[env.key]
+        return env.value && isValid === false
+      })
+
+      if (hasInvalidCredentials) {
+        toast.error('Please fix invalid credentials before creating the project')
+        return
+      }
+    }
+
     setCurrentStep('creating')
+  }
+
+  const handleSkipForNow = () => {
+    setShowSkipWarning(true)
+  }
+
+  const handleConfirmSkip = () => {
+    setShowSkipWarning(false)
+    handleCreateProject(true) // Skip validation
   }
 
   const normalizeUrl = (url: string): string => {
@@ -1350,30 +1376,46 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                               <div
                                 key={template.id}
                                 onClick={() => handleTemplateSelect(template)}
-                                className="flex-shrink-0 w-72 p-4 rounded-lg border border-dark-border hover:border-primary/50 hover:bg-primary/5 transition-all group cursor-pointer"
+                                className="flex-shrink-0 w-72 rounded-lg border border-dark-border hover:border-primary/50 hover:bg-primary/5 transition-all group cursor-pointer overflow-hidden"
                               >
-                                <div className="flex items-start justify-between mb-3">
-                                  <h4 className="text-sm font-medium text-white group-hover:text-primary transition-colors flex-1">
-                                    {template.name}
-                                  </h4>
-                                  {template.requiredPlan !== 'free' && (
-                                    <span
-                                      className={`inline-flex items-center ${getPlanBadgeColor(template.requiredPlan)} rounded px-1.5 py-0.5 text-[9px] font-semibold text-white uppercase tracking-wide flex-shrink-0 ml-2`}
-                                    >
-                                      {getPlanLabel(template.requiredPlan)}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-gray-400 mb-3 line-clamp-2">
-                                  {template.longDescription || template.description}
-                                </p>
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  {template.techStack.slice(0, 4).map((tech) => (
-                                    <TechIcon key={tech} name={tech} />
-                                  ))}
-                                  {template.techStack.length > 4 && (
-                                    <span className="text-[9px] text-gray-600">+{template.techStack.length - 4}</span>
-                                  )}
+                                {/* Screenshot Thumbnail */}
+                                {template.screenshot && (
+                                  <div className="w-full h-36 bg-dark-bg/50 overflow-hidden">
+                                    <img
+                                      src={template.screenshot}
+                                      alt={template.name}
+                                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none'
+                                      }}
+                                    />
+                                  </div>
+                                )}
+
+                                <div className="p-4">
+                                  <div className="flex items-start justify-between mb-3">
+                                    <h4 className="text-sm font-medium text-white group-hover:text-primary transition-colors flex-1">
+                                      {template.name}
+                                    </h4>
+                                    {template.requiredPlan !== 'free' && (
+                                      <span
+                                        className={`inline-flex items-center ${getPlanBadgeColor(template.requiredPlan)} rounded px-1.5 py-0.5 text-[9px] font-semibold text-white uppercase tracking-wide flex-shrink-0 ml-2`}
+                                      >
+                                        {getPlanLabel(template.requiredPlan)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-400 mb-3 line-clamp-2">
+                                    {template.longDescription || template.description}
+                                  </p>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {template.techStack.slice(0, 4).map((tech) => (
+                                      <TechIcon key={tech} name={tech} />
+                                    ))}
+                                    {template.techStack.length > 4 && (
+                                      <span className="text-[9px] text-gray-600">+{template.techStack.length - 4}</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             ))}
@@ -1463,7 +1505,29 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 ) : (
                   <div className="space-y-5">{selectedTemplate && (
                     <>
-                  {/* Header with Plan Badge */}
+                  {/* Screenshot Preview (Large) */}
+                  {selectedTemplate.screenshot && (
+                    <div className="w-full rounded-lg overflow-hidden border border-dark-border bg-dark-bg/30 relative">
+                      <img
+                        src={selectedTemplate.screenshot}
+                        alt={selectedTemplate.name}
+                        className="w-full h-auto object-contain max-h-64"
+                        onError={(e) => {
+                          e.currentTarget.parentElement!.style.display = 'none'
+                        }}
+                      />
+                      {/* Plan Badge Overlay */}
+                      {selectedTemplate.requiredPlan !== 'free' && (
+                        <span
+                          className={`absolute top-3 right-3 inline-flex items-center ${getPlanBadgeColor(selectedTemplate.requiredPlan)} rounded-md px-3 py-1 text-[11px] font-semibold text-white uppercase tracking-wide shadow-lg`}
+                        >
+                          {getPlanLabel(selectedTemplate.requiredPlan)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Header */}
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
@@ -1487,13 +1551,6 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                         {selectedTemplate.longDescription || selectedTemplate.description}
                       </p>
                     </div>
-                    {selectedTemplate.requiredPlan !== 'free' && (
-                      <span
-                        className={`inline-flex items-center ${getPlanBadgeColor(selectedTemplate.requiredPlan)} rounded-md px-3 py-1 text-[11px] font-semibold text-white uppercase tracking-wide flex-shrink-0`}
-                      >
-                        {getPlanLabel(selectedTemplate.requiredPlan)}
-                      </span>
-                    )}
                   </div>
 
                   {/* Tech Stack */}
@@ -1972,14 +2029,14 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   <div className="flex items-center gap-3">
                     {envVariables.length > 0 && (
                       <button
-                        onClick={handleCreateProject}
+                        onClick={handleSkipForNow}
                         className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors cursor-pointer"
                       >
                         Skip for Now
                       </button>
                     )}
                     <button
-                      onClick={handleCreateProject}
+                      onClick={() => handleCreateProject(false)}
                       disabled={!projectName.trim()}
                       className={projectName.trim() ? 'px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2' : 'bg-gray-700/50 text-gray-500 cursor-not-allowed inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all'}
                     >
@@ -2039,6 +2096,63 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           </div>
         )}
       </motion.div>
+
+      {/* Skip Warning Modal */}
+      <AnimatePresence>
+        {showSkipWarning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowSkipWarning(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-dark-card border border-dark-border rounded-lg shadow-2xl p-6 max-w-md mx-4"
+            >
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <Info className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-base font-semibold text-white mb-2">
+                    Not Ready Yet? No Worries.
+                  </h3>
+                  <div className="space-y-3 text-xs text-gray-400 leading-relaxed">
+                    <p>
+                      Skip this and dive into the code. You can always add your API keys later in Project Settings.
+                    </p>
+                    <p>
+                      Here's the thing: <span className="text-white font-medium">True ownership means using your own services.</span> That's why we don't use shared demo credentials—your Stripe, Supabase, and MongoDB accounts mean your data is yours, forever.
+                    </p>
+                    <p>
+                      The template won't be fully functional without them, but our guides will get you up and running in minutes when you're ready.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 justify-end">
+                <button
+                  onClick={() => setShowSkipWarning(false)}
+                  className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  Complete Setup
+                </button>
+                <button
+                  onClick={handleConfirmSkip}
+                  className="px-4 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all"
+                >
+                  I'll Do This Later
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       </div>
     </ModalPortal>
   )

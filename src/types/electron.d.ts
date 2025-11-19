@@ -17,6 +17,7 @@ export interface Template {
   demoUrl?: string
   techStack: string[]
   libraries?: TemplateLibrary[]
+  screenshot?: string
 }
 
 export interface Project {
