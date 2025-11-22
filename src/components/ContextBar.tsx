@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { Trash2, Database, Info, X, AlertTriangle, FileText } from 'lucide-react'
+import { Trash2, Database, Info, X, AlertTriangle, FileText, ExternalLink } from 'lucide-react'
 import type { ClaudeContext } from '../types/electron'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
@@ -161,6 +161,10 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
     }
     setShowAddendumModal(false)
     setShowTooltip(false)
+  }
+
+  const handleOpenUsage = async () => {
+    await window.electronAPI?.shell?.openExternal('https://claude.ai/settings/usage')
   }
 
   const formatTokens = (tokens: number) => {
@@ -383,6 +387,16 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
                     <div className="absolute right-0 bottom-full mb-2 bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[9px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/info:opacity-100 transition-opacity z-[150] shadow-xl">
                     Billed to API users only.<br />
                     Included in Max plans.
+                    </div>
+                  </div>
+                  <div className="group/usage relative">
+                    <ExternalLink
+                      size={10}
+                      className="text-gray-500 hover:text-primary cursor-pointer transition-colors"
+                      onClick={handleOpenUsage}
+                    />
+                    <div className="absolute right-0 bottom-full mb-2 bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[9px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/usage:opacity-100 transition-opacity z-[150] shadow-xl">
+                      Check your usage on Anthropic Website
                     </div>
                   </div>
                 </div>
