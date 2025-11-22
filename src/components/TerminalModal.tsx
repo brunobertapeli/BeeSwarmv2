@@ -33,26 +33,53 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
   const [filterSource, setFilterSource] = useState<'all' | 'code' | 'git' | 'npm' | 'shell' | 'dev-server'>('all')
   const [showFilterDropdown, setShowFilterDropdown] = useState(false)
 
-  // Tab management
+  // Tab management (per-project)
   type TabType = 'unified' | 'terminal'
   interface Tab {
     id: string
     type: TabType
     label: string
   }
-  const [tabs, setTabs] = useState<Tab[]>([{ id: 'unified', type: 'unified', label: 'Unified' }])
+
+  // Store tabs per project using a ref
+  const tabsByProjectRef = useRef<Map<string, Tab[]>>(new Map())
+
+  // Initialize tabs for current project
+  const getTabsForProject = (projId: string): Tab[] => {
+    if (!tabsByProjectRef.current.has(projId)) {
+      tabsByProjectRef.current.set(projId, [{ id: 'unified', type: 'unified', label: 'Unified' }])
+    }
+    return tabsByProjectRef.current.get(projId)!
+  }
+
+  const [tabs, setTabs] = useState<Tab[]>(() => getTabsForProject(projectId))
   const [activeTabId, setActiveTabId] = useState('unified')
 
   const terminalRef = useRef<HTMLDivElement>(null)
+
+  // Store unified terminal instances per project
+  const unifiedTerminalsRef = useRef<Map<string, { term: Terminal, fit: FitAddon }>>(new Map())
+
+  // Get current unified terminal for active project
   const xtermRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+
   const filterButtonRef = useRef<HTMLButtonElement>(null)
 
-  // Store multiple terminal instances (one per terminal tab)
+  // Store multiple terminal instances (one per terminal tab, keyed by projectId:terminalId)
   const terminalInstancesRef = useRef<Map<string, { term: Terminal, fit: FitAddon }>>(new Map())
 
-  // Store container refs for each terminal tab
+  // Store container refs for each terminal tab (keyed by projectId:terminalId)
   const terminalContainersRef = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  // Track previous projectId to detect changes
+  const prevProjectIdRef = useRef<string>(projectId)
+
+  // Helper to update tabs and persist to map
+  const updateTabs = (newTabs: Tab[]) => {
+    setTabs(newTabs)
+    tabsByProjectRef.current.set(projectId, newTabs)
+  }
 
   // Create new terminal tab
   const createNewTerminalTab = () => {
@@ -63,7 +90,7 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
       type: 'terminal',
       label: `Terminal ${terminalCount + 1}`
     }
-    setTabs([...tabs, newTab])
+    updateTabs([...tabs, newTab])
     setActiveTabId(newId)
   }
 
@@ -71,19 +98,25 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
   const closeTab = (tabId: string) => {
     if (tabId === 'unified') return // Can't close unified tab
 
+    // Build session key for this project:terminal
+    const sessionKey = `${projectId}:${tabId}`
+
     // Cleanup terminal instance
-    const instance = terminalInstancesRef.current.get(tabId)
+    const instance = terminalInstancesRef.current.get(sessionKey)
     if (instance) {
       instance.term.dispose()
-      terminalInstancesRef.current.delete(tabId)
+      terminalInstancesRef.current.delete(sessionKey)
     }
+
+    // Remove container ref
+    terminalContainersRef.current.delete(sessionKey)
 
     // Destroy PTY session on backend
     window.electronAPI.terminal.destroyInteractiveSession?.(projectId, tabId)
 
     // Remove tab
     const newTabs = tabs.filter(t => t.id !== tabId)
-    setTabs(newTabs)
+    updateTabs(newTabs)
 
     // Switch to unified if closing active tab
     if (activeTabId === tabId) {
@@ -247,13 +280,13 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
     const reset = '\x1b[0m'
 
     // Calculate prefix length for wrapping
-    // [HH:MM:SS] [Source] = approx 25 chars
+    // [HH:MM:SS] [Source] = approx 25 chars (visible length without ANSI codes)
     const prefix = `${timeColor}[${timestamp}]${reset} ${sourceColor}${sourceTag}${reset} `
     const prefixDisplayLength = `[${timestamp}] ${sourceTag} `.length // Visible length without ANSI codes
 
-    // Terminal width (default to 120 if not available)
+    // Terminal width - account for scrollbar and padding (reduce by 3 cols for safety)
     const terminalWidth = terminal.cols || 120
-    const maxLineWidth = terminalWidth - 5 // Leave some margin
+    const availableWidth = terminalWidth - prefixDisplayLength - 3
 
     // Clean message (remove trailing newlines for processing)
     let message = line.message.replace(/\n+$/, '')
@@ -261,32 +294,18 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
     // Split message into lines if it contains newlines
     const messageLines = message.split('\n')
 
-    messageLines.forEach((msgLine, index) => {
-      if (msgLine.length + prefixDisplayLength <= maxLineWidth) {
+    messageLines.forEach((msgLine) => {
+      if (msgLine.length <= availableWidth) {
         // Line fits - write normally
-        if (index === 0) {
-          terminal.write(prefix + msgLine + '\r\n')
-        } else {
-          // Continuation line - add prefix for consistency
-          terminal.write(prefix + msgLine + '\r\n')
-        }
+        terminal.write(prefix + msgLine + '\r\n')
       } else {
         // Line too long - wrap it
         let remaining = msgLine
-        let isFirst = index === 0
 
         while (remaining.length > 0) {
-          const availableWidth = maxLineWidth - (isFirst ? prefixDisplayLength : prefixDisplayLength)
           const chunk = remaining.substring(0, availableWidth)
           remaining = remaining.substring(availableWidth)
-
-          if (isFirst) {
-            terminal.write(prefix + chunk + '\r\n')
-            isFirst = false
-          } else {
-            // Wrapped continuation - add prefix
-            terminal.write(prefix + chunk + '\r\n')
-          }
+          terminal.write(prefix + chunk + '\r\n')
         }
       }
     })
@@ -308,6 +327,22 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
       console.error('Failed to load terminal history:', error)
     }
   }
+
+  // Handle project changes - switch to project-specific tabs
+  useEffect(() => {
+    if (prevProjectIdRef.current !== projectId) {
+      // Save current tabs for the old project
+      tabsByProjectRef.current.set(prevProjectIdRef.current, tabs)
+
+      // Load tabs for the new project
+      const newProjectTabs = getTabsForProject(projectId)
+      setTabs(newProjectTabs)
+      setActiveTabId('unified')
+
+      // Update ref
+      prevProjectIdRef.current = projectId
+    }
+  }, [projectId, tabs])
 
   // Handle freeze frame when terminal opens/closes
   useEffect(() => {
@@ -337,77 +372,135 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
     handleFreezeFrame()
   }, [isOpen, projectId, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
-  // Initialize xterm.js terminal
+  // Initialize unified terminal for current project
   useEffect(() => {
-    if (!isOpen) return
-    if (!terminalRef.current) {
-      return
+    if (!terminalRef.current) return
+
+    // Always clear the container first
+    const container = terminalRef.current
+    while (container.firstChild) {
+      container.removeChild(container.firstChild)
     }
-    if (xtermRef.current) {
-      return
+
+    // Check if we already have a terminal for this project
+    let existing = unifiedTerminalsRef.current.get(projectId)
+
+    if (!existing) {
+      // Create new terminal instance for this project
+      const terminal = new Terminal({
+        cursorBlink: false,
+        fontSize: 13,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        theme: {
+          background: '#0a0e14',
+          foreground: '#e5e7eb',
+          cursor: '#FFD700',
+          black: '#0a0e14',
+          red: '#ff6b6b',
+          green: '#10B981',
+          yellow: '#ffd93d',
+          blue: '#6495ED',
+          magenta: '#f472b6',
+          cyan: '#06b6d4',
+          white: '#e5e7eb',
+          brightBlack: '#6b7280',
+          brightRed: '#fca5a5',
+          brightGreen: '#34d399',
+          brightYellow: '#fde047',
+          brightBlue: '#93c5fd',
+          brightMagenta: '#f9a8d4',
+          brightCyan: '#67e8f9',
+          brightWhite: '#ffffff',
+        },
+        allowProposedApi: true,
+        scrollback: 1000,
+        convertEol: true,
+      })
+
+      const fitAddon = new FitAddon()
+      terminal.loadAddon(fitAddon)
+
+      // Store in map
+      existing = { term: terminal, fit: fitAddon }
+      unifiedTerminalsRef.current.set(projectId, existing)
+
+      // Open terminal
+      terminal.open(container)
+
+      xtermRef.current = terminal
+      fitAddonRef.current = fitAddon
+
+      // Enable CMD+C copy with cleaned text
+      terminal.attachCustomKeyEventHandler((e) => {
+        // Intercept CMD+C / CTRL+C
+        if ((e.metaKey || e.ctrlKey) && e.key === 'c' && e.type === 'keydown') {
+          const selection = terminal.getSelection()
+          if (selection) {
+            // Strip [HH:MM:SS] [Source] prefix from each line
+            const cleanedSelection = selection
+              .split('\n')
+              .map(line => {
+                const match = line.match(/^\[[\d:]+\]\s+\[[^\]]+\]\s+(.*)$/)
+                return match ? match[1] : line
+              })
+              .join('\n')
+            navigator.clipboard.writeText(cleanedSelection)
+            return false // Prevent default
+          }
+        }
+        return true // Allow other keys
+      })
+
+      // Wait for DOM to render, then fit multiple times to ensure correct size
+      requestAnimationFrame(() => {
+        fitAddon.fit()
+        requestAnimationFrame(() => {
+          fitAddon.fit()
+
+          // Wait for cols to be properly set before loading history
+          const checkAndLoad = () => {
+            const currentCols = terminal.cols || 0
+
+            // Terminal should have > 100 cols for the wide modal (expecting ~150-180 cols)
+            if (currentCols > 100) {
+              // Terminal is properly sized - safe to load history
+              terminal.clear()
+              drawBanner()
+              loadTerminalHistory()
+            } else {
+              // Not ready yet - fit again and retry
+              fitAddon.fit()
+              setTimeout(checkAndLoad, 50)
+            }
+          }
+
+          setTimeout(checkAndLoad, 100)
+        })
+      })
+    } else {
+      // Terminal exists - re-mount it in the container
+      existing.term.open(container)
+
+      xtermRef.current = existing.term
+      fitAddonRef.current = existing.fit
+
+      // Ensure it's properly fitted after remounting
+      requestAnimationFrame(() => {
+        existing.fit.fit()
+        setTimeout(() => {
+          existing.fit.fit()
+        }, 100)
+      })
     }
 
-    // Create terminal instance
-    const terminal = new Terminal({
-      cursorBlink: false,
-      fontSize: 13,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      theme: {
-        background: '#0a0e14',
-        foreground: '#e5e7eb',
-        cursor: '#FFD700',
-        black: '#0a0e14',
-        red: '#ff6b6b',
-        green: '#10B981',
-        yellow: '#ffd93d',
-        blue: '#6495ED',
-        magenta: '#f472b6',
-        cyan: '#06b6d4',
-        white: '#e5e7eb',
-        brightBlack: '#6b7280',
-        brightRed: '#fca5a5',
-        brightGreen: '#34d399',
-        brightYellow: '#fde047',
-        brightBlue: '#93c5fd',
-        brightMagenta: '#f9a8d4',
-        brightCyan: '#67e8f9',
-        brightWhite: '#ffffff',
-      },
-      allowProposedApi: true,
-      scrollback: 1000,
-      convertEol: true,
-    })
-
-    // Create fit addon
-    const fitAddon = new FitAddon()
-    terminal.loadAddon(fitAddon)
-
-    // Open terminal in DOM
-    terminal.open(terminalRef.current)
-    fitAddon.fit()
-
-    // Store refs
-    xtermRef.current = terminal
-    fitAddonRef.current = fitAddon
-
-    // Draw initial banner
-    drawBanner()
-
-    // Load history if exists
-    loadTerminalHistory()
-
-    // Cleanup
+    // Cleanup on unmount only
     return () => {
-      terminal.dispose()
-      xtermRef.current = null
-      fitAddonRef.current = null
+      // Don't dispose - keep terminals alive
     }
-  }, [isOpen, projectId])
+  }, [projectId])
 
   // Listen for new terminal lines
   useEffect(() => {
-    if (!isOpen) return
-
     const handleTerminalLine = (receivedProjectId: string, line: TerminalLine) => {
       if (receivedProjectId !== projectId) return
 
@@ -428,7 +521,7 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
       unsubLine?.()
       unsubCleared?.()
     }
-  }, [isOpen, projectId, filterSource])
+  }, [projectId, filterSource])
 
   // Reload terminal when filter changes
   useEffect(() => {
@@ -442,14 +535,25 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
 
   // Initialize interactive terminal instances
   useEffect(() => {
-    if (!isOpen) return
-
     const cleanupFunctions: Array<() => void> = []
 
     tabs.forEach(tab => {
-      if (tab.type === 'terminal' && !terminalInstancesRef.current.has(tab.id)) {
-        const container = terminalContainersRef.current.get(tab.id)
+      if (tab.type === 'terminal') {
+        const sessionKey = `${projectId}:${tab.id}`
+
+        const container = terminalContainersRef.current.get(sessionKey)
         if (!container) return
+
+        // Check if terminal instance already exists
+        const existingInstance = terminalInstancesRef.current.get(sessionKey)
+        if (existingInstance) {
+          // Re-mount the terminal in the new container if needed
+          if (container.children.length === 0) {
+            existingInstance.term.open(container)
+            existingInstance.fit.fit()
+          }
+          return
+        }
 
         // Create terminal instance
         const terminal = new Terminal({
@@ -487,8 +591,8 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
         terminal.open(container)
         fitAddon.fit()
 
-        // Store instance
-        terminalInstancesRef.current.set(tab.id, { term: terminal, fit: fitAddon })
+        // Store instance with project-specific key
+        terminalInstancesRef.current.set(sessionKey, { term: terminal, fit: fitAddon })
 
         // Create PTY session for this terminal
         window.electronAPI.terminal.createInteractiveSession?.(projectId, tab.id)
@@ -515,7 +619,7 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
     return () => {
       cleanupFunctions.forEach(cleanup => cleanup())
     }
-  }, [isOpen, tabs, projectId])
+  }, [tabs, projectId])
 
   // Handle window resize
   useEffect(() => {
@@ -541,8 +645,10 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
 
   // Handle ESC key to close
   useEffect(() => {
+    if (!isOpen) return
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
         onClose()
       }
     }
@@ -609,11 +715,12 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
     }
   }
 
-  if (!isOpen) return null
-
   return (
     <ModalPortal>
-      <div className="fixed inset-0 z-[300] flex items-center justify-center">
+      <div
+        className="fixed inset-0 z-[300] flex items-center justify-center"
+        style={{ display: isOpen ? 'flex' : 'none' }}
+      >
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fadeIn"
@@ -829,21 +936,24 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
           {/* Unified Terminal */}
           <div
             ref={terminalRef}
-            className="h-full w-full p-2"
+            className="h-full w-full px-1 py-1"
             style={{ display: activeTabId === 'unified' ? 'block' : 'none' }}
           />
 
           {/* Interactive Terminals */}
-          {tabs.filter(t => t.type === 'terminal').map(tab => (
-            <div
-              key={tab.id}
-              ref={(el) => {
-                if (el) terminalContainersRef.current.set(tab.id, el)
-              }}
-              className="h-full w-full"
-              style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
-            />
-          ))}
+          {tabs.filter(t => t.type === 'terminal').map(tab => {
+            const sessionKey = `${projectId}:${tab.id}`
+            return (
+              <div
+                key={sessionKey}
+                ref={(el) => {
+                  if (el) terminalContainersRef.current.set(sessionKey, el)
+                }}
+                className="h-full w-full"
+                style={{ display: activeTabId === tab.id ? 'block' : 'none' }}
+              />
+            )
+          })}
         </div>
 
         {/* Command Input - only show for unified tab */}

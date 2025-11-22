@@ -76,7 +76,7 @@ function ActionBar({
   onAutoMessageSent
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, modalFreezeActive } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
@@ -261,32 +261,32 @@ function ActionBar({
         return
       }
 
-      // E - Toggle Edit Mode (only in DEFAULT mode)
-      if (e.key.toLowerCase() === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // E - Toggle Edit Mode (only in DEFAULT mode, and not when modal is open)
+      if (e.key.toLowerCase() === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
         if (layoutState === 'DEFAULT') {
           e.preventDefault()
           toggleEditMode()
         }
       }
 
-      // P - Take Screenshot (only in DEFAULT mode)
-      if (e.key.toLowerCase() === 'p' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // P - Take Screenshot (only in DEFAULT mode, and not when modal is open)
+      if (e.key.toLowerCase() === 'p' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
         if (layoutState === 'DEFAULT') {
           e.preventDefault()
           handleTakeScreenshot()
         }
       }
 
-      // N - Add Sticky Note (only in TOOLS mode)
-      if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // N - Add Sticky Note (only in TOOLS mode, and not when modal is open)
+      if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
         if (layoutState === 'TOOLS') {
           e.preventDefault()
           handleAddStickyNote()
         }
       }
 
-      // K - Toggle Kanban Board (only in TOOLS mode)
-      if (e.key.toLowerCase() === 'k' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // K - Toggle Kanban Board (only in TOOLS mode, and not when modal is open)
+      if (e.key.toLowerCase() === 'k' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
         if (layoutState === 'TOOLS') {
           e.preventDefault()
           toggleKanban()
@@ -296,7 +296,7 @@ function ActionBar({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [layoutState, kanbanEnabled, editModeEnabled, setKanbanEnabled, setEditModeEnabled]) // Re-run when layout state or kanban state changes
+  }, [layoutState, kanbanEnabled, editModeEnabled, setKanbanEnabled, setEditModeEnabled, modalFreezeActive]) // Re-run when modal state changes
 
   // Listen for global shortcuts from Electron main process
   useEffect(() => {
@@ -304,6 +304,9 @@ function ActionBar({
 
     // Listen for edit mode toggle (E key)
     const unsubEditMode = window.electronAPI.onEditModeToggleRequested?.(() => {
+      // Skip if modal is open
+      if (modalFreezeActive) return
+
       // Only trigger if not typing in an input/textarea
       const activeElement = document.activeElement
       if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
@@ -317,6 +320,9 @@ function ActionBar({
 
     // Listen for screenshot request (P key)
     const unsubScreenshot = window.electronAPI.onScreenshotRequested?.(() => {
+      // Skip if modal is open
+      if (modalFreezeActive) return
+
       // Only trigger if not typing in an input/textarea
       const activeElement = document.activeElement
       if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
@@ -332,7 +338,7 @@ function ActionBar({
       unsubEditMode?.()
       unsubScreenshot?.()
     }
-  }, [layoutState, editModeEnabled, setEditModeEnabled])
+  }, [layoutState, editModeEnabled, setEditModeEnabled, modalFreezeActive])
 
 
   // Auto-send message for website import
