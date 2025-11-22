@@ -663,7 +663,7 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Preview Area - Desktop or Mobile Mode */}
       <div
-        className={`w-full relative overflow-hidden p-[5px] border-b border-gray-700/50 z-[101] ${layoutState === 'TOOLS' ? 'pointer-events-none' : ''
+        className={`w-full relative overflow-hidden p-[5px] ${projects.length > 0 ? 'border-b border-gray-700/50' : ''} z-[101] ${layoutState === 'TOOLS' ? 'pointer-events-none' : ''
           }`}
         style={{ height: 'calc(100vh - 40px - 200px)' }}
       >
