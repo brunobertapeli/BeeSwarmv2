@@ -256,6 +256,11 @@ function ActionBar({
         return
       }
 
+      // Also skip if target is contentEditable (for inline text editing in Edit Mode)
+      if (e.target instanceof HTMLElement && e.target.isContentEditable) {
+        return
+      }
+
       // E - Toggle Edit Mode (only in DEFAULT mode)
       if (e.key.toLowerCase() === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         if (layoutState === 'DEFAULT') {
@@ -650,7 +655,7 @@ function ActionBar({
     setEditModeEnabled(!editModeEnabled)
     toast.info(
       editModeEnabled ? 'Edit mode disabled' : 'Edit mode enabled',
-      editModeEnabled ? 'Images are no longer highlighted' : 'Click on images to edit'
+      editModeEnabled ? 'Images and text are no longer highlighted' : 'Click on images or text to edit'
     )
   }
 

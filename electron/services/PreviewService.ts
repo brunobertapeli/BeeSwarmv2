@@ -76,22 +76,40 @@ class PreviewService extends EventEmitter {
     this.isHidden.set(projectId, false);
 
     // Intercept keyboard shortcuts in BrowserView
-    view.webContents.on('before-input-event', (event, input) => {
+    view.webContents.on('before-input-event', async (event, input) => {
       // Tab key - used for layout switching
       if (input.key === 'Tab' && input.type === 'keyDown') {
         event.preventDefault();
       }
 
-      // E key - toggle edit mode (no modifiers)
-      if (input.key.toLowerCase() === 'e' && input.type === 'keyDown' && !input.meta && !input.control && !input.alt) {
-        event.preventDefault();
-        this.mainWindow.webContents.send('edit-mode-toggle-requested');
-      }
+      // For E and P keys, check if we're editing text first
+      if ((input.key.toLowerCase() === 'e' || input.key.toLowerCase() === 'p') && input.type === 'keyDown' && !input.meta && !input.control && !input.alt) {
+        try {
+          // Check if any element is currently contentEditable
+          const isEditing = await view.webContents.executeJavaScript(`
+            (function() {
+              const activeElement = document.activeElement;
+              return activeElement && activeElement.isContentEditable;
+            })();
+          `);
 
-      // P key - take screenshot (no modifiers)
-      if (input.key.toLowerCase() === 'p' && input.type === 'keyDown' && !input.meta && !input.control && !input.alt) {
+          // If we're editing text, don't intercept the key
+          if (isEditing) {
+            return;
+          }
+        } catch (error) {
+          // If executeJavaScript fails, assume we're not editing
+          console.error('Failed to check contentEditable state:', error);
+        }
+
+        // Not editing, so intercept the key
         event.preventDefault();
-        this.mainWindow.webContents.send('screenshot-requested');
+
+        if (input.key.toLowerCase() === 'e') {
+          this.mainWindow.webContents.send('edit-mode-toggle-requested');
+        } else if (input.key.toLowerCase() === 'p') {
+          this.mainWindow.webContents.send('screenshot-requested');
+        }
       }
     });
 

@@ -24,6 +24,7 @@ import { registerSecureStorageHandlers } from './handlers/secureStorageHandlers.
 import { registerWebsiteImportHandlers} from './handlers/websiteImportHandlers.js'
 import { registerClaudeMdHandlers } from './handlers/claudeMdHandlers.js'
 import { registerImageHandlers } from './handlers/imageHandlers.js'
+import { registerFileHandlers } from './handlers/fileHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { layoutManager } from './services/LayoutManager.js'
 
@@ -392,6 +393,7 @@ async function initializeApp() {
     registerLayoutHandlers()
     registerShellHandlers()
     registerImageHandlers()
+    registerFileHandlers()
     registerClaudeMdHandlers()
     registerTerminalHandlers()
     registerClaudeHandlers()

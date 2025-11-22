@@ -906,6 +906,28 @@ export interface ElectronAPI {
       error?: string
     }>
   }
+
+  files: {
+    replaceTextInProject: (projectId: string, originalText: string, newText: string) => Promise<{
+      success: boolean
+      filesModified?: number
+      modifiedFiles?: string[]
+      error?: string
+    }>
+    replaceTextBySelector: (projectId: string, elementInfo: {
+      tag: string
+      id: string | null
+      className: string | null
+      dataAttributes: Record<string, string>
+      textContent: string
+      selector: string
+    }, originalText: string, newText: string) => Promise<{
+      success: boolean
+      filesModified?: number
+      modifiedFiles?: string[]
+      error?: string
+    }>
+  }
 }
 
 declare global {

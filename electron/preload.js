@@ -407,5 +407,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAddendum: (projectId) => ipcRenderer.invoke('claude-md:get-addendum', projectId),
     saveAddendum: (projectId, addendum) => ipcRenderer.invoke('claude-md:save-addendum', projectId, addendum),
     removeAddendum: (projectId) => ipcRenderer.invoke('claude-md:remove-addendum', projectId)
+  },
+
+  // File methods
+  files: {
+    replaceTextInProject: (projectId, originalText, newText) => ipcRenderer.invoke('files:replace-text-in-project', projectId, originalText, newText),
+    replaceTextBySelector: (projectId, elementInfo, originalText, newText) => ipcRenderer.invoke('files:replace-text-by-selector', projectId, elementInfo, originalText, newText)
   }
 })
