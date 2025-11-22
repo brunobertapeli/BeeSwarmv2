@@ -4,6 +4,7 @@ import { useLayoutStore } from '../store/layoutStore'
 import FrozenBackground from './FrozenBackground'
 import HealthStatusModal from './HealthStatusModal'
 import ImageEditModal from './ImageEditModal'
+import PreviewLoader from './PreviewLoader'
 import { HealthCheckStatus } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
 import noiseBgImage from '../assets/images/noise_bg.png'
@@ -20,6 +21,7 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
   const [healthStatus, setHealthStatus] = useState<HealthCheckStatus | null>(null)
   const [showHealthModal, setShowHealthModal] = useState(false)
   const [previewFailed, setPreviewFailed] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(true)
   const contentAreaRef = useRef<HTMLDivElement>(null)
   const browserViewRef = useRef<HTMLDivElement>(null)
   const healthButtonRef = useRef<HTMLButtonElement>(null)
@@ -35,6 +37,8 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
   // Create/Update BrowserView when using BrowserView mode
   useEffect(() => {
     if (!useBrowserView || !projectId || !port) return
+
+    setPreviewLoading(true)
 
     const createOrUpdatePreview = async () => {
       const maxRetries = 3
@@ -59,10 +63,13 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
               bounds
             )
             setPreviewFailed(false)
+            // Wait a bit for the preview to actually load before hiding loader
+            setTimeout(() => setPreviewLoading(false), 500)
             return // Success!
           } catch (error) {
             console.error('Failed to create desktop preview:', error)
             setPreviewFailed(true)
+            setPreviewLoading(false)
             return
           }
         }
@@ -76,6 +83,7 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
       // All retries failed - bounds never became available
       console.error('Failed to get DOM bounds after 3 retries')
       setPreviewFailed(true)
+      setPreviewLoading(false)
     }
 
     const timer = setTimeout(createOrUpdatePreview, 100)
@@ -918,12 +926,14 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
     if (!projectId || !port) return
 
     setPreviewFailed(false)
+    setPreviewLoading(true)
 
     // Retry preview creation
     const rect = browserViewRef.current?.getBoundingClientRect()
     if (!rect) {
       console.error('Cannot retry - DOM bounds still unavailable')
       setPreviewFailed(true)
+      setPreviewLoading(false)
       return
     }
 
@@ -941,9 +951,11 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
         bounds
       )
       setPreviewFailed(false)
+      setTimeout(() => setPreviewLoading(false), 500)
     } catch (error) {
       console.error('Failed to retry preview creation:', error)
       setPreviewFailed(true)
+      setPreviewLoading(false)
     }
   }
 
@@ -1062,6 +1074,9 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
           >
             {/* Frozen background overlay - positioned exactly where BrowserView appears */}
             <FrozenBackground />
+
+            {/* Loading animation */}
+            {previewLoading && !previewFailed && <PreviewLoader />}
 
             {/* Preview failed - show reload button */}
             {previewFailed && (

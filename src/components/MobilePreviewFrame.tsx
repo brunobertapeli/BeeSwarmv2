@@ -3,6 +3,7 @@ import { RotateCw, Code2 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
 import FrozenBackground from './FrozenBackground'
+import PreviewLoader from './PreviewLoader'
 import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface MobilePreviewFrameProps {
@@ -12,6 +13,7 @@ interface MobilePreviewFrameProps {
 
 function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   const [devToolsOpen, setDevToolsOpen] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(true)
   const contentAreaRef = useRef<HTMLDivElement>(null)
   const browserViewRef = useRef<HTMLDivElement>(null)
   const { layoutState, editModeEnabled } = useLayoutStore()
@@ -21,9 +23,12 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   useEffect(() => {
     if (!projectId || !port) return
 
+    setPreviewLoading(true)
+
     const createOrUpdatePreview = async () => {
       const rect = browserViewRef.current?.getBoundingClientRect()
       if (!rect) {
+        setPreviewLoading(false)
         return
       }
 
@@ -40,8 +45,11 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
           `http://localhost:${port}`,
           bounds
         )
+        // Wait a bit for the preview to actually load before hiding loader
+        setTimeout(() => setPreviewLoading(false), 500)
       } catch (error) {
         console.error('Failed to create mobile preview:', error)
+        setPreviewLoading(false)
       }
     }
 
@@ -764,6 +772,9 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
           >
             {/* Frozen background overlay - positioned exactly where BrowserView appears */}
             <FrozenBackground />
+
+            {/* Loading animation */}
+            {previewLoading && <PreviewLoader />}
           </div>
         </div>
       </div>
