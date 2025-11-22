@@ -32,6 +32,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
   const [cropImage, setCropImage] = useState<string | null>(null)
   const [cropImageDimensions, setCropImageDimensions] = useState({ width: 0, height: 0 })
   const [zoom, setZoom] = useState(1)
+  const [minZoom, setMinZoom] = useState(1)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
@@ -120,8 +121,21 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
         img.onload = () => {
           setCropImageDimensions({ width: img.width, height: img.height })
           setCropImage(result)
+
+          // Calculate initial zoom to fit the crop area
+          if (imageWidth && imageHeight) {
+            const cropArea = getCropAreaDimensions()
+            const scaleX = cropArea.width / img.width
+            const scaleY = cropArea.height / img.height
+            const initialZoom = Math.max(scaleX, scaleY, 0.1)
+            setMinZoom(initialZoom)
+            setZoom(initialZoom)
+          } else {
+            setMinZoom(0.1)
+            setZoom(1)
+          }
+
           setCropMode(true)
-          setZoom(1)
           setPosition({ x: 0, y: 0 })
         }
         img.src = result
@@ -194,31 +208,73 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
     }
   }
 
+  // Calculate minimum zoom to cover crop area
+  const calculateMinZoom = () => {
+    if (!imageWidth || !imageHeight || !cropImageDimensions.width || !cropImageDimensions.height) {
+      return 0.1
+    }
+
+    const cropArea = getCropAreaDimensions()
+    const scaleX = cropArea.width / cropImageDimensions.width
+    const scaleY = cropArea.height / cropImageDimensions.height
+    return Math.max(scaleX, scaleY, 0.1)
+  }
+
   // Crop tool handlers
   const handleZoomIn = () => {
-    setZoom(prev => Math.min(prev + 0.05, 3))
+    setZoom(prev => Math.min(prev + 0.1, 5))
   }
 
   const handleZoomOut = () => {
-    setZoom(prev => prev - 0.05)
+    const newMinZoom = calculateMinZoom()
+    setZoom(prev => Math.max(prev - 0.1, newMinZoom))
   }
 
   const handleResetZoom = () => {
-    setZoom(1)
+    const newMinZoom = calculateMinZoom()
+    setZoom(newMinZoom)
     setPosition({ x: 0, y: 0 })
   }
 
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault()
+
+    const delta = e.deltaY * -0.001
+    const newMinZoom = calculateMinZoom()
+    const newZoom = Math.max(newMinZoom, Math.min(5, zoom + delta))
+
+    if (newZoom !== zoom) {
+      // Zoom towards cursor position
+      const rect = cropContainerRef.current?.getBoundingClientRect()
+      if (rect) {
+        const mouseX = e.clientX - rect.left - rect.width / 2
+        const mouseY = e.clientY - rect.top - rect.height / 2
+
+        const zoomFactor = newZoom / zoom
+
+        setPosition(prev => ({
+          x: mouseX - (mouseX - prev.x) * zoomFactor,
+          y: mouseY - (mouseY - prev.y) * zoomFactor
+        }))
+      }
+
+      setZoom(newZoom)
+    }
+  }
+
   const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
     setIsDragging(true)
     setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y })
   }
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDragging) {
-      setPosition({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y
-      })
+      e.preventDefault()
+      const newX = e.clientX - dragStart.x
+      const newY = e.clientY - dragStart.y
+
+      setPosition({ x: newX, y: newY })
     }
   }
 
@@ -461,7 +517,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
             <div>
               <h2 className="text-lg font-semibold text-white">Adjust Image</h2>
               <p className="text-xs text-gray-400 mt-0.5">
-                Position and zoom the image to fit the {imageWidth} × {imageHeight}px area
+                Scroll to zoom • Drag to reposition • Target: {imageWidth} × {imageHeight}px
               </p>
             </div>
             <button
@@ -479,10 +535,11 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onWheel={handleWheel}
           >
             {/* Image with zoom and pan */}
             <div
-              className="absolute inset-0 flex items-center justify-center cursor-move"
+              className={`absolute inset-0 flex items-center justify-center ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
               onMouseDown={handleMouseDown}
               style={{
                 transform: `translate(${position.x}px, ${position.y}px) scale(${zoom})`,
@@ -553,8 +610,9 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
               <span className="text-xs text-gray-400 mr-2">Zoom:</span>
               <button
                 onClick={handleZoomOut}
-                className="p-2 rounded-lg bg-dark-bg hover:bg-dark-bg/80 border border-dark-border text-gray-400 hover:text-white transition-colors"
-                title="Zoom out"
+                disabled={zoom <= calculateMinZoom()}
+                className="p-2 rounded-lg bg-dark-bg hover:bg-dark-bg/80 border border-dark-border text-gray-400 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Zoom out (or use scroll wheel)"
               >
                 <ZoomOut size={16} />
               </button>
@@ -563,15 +621,16 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
               </span>
               <button
                 onClick={handleZoomIn}
-                className="p-2 rounded-lg bg-dark-bg hover:bg-dark-bg/80 border border-dark-border text-gray-400 hover:text-white transition-colors"
-                title="Zoom in"
+                disabled={zoom >= 5}
+                className="p-2 rounded-lg bg-dark-bg hover:bg-dark-bg/80 border border-dark-border text-gray-400 hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Zoom in (or use scroll wheel)"
               >
                 <ZoomIn size={16} />
               </button>
               <button
                 onClick={handleResetZoom}
                 className="p-2 rounded-lg bg-dark-bg hover:bg-dark-bg/80 border border-dark-border text-gray-400 hover:text-white transition-colors ml-2"
-                title="Reset"
+                title="Reset zoom and position"
               >
                 <RotateCcw size={16} />
               </button>
