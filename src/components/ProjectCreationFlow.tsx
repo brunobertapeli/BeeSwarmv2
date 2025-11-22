@@ -50,6 +50,7 @@ interface EnvVariable {
   key: string
   value: string
   description?: string
+  isRequired?: boolean
 }
 
 // Service variants configuration
@@ -589,7 +590,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           requiredEnvVars.push({
             key: keyName,
             value: '',
-            description: keyConfig?.description || ''
+            description: keyConfig?.description || '',
+            isRequired: true
           })
         })
         // Add optional keys
@@ -598,7 +600,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           requiredEnvVars.push({
             key: keyName,
             value: '',
-            description: keyConfig?.description || ''
+            description: keyConfig?.description || '',
+            isRequired: false
           })
         })
       }
@@ -614,8 +617,15 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
       return
     }
 
-    // If not skipping validation, check for filled but invalid credentials
+    // If not skipping validation, check credentials
     if (!skipValidation && envVariables.length > 0) {
+      // Check if any required field is empty
+      const missingRequired = envVariables.filter((env) => env.isRequired && !env.value.trim())
+      if (missingRequired.length > 0) {
+        toast.error(`Please fill in all required credentials or click "Skip for Now"`)
+        return
+      }
+
       // Check if any field has a value that is invalid
       const hasInvalidCredentials = envVariables.some((env) => {
         const isValid = keyValidation[env.key]
@@ -1709,10 +1719,16 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                                     <div key={env.key} className="space-y-1.5">
                                       <label className="block text-xs font-medium text-gray-300">
                                         {keyConfig?.label || env.key}
+                                        {env.isRequired && (
+                                          <span className="text-red-400 ml-1">*</span>
+                                        )}
                                         {env.description && (
                                           <span className="text-gray-500 text-[10px] ml-2">
                                             {env.description}
                                           </span>
+                                        )}
+                                        {!env.isRequired && (
+                                          <span className="text-gray-500 text-[10px] ml-2 italic">(optional)</span>
                                         )}
                                       </label>
                                       <div className="relative">
