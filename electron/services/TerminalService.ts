@@ -20,6 +20,7 @@ interface TerminalSession {
   projectPath: string;
   output: TerminalOutput[];
   buffer: string; // Buffer for incomplete lines
+  lastCommand: string; // Track last command to filter echo
 }
 
 /**
@@ -32,6 +33,9 @@ interface TerminalSession {
 class TerminalService extends EventEmitter {
   private sessions: Map<string, TerminalSession> = new Map();
   private readonly MAX_OUTPUT_LINES = 1000; // Keep last 1000 lines per session
+
+  // Interactive terminal sessions (multiple per project)
+  private interactiveSessions: Map<string, pty.IPty> = new Map();
 
   /**
    * Create a new terminal session for a project
@@ -50,15 +54,19 @@ class TerminalService extends EventEmitter {
 
     // Spawn PTY process
     const ptyProcess = pty.spawn(shell, shellArgs, {
-      name: 'xterm-256color',
-      cols: 120,
+      name: 'dumb', // Use dumb terminal to avoid special formatting
+      cols: 200,    // Wide columns to prevent wrapping
       rows: 30,
       cwd: projectPath,
       env: {
         ...process.env,
-        TERM: 'xterm-256color',
-        COLORTERM: 'truecolor',
-        FORCE_COLOR: '1', // Force color output
+        TERM: 'dumb',  // Dumb terminal = no fancy features
+        PS1: '$ ',     // Simple prompt
+        PROMPT: '$ ',  // For some shells
+        // Disable Oh My Zsh/Starship/Powerlevel10k themes
+        ZSH_THEME: '',
+        STARSHIP_CONFIG: '',
+        POWERLEVEL9K_DISABLE_CONFIGURATION_WIZARD: 'true',
       },
     });
 
@@ -68,6 +76,7 @@ class TerminalService extends EventEmitter {
       projectPath,
       output: [],
       buffer: '', // Initialize empty buffer
+      lastCommand: '', // Initialize empty last command
     };
 
     this.sessions.set(projectId, session);
@@ -96,6 +105,9 @@ class TerminalService extends EventEmitter {
     if (!session) {
       return;
     }
+
+    // Store the command (without newline) to filter echo
+    session.lastCommand = input.trim();
 
     session.ptyProcess.write(input);
   }
@@ -205,10 +217,44 @@ class TerminalService extends EventEmitter {
     for (const line of lines) {
       if (line.length === 0) continue; // Skip empty lines
 
+      // Remove ALL ANSI/control sequences comprehensively:
+      // 1. CSI sequences: ESC [ ... (letter or special char)
+      // 2. OSC sequences: ESC ] ... (terminated by BEL or ST)
+      // 3. Other escape sequences
+      let cleaned = line
+        .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')  // Standard CSI sequences
+        .replace(/\x1b\[[0-9;?]*[hl]/g, '')      // Mode sequences like [?2004h
+        .replace(/\x1b\][^\x07]*\x07/g, '')      // OSC sequences ending with BEL
+        .replace(/\x1b\][^\x1b]*\x1b\\/g, '')    // OSC sequences ending with ST
+        .replace(/\x1b[=>]/g, '')                 // Keypad mode sequences
+        .replace(/\x1b\([0B]/g, '')               // Character set sequences
+        .replace(/\r/g, '')                       // Carriage returns
+        .replace(/[\x00-\x08\x0B-\x1F\x7F]/g, '') // Other control chars (except \n)
+
+      // Trim to check content
+      const trimmed = cleaned.trim();
+
+      // Skip if:
+      // 1. Empty after cleaning
+      // 2. Only prompt characters (%, $, >, #)
+      // 3. Lines that look like prompt remnants (% followed by spaces and $, or just % with lots of spaces)
+      // 4. Lines that are mostly whitespace with just a few chars at the start/end
+      // 5. Line matches the last command sent (command echo)
+      if (
+        trimmed.length === 0 ||
+        /^[%$>#]+$/.test(trimmed) ||
+        /^%\s+\$/.test(trimmed) ||
+        (trimmed.startsWith('%') && trimmed.length < 5) ||
+        (trimmed.startsWith('$') && trimmed.length < 3) ||
+        (session.lastCommand && trimmed === session.lastCommand)
+      ) {
+        continue;
+      }
+
       const output: TerminalOutput = {
         timestamp: new Date(),
         type: 'stdout', // PTY combines stdout/stderr
-        message: line + '\n', // Add back the newline
+        message: cleaned + '\n', // Use cleaned version
       };
 
       // Add to history buffer
@@ -265,9 +311,129 @@ class TerminalService extends EventEmitter {
       // Windows: no special args needed
       return [];
     } else {
-      // Unix-like: login shell to load user's profile
-      return ['-l'];
+      // Unix-like: -f to prevent loading config files (no .zshrc, .bashrc, etc.)
+      // This prevents fancy prompts from Oh My Zsh, Starship, etc.
+      return ['-f'];
     }
+  }
+
+  /**
+   * Create interactive terminal session (for raw terminal tabs)
+   * @param projectId - Project identifier
+   * @param terminalId - Unique terminal tab identifier
+   * @param projectPath - Project directory path
+   */
+  createInteractiveSession(projectId: string, terminalId: string, projectPath: string): void {
+    const sessionKey = `${projectId}:${terminalId}`;
+
+    // Close existing session if any
+    if (this.interactiveSessions.has(sessionKey)) {
+      this.destroyInteractiveSession(projectId, terminalId);
+    }
+
+    const shell = this.getDefaultShell();
+
+    // Spawn PTY with normal shell (not -f flag, so user gets their full environment)
+    const ptyProcess = pty.spawn(shell, [], {
+      name: 'xterm-256color',
+      cols: 120,
+      rows: 30,
+      cwd: projectPath,
+      env: {
+        ...process.env,
+        TERM: 'xterm-256color',
+        COLORTERM: 'truecolor',
+      },
+    });
+
+    this.interactiveSessions.set(sessionKey, ptyProcess);
+
+    // Forward output to renderer
+    ptyProcess.onData((data: string) => {
+      this.emit('interactive-output', { projectId, terminalId, data });
+    });
+
+    // Handle exit
+    ptyProcess.onExit(({ exitCode, signal }) => {
+      this.emit('interactive-exit', { projectId, terminalId, exitCode, signal });
+      this.interactiveSessions.delete(sessionKey);
+    });
+  }
+
+  /**
+   * Write input to interactive terminal
+   * @param projectId - Project identifier
+   * @param terminalId - Terminal tab identifier
+   * @param input - User input
+   */
+  writeInteractiveInput(projectId: string, terminalId: string, input: string): void {
+    const sessionKey = `${projectId}:${terminalId}`;
+    const ptyProcess = this.interactiveSessions.get(sessionKey);
+
+    if (!ptyProcess) {
+      return;
+    }
+
+    ptyProcess.write(input);
+  }
+
+  /**
+   * Resize interactive terminal
+   * @param projectId - Project identifier
+   * @param terminalId - Terminal tab identifier
+   * @param cols - Number of columns
+   * @param rows - Number of rows
+   */
+  resizeInteractive(projectId: string, terminalId: string, cols: number, rows: number): void {
+    const sessionKey = `${projectId}:${terminalId}`;
+    const ptyProcess = this.interactiveSessions.get(sessionKey);
+
+    if (!ptyProcess) {
+      return;
+    }
+
+    ptyProcess.resize(cols, rows);
+  }
+
+  /**
+   * Destroy interactive terminal session
+   * @param projectId - Project identifier
+   * @param terminalId - Terminal tab identifier
+   */
+  destroyInteractiveSession(projectId: string, terminalId: string): void {
+    const sessionKey = `${projectId}:${terminalId}`;
+    const ptyProcess = this.interactiveSessions.get(sessionKey);
+
+    if (!ptyProcess) {
+      return;
+    }
+
+    try {
+      ptyProcess.kill();
+    } catch (error) {
+      console.error(`❌ Error killing interactive PTY ${sessionKey}:`, error);
+    }
+
+    this.interactiveSessions.delete(sessionKey);
+  }
+
+  /**
+   * Destroy all interactive sessions for a project
+   * @param projectId - Project identifier
+   */
+  destroyAllInteractiveSessions(projectId: string): void {
+    const keysToDelete: string[] = [];
+
+    this.interactiveSessions.forEach((_, key) => {
+      if (key.startsWith(`${projectId}:`)) {
+        keysToDelete.push(key);
+      }
+    });
+
+    keysToDelete.forEach(key => {
+      const [, terminalId] = key.split(':');
+      this.destroyInteractiveSession(projectId, terminalId);
+    });
   }
 }
 

@@ -225,6 +225,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const listener = (_event, projectId, exitCode, signal) => callback(projectId, exitCode, signal)
       ipcRenderer.on('terminal:exit', listener)
       return () => ipcRenderer.removeListener('terminal:exit', listener)
+    },
+
+    // Interactive terminal methods (for raw terminal tabs)
+    createInteractiveSession: (projectId, terminalId) => ipcRenderer.invoke('terminal:create-interactive-session', projectId, terminalId),
+    writeInteractiveInput: (projectId, terminalId, input) => ipcRenderer.invoke('terminal:write-interactive-input', projectId, terminalId, input),
+    resizeInteractive: (projectId, terminalId, cols, rows) => ipcRenderer.invoke('terminal:resize-interactive', projectId, terminalId, cols, rows),
+    destroyInteractiveSession: (projectId, terminalId) => ipcRenderer.invoke('terminal:destroy-interactive-session', projectId, terminalId),
+
+    onInteractiveOutput: (callback) => {
+      const listener = (_event, projectId, terminalId, data) => callback(projectId, terminalId, data)
+      ipcRenderer.on('terminal:interactive-output', listener)
+      return () => ipcRenderer.removeListener('terminal:interactive-output', listener)
+    },
+    onInteractiveExit: (callback) => {
+      const listener = (_event, projectId, terminalId, exitCode, signal) => callback(projectId, terminalId, exitCode, signal)
+      ipcRenderer.on('terminal:interactive-exit', listener)
+      return () => ipcRenderer.removeListener('terminal:interactive-exit', listener)
     }
   },
 

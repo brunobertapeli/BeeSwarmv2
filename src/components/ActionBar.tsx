@@ -1351,7 +1351,7 @@ function ActionBar({
             >
               <Terminal size={15} className="text-gray-400 hover:text-primary transition-colors" />
               <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
-                Console
+                Terminal
               </span>
             </button>
 

@@ -577,6 +577,26 @@ export interface ElectronAPI {
     onLine: (callback: (projectId: string, line: TerminalLine) => void) => () => void
     onCleared: (callback: (projectId: string) => void) => () => void
     onExit: (callback: (projectId: string, exitCode: number, signal?: number) => void) => () => void
+
+    // Interactive terminal sessions (for raw terminal tabs)
+    createInteractiveSession: (projectId: string, terminalId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    writeInteractiveInput: (projectId: string, terminalId: string, input: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    resizeInteractive: (projectId: string, terminalId: string, cols: number, rows: number) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    destroyInteractiveSession: (projectId: string, terminalId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    onInteractiveOutput: (callback: (projectId: string, terminalId: string, data: string) => void) => () => void
+    onInteractiveExit: (callback: (projectId: string, terminalId: string, exitCode: number, signal?: number) => void) => () => void
   }
 
   claude: {

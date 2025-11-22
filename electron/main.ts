@@ -14,7 +14,7 @@ import { registerProcessHandlers, setProcessHandlersWindow } from './handlers/pr
 import { registerPreviewHandlers, setPreviewHandlersWindow } from './handlers/previewHandlers.js'
 import { registerLayoutHandlers, setLayoutHandlersWindow } from './handlers/layoutHandlers.js'
 import { registerShellHandlers } from './handlers/shellHandlers.js'
-import { registerTerminalHandlers, setTerminalHandlersWindow } from './handlers/terminalHandlers.js'
+import { registerTerminalHandlers, registerInteractiveTerminalHandlers, setTerminalHandlersWindow } from './handlers/terminalHandlers.js'
 import { registerClaudeHandlers, setClaudeHandlersWindow } from './handlers/claudeHandlers.js'
 import { registerChatHandlers, setChatHandlersWindow } from './handlers/chatHandlers.js'
 import { registerResearchAgentHandlers, setResearchAgentHandlersWindow } from './handlers/researchAgentHandlers.js'
@@ -396,6 +396,7 @@ async function initializeApp() {
     registerFileHandlers()
     registerClaudeMdHandlers()
     registerTerminalHandlers()
+    registerInteractiveTerminalHandlers()
     registerClaudeHandlers()
     registerChatHandlers()
     registerResearchAgentHandlers()

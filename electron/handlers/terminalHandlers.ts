@@ -47,9 +47,17 @@ export function registerTerminalHandlers(): void {
   // Write input to terminal (user command)
   ipcMain.handle('terminal:write-input', async (_event, projectId: string, input: string) => {
     try {
+      // First, add the user's command to the terminal output (we know what they typed)
+      terminalAggregator.addShellLine(projectId, {
+        timestamp: new Date(),
+        type: 'stdout',
+        message: input + '\n',
+      });
+
       // Ensure input ends with newline for command execution
       const command = input.endsWith('\n') ? input : input + '\n';
 
+      // Then execute the command
       terminalService.writeInput(projectId, command);
 
       return {
@@ -170,5 +178,98 @@ function setupTerminalEventForwarding(): void {
   // Forward shell output to aggregator
   terminalService.on('terminal-output', ({ projectId, output }) => {
     terminalAggregator.addShellLine(projectId, output);
+  });
+
+  // Forward interactive terminal output to renderer
+  terminalService.on('interactive-output', ({ projectId, terminalId, data }) => {
+    if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+      mainWindowContents.send('terminal:interactive-output', projectId, terminalId, data);
+    }
+  });
+
+  // Forward interactive terminal exit
+  terminalService.on('interactive-exit', ({ projectId, terminalId, exitCode, signal }) => {
+    if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+      mainWindowContents.send('terminal:interactive-exit', projectId, terminalId, exitCode, signal);
+    }
+  });
+}
+
+/**
+ * Register interactive terminal IPC handlers
+ */
+export function registerInteractiveTerminalHandlers(): void {
+  // Create interactive session
+  ipcMain.handle('terminal:create-interactive-session', async (_event, projectId: string, terminalId: string) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return {
+          success: false,
+          error: 'Project not found',
+        };
+      }
+
+      terminalService.createInteractiveSession(projectId, terminalId, project.path);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error creating interactive terminal session:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to create interactive session',
+      };
+    }
+  });
+
+  // Write input to interactive session
+  ipcMain.handle('terminal:write-interactive-input', async (_event, projectId: string, terminalId: string, input: string) => {
+    try {
+      terminalService.writeInteractiveInput(projectId, terminalId, input);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error writing to interactive terminal:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to write to interactive terminal',
+      };
+    }
+  });
+
+  // Resize interactive session
+  ipcMain.handle('terminal:resize-interactive', async (_event, projectId: string, terminalId: string, cols: number, rows: number) => {
+    try {
+      terminalService.resizeInteractive(projectId, terminalId, cols, rows);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error resizing interactive terminal:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to resize interactive terminal',
+      };
+    }
+  });
+
+  // Destroy interactive session
+  ipcMain.handle('terminal:destroy-interactive-session', async (_event, projectId: string, terminalId: string) => {
+    try {
+      terminalService.destroyInteractiveSession(projectId, terminalId);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      return {
+        success: true, // Always succeed
+      };
+    }
   });
 }

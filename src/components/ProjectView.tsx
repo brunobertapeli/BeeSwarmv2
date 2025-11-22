@@ -841,12 +841,9 @@ Please read the manifest to understand what my website is about, then create an 
         <TerminalModal
           isOpen={showTerminal}
           onClose={() => setShowTerminal(false)}
-          onStop={() => {
-            window.electronAPI?.process.stopDevServer(currentProject.id)
-            toast.info('Stopping dev server...')
-          }}
           projectId={currentProject.id}
           projectName={currentProject.name}
+          projectPath={currentProject.path}
         />
       )}
     </div>
