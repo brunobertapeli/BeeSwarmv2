@@ -18,6 +18,7 @@ import {
   Edit2,
   StickyNote,
   Kanban,
+  BarChart3,
   LayoutGrid,
   Camera
 } from 'lucide-react'
@@ -76,7 +77,7 @@ function ActionBar({
   onAutoMessageSent
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, modalFreezeActive } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, modalFreezeActive } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
@@ -292,11 +293,19 @@ function ActionBar({
           toggleKanban()
         }
       }
+
+      // A - Toggle Analytics Widget (only in TOOLS mode, and not when modal is open)
+      if (e.key.toLowerCase() === 'a' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+        if (layoutState === 'TOOLS') {
+          e.preventDefault()
+          toggleAnalytics()
+        }
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [layoutState, kanbanEnabled, editModeEnabled, setKanbanEnabled, setEditModeEnabled, modalFreezeActive]) // Re-run when modal state changes
+  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setEditModeEnabled, modalFreezeActive]) // Re-run when modal state changes
 
   // Listen for global shortcuts from Electron main process
   useEffect(() => {
@@ -682,6 +691,18 @@ function ActionBar({
     toast.info(
       newState ? 'Kanban Enabled' : 'Kanban Disabled',
       newState ? 'Kanban board shown' : 'Kanban board hidden'
+    )
+  }
+
+  const toggleAnalytics = () => {
+    // Only allow in TOOLS mode
+    if (layoutState !== 'TOOLS') return
+
+    const newState = !analyticsWidgetEnabled
+    setAnalyticsWidgetEnabled(newState)
+    toast.info(
+      newState ? 'Analytics Enabled' : 'Analytics Disabled',
+      newState ? 'Analytics widget shown' : 'Analytics widget hidden'
     )
   }
 
@@ -1341,6 +1362,27 @@ function ActionBar({
                       />
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle Kanban (K)
+                      </span>
+                    </motion.button>
+
+                    <motion.button
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2, delay: 0.2 }}
+                      onClick={toggleAnalytics}
+                      className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
+                    >
+                      <BarChart3
+                        size={15}
+                        className={`transition-colors ${
+                          analyticsWidgetEnabled
+                            ? 'text-green-500'
+                            : 'text-gray-400 hover:text-green-400'
+                        }`}
+                      />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                        Toggle Analytics (A)
                       </span>
                     </motion.button>
                   </motion.div>

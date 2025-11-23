@@ -466,17 +466,21 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           ]
         )
 
-        // Step 2: Save environment variables if any
-        if (envVariables.length > 0) {
-          const envConfig: Record<string, string> = {}
-          envVariables.forEach((v) => {
-            if (v.value) {
-              envConfig[v.key] = v.value
-            }
-          })
+        // Step 2: Save environment variables
+        const envConfig: Record<string, string> = {}
 
-          await window.electronAPI?.projects.saveEnvConfig(result.project.id, envConfig)
-        }
+        // Add user-entered environment variables (if any)
+        envVariables.forEach((v) => {
+          if (v.value) {
+            envConfig[v.key] = v.value
+          }
+        })
+
+        // Always inject these required environment variables
+        envConfig['VITE_GA_ID'] = 'G-8NGLL2W3H5'
+        envConfig['VITE_PROJECT_ID'] = result.project.id
+
+        await window.electronAPI?.projects.saveEnvConfig(result.project.id, envConfig)
 
         // Step 3: Install dependencies
         setCurrentStep('installing')

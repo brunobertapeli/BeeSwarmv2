@@ -412,6 +412,23 @@ export interface ElectronAPI {
       } | null
       error?: string
     }>
+    saveAnalyticsWidgetState: (id: string, widgetState: {
+      enabled: boolean;
+      position: { x: number; y: number };
+      size: { width: number; height: number };
+    }) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    getAnalyticsWidgetState: (id: string) => Promise<{
+      success: boolean;
+      widgetState?: {
+        enabled: boolean;
+        position: { x: number; y: number };
+        size: { width: number; height: number };
+      } | null;
+      error?: string;
+    }>;
   }
 
   process: {
@@ -945,6 +962,45 @@ export interface ElectronAPI {
       success: boolean
       filesModified?: number
       modifiedFiles?: string[]
+      error?: string
+    }>
+  }
+
+  analytics: {
+    getData: (projectId: string, timeRange: 'today' | 'week' | 'month') => Promise<{
+      success: boolean
+      data?: {
+        activeUsers: number
+        stats: {
+          visitors: number
+          pageViews: number
+          avgTime: string
+        }
+        trend: Array<{
+          date: string
+          visitors: number
+        }>
+        topPages: Array<{
+          path: string
+          views: number
+          percentage: number
+        }>
+        sources: Array<{
+          name: string
+          value: number
+          color: string
+        }>
+        devices: Array<{
+          name: string
+          value: number
+          color: string
+        }>
+      }
+      error?: string
+    }>
+    getActiveUsers: (projectId: string) => Promise<{
+      success: boolean
+      activeUsers?: number
       error?: string
     }>
   }

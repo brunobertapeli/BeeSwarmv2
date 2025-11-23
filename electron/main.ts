@@ -25,7 +25,9 @@ import { registerWebsiteImportHandlers} from './handlers/websiteImportHandlers.j
 import { registerClaudeMdHandlers } from './handlers/claudeMdHandlers.js'
 import { registerImageHandlers } from './handlers/imageHandlers.js'
 import { registerFileHandlers } from './handlers/fileHandlers.js'
+import { registerAnalyticsHandlers } from './handlers/analyticsHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
+import { analyticsService } from './services/AnalyticsService.js'
 import { layoutManager } from './services/LayoutManager.js'
 
 // Global state for current user
@@ -384,10 +386,16 @@ async function initializeApp() {
     // Initialize chat history manager (tracks Claude events)
     chatHistoryManager.init()
 
+    // Initialize analytics service (async, non-blocking)
+    analyticsService.init().catch(err => {
+      console.error('Failed to initialize analytics service:', err)
+    })
+
     // Register IPC handlers (only once)
     registerSecureStorageHandlers()
     registerTemplateHandlers()
     registerProjectHandlers()
+    registerAnalyticsHandlers()
     registerProcessHandlers()
     registerPreviewHandlers()
     registerLayoutHandlers()

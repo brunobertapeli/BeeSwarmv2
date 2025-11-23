@@ -126,6 +126,15 @@ interface LayoutStoreState {
   bringNoteToFront: (id: string) => void;
   loadStickyNotesState: (projectId: string) => Promise<void>;
 
+  // Analytics widget state
+  analyticsWidgetEnabled: boolean;
+  setAnalyticsWidgetEnabled: (enabled: boolean) => void;
+  analyticsWidgetPosition: { x: number; y: number };
+  setAnalyticsWidgetPosition: (position: { x: number; y: number }) => void;
+  analyticsWidgetSize: { width: number; height: number };
+  setAnalyticsWidgetSize: (size: { width: number; height: number }) => void;
+  loadAnalyticsWidgetState: (projectId: string) => Promise<void>;
+
   // Helper to check if in specific state
   isState: (state: LayoutState) => boolean;
 
@@ -188,6 +197,26 @@ const debouncedSaveStickyNotesState = (projectId: string, stickyNotesState: {
   }, 500); // 500ms debounce
 };
 
+// Debounce helper for saving Analytics widget state
+let saveAnalyticsTimeout: NodeJS.Timeout | null = null;
+const debouncedSaveAnalyticsWidgetState = (projectId: string, widgetState: {
+  enabled: boolean;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+}) => {
+  if (saveAnalyticsTimeout) {
+    clearTimeout(saveAnalyticsTimeout);
+  }
+
+  saveAnalyticsTimeout = setTimeout(async () => {
+    try {
+      await window.electronAPI?.projects.saveAnalyticsWidgetState(projectId, widgetState);
+    } catch (error) {
+      console.error('Failed to save Analytics widget state:', error);
+    }
+  }, 500); // 500ms debounce
+};
+
 export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   // State
   layoutState: 'DEFAULT', // Start in DEFAULT state
@@ -212,6 +241,11 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
 
   // Sticky notes initial state
   stickyNotes: [],
+
+  // Analytics widget initial state
+  analyticsWidgetEnabled: false,
+  analyticsWidgetPosition: { x: 940, y: 43 }, // Position next to Kanban
+  analyticsWidgetSize: { width: 600, height: 405 },
 
   // Setters
   setLayoutState: (state) => set({ layoutState: state }),
@@ -445,6 +479,74 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       // Reset to defaults on error
       set({
         stickyNotes: []
+      });
+    }
+  },
+
+  // Analytics widget functions
+  setAnalyticsWidgetEnabled: (enabled) => {
+    set({ analyticsWidgetEnabled: enabled });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveAnalyticsWidgetState(currentProjectId, {
+        enabled,
+        position: state.analyticsWidgetPosition,
+        size: state.analyticsWidgetSize
+      });
+    }
+  },
+
+  setAnalyticsWidgetPosition: (position) => {
+    set({ analyticsWidgetPosition: position });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveAnalyticsWidgetState(currentProjectId, {
+        enabled: state.analyticsWidgetEnabled,
+        position,
+        size: state.analyticsWidgetSize
+      });
+    }
+  },
+
+  setAnalyticsWidgetSize: (size) => {
+    set({ analyticsWidgetSize: size });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveAnalyticsWidgetState(currentProjectId, {
+        enabled: state.analyticsWidgetEnabled,
+        position: state.analyticsWidgetPosition,
+        size
+      });
+    }
+  },
+
+  loadAnalyticsWidgetState: async (projectId: string) => {
+    try {
+      const result = await window.electronAPI?.projects.getAnalyticsWidgetState(projectId);
+      if (result?.success && result.widgetState) {
+        set({
+          analyticsWidgetEnabled: result.widgetState.enabled,
+          analyticsWidgetPosition: result.widgetState.position,
+          analyticsWidgetSize: result.widgetState.size
+        });
+      } else {
+        // Reset to defaults if no saved state
+        set({
+          analyticsWidgetEnabled: false,
+          analyticsWidgetPosition: { x: 940, y: 43 },
+          analyticsWidgetSize: { width: 600, height: 405 }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load Analytics widget state:', error);
+      // Reset to defaults on error
+      set({
+        analyticsWidgetEnabled: false,
+        analyticsWidgetPosition: { x: 940, y: 43 },
+        analyticsWidgetSize: { width: 600, height: 405 }
       });
     }
   },

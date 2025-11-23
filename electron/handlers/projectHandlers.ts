@@ -518,4 +518,61 @@ export function registerProjectHandlers() {
       }
     }
   })
+
+  // Save Analytics widget state
+  ipcMain.handle('project:save-analytics-widget-state', async (_event, projectId: string, widgetState: { enabled: boolean; position: { x: number; y: number }; size: { width: number; height: number } }) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      databaseService.saveAnalyticsWidgetState(projectId, widgetState)
+
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('❌ Error saving Analytics widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save Analytics widget state'
+      }
+    }
+  })
+
+  // Get Analytics widget state
+  ipcMain.handle('project:get-analytics-widget-state', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      const widgetState = databaseService.getAnalyticsWidgetState(projectId)
+
+      return {
+        success: true,
+        widgetState
+      }
+    } catch (error) {
+      console.error('❌ Error getting Analytics widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Analytics widget state'
+      }
+    }
+  })
 }

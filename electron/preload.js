@@ -82,7 +82,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveKanbanState: (id, kanbanState) => ipcRenderer.invoke('project:save-kanban-state', id, kanbanState),
     getKanbanState: (id) => ipcRenderer.invoke('project:get-kanban-state', id),
     saveStickyNotesState: (id, stickyNotesState) => ipcRenderer.invoke('project:save-sticky-notes-state', id, stickyNotesState),
-    getStickyNotesState: (id) => ipcRenderer.invoke('project:get-sticky-notes-state', id)
+    getStickyNotesState: (id) => ipcRenderer.invoke('project:get-sticky-notes-state', id),
+    saveAnalyticsWidgetState: (id, widgetState) => ipcRenderer.invoke('project:save-analytics-widget-state', id, widgetState),
+    getAnalyticsWidgetState: (id) => ipcRenderer.invoke('project:get-analytics-widget-state', id)
   },
 
   // Listen for dependency install progress
@@ -430,5 +432,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   files: {
     replaceTextInProject: (projectId, originalText, newText) => ipcRenderer.invoke('files:replace-text-in-project', projectId, originalText, newText),
     replaceTextBySelector: (projectId, elementInfo, originalText, newText) => ipcRenderer.invoke('files:replace-text-by-selector', projectId, elementInfo, originalText, newText)
+  },
+
+  // Analytics methods
+  analytics: {
+    getData: (projectId, timeRange) => ipcRenderer.invoke('analytics:get-data', projectId, timeRange),
+    getActiveUsers: (projectId) => ipcRenderer.invoke('analytics:get-active-users', projectId)
   }
 })

@@ -22,6 +22,7 @@ export interface Project {
   imagePath: string | null // Path to template images
   kanbanState: string | null // JSON string with { enabled, position, size }
   stickyNotesState: string | null // JSON string with sticky notes array
+  analyticsWidgetState: string | null // JSON string with { enabled, position, size }
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -57,6 +58,12 @@ export interface StickyNote {
 
 export interface StickyNotesState {
   notes: StickyNote[]
+}
+
+export interface AnalyticsWidgetState {
+  enabled: boolean
+  position: { x: number; y: number }
+  size: { width: number; height: number }
 }
 
 export interface ChatBlock {
@@ -343,6 +350,12 @@ class DatabaseService {
         }
       } catch (e) {
         // research_agents table might not exist yet - that's ok
+      }
+
+      // Migration 19: Add analyticsWidgetState column if it doesn't exist
+      const hasAnalyticsWidgetState = tableInfo.some(col => col.name === 'analyticsWidgetState')
+      if (!hasAnalyticsWidgetState) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN analyticsWidgetState TEXT')
       }
 
       // Future migrations can be added here
@@ -756,6 +769,47 @@ class DatabaseService {
       return JSON.parse(project.stickyNotesState) as StickyNotesState
     } catch (error) {
       console.error('❌ Failed to parse sticky notes state:', error)
+      return null
+    }
+  }
+
+  /**
+   * Save Analytics widget state for a project
+   */
+  saveAnalyticsWidgetState(projectId: string, widgetState: AnalyticsWidgetState): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save Analytics widget state after database closed - ignoring')
+      return
+    }
+
+    const stateJson = JSON.stringify(widgetState)
+    const sql = 'UPDATE projects SET analyticsWidgetState = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(stateJson, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save Analytics widget state:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get Analytics widget state for a project
+   */
+  getAnalyticsWidgetState(projectId: string): AnalyticsWidgetState | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!project?.analyticsWidgetState) {
+      return null
+    }
+
+    try {
+      return JSON.parse(project.analyticsWidgetState) as AnalyticsWidgetState
+    } catch (error) {
+      console.error('❌ Failed to parse Analytics widget state:', error)
       return null
     }
   }
