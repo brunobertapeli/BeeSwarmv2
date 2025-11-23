@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   Circle,
   Eye,
-  EyeOff
+  EyeOff,
+  Edit3
 } from 'lucide-react'
 import type { TechConfig } from './TemplateSelector'
 import { useAppStore } from '../store/appStore'
@@ -30,6 +31,8 @@ interface ProjectSettingsProps {
   requiredTechConfigs?: TechConfig[]
   onSetupComplete?: () => void
   initialTab?: 'general' | 'apikeys' | 'deployment'
+  onProjectUpdated?: () => void
+  onSelectProject?: (projectId: string) => void
 }
 
 // Store API key values by key name
@@ -46,7 +49,9 @@ function ProjectSettings({
   isSetupMode = false,
   requiredTechConfigs = [],
   onSetupComplete,
-  initialTab = 'general'
+  initialTab = 'general',
+  onProjectUpdated,
+  onSelectProject
 }: ProjectSettingsProps) {
   const { netlifyConnected, setNetlifyConnected, currentProjectId } = useAppStore()
   const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
@@ -59,6 +64,39 @@ function ProjectSettings({
   const [activeTab, setActiveTab] = useState<'general' | 'apikeys' | 'deployment'>(initialTab)
   const [isInstallingDeps, setIsInstallingDeps] = useState(false)
   const [installProgress, setInstallProgress] = useState<string[]>([])
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  // Track if there are unsaved changes
+  const hasUnsavedChanges = editedName.trim() !== projectName && editedName.trim() !== ''
+
+  // Format path to show meaningful parts: ~/.../{last-2-folders}
+  const formatPath = (path: string) => {
+    if (!path) return ''
+
+    // Replace home directory with ~
+    const homeDir = '/Users/' + (path.split('/')[2] || '')
+    let displayPath = path.replace(homeDir, '~')
+
+    // Split path into parts
+    const parts = displayPath.split('/')
+
+    // If path is short enough, show it all
+    if (displayPath.length <= 40) return displayPath
+
+    // Show ~/.../{parent-folder}/{project-folder}
+    if (parts.length > 3) {
+      const lastTwo = parts.slice(-2).join('/')
+      return `~/.../​${lastTwo}`
+    }
+
+    return displayPath
+  }
+
+  // Sync editedName with projectName prop changes
+  useEffect(() => {
+    setEditedName(projectName)
+  }, [projectName])
 
   // Update active tab when initialTab changes
   useEffect(() => {
@@ -119,8 +157,39 @@ function ProjectSettings({
     setApiKeyValues(prev => ({ ...prev, [keyName]: value }))
   }
 
-  const handleOpenInFinder = () => {
-    // Will implement with Electron
+  const handleSaveChanges = async () => {
+    // Handle project rename if name changed
+    if (hasUnsavedChanges) {
+      const result = await window.electronAPI?.projects.rename(projectId, editedName.trim())
+      if (result?.success && result.project) {
+        toast.success('Project renamed', `Project renamed to "${result.project.name}"`)
+        onProjectUpdated?.()
+        setIsEditingName(false)
+      } else if (result && 'reason' in result && result.reason === 'claude_active') {
+        toast.warning(
+          'Cannot rename project',
+          'Claude is currently working on this project. Please wait for Claude to complete or stop the session first.'
+        )
+        setEditedName(projectName)
+        return
+      } else if (result?.error) {
+        toast.error('Rename failed', result.error)
+        setEditedName(projectName)
+        return
+      }
+    }
+
+    toast.success('Settings saved', 'Your changes have been applied')
+    onClose()
+  }
+
+  const handleOpenInFinder = async () => {
+    try {
+      await window.electronAPI?.projects.showInFinder(projectId)
+    } catch (error) {
+      console.error('Error showing in Finder:', error)
+      toast.error('Failed to open', 'Could not open project location')
+    }
   }
 
   const handleToggleNetlify = () => {
@@ -133,14 +202,48 @@ function ProjectSettings({
     }
   }
 
-  const handleDeleteProject = () => {
-    if (deleteConfirmation === projectId) {
-      toast.error('Project deleted', `${projectName} has been permanently removed`)
-      setShowDeleteModal(false)
-      onClose()
-      // Will implement actual deletion
-    } else {
-      toast.error('Incorrect confirmation', 'Please type the project ID exactly')
+  const handleDeleteProject = async () => {
+    if (deleteConfirmation !== projectName) {
+      toast.error('Incorrect confirmation', 'Please type the project name exactly')
+      return
+    }
+
+    setIsDeleting(true)
+
+    try {
+      // Fetch all projects to find next project to switch to
+      const projectsResult = await window.electronAPI?.projects.getAll()
+      const allProjects = projectsResult?.projects || []
+
+      const result = await window.electronAPI?.projects.delete(projectId)
+
+      if (result?.success) {
+        toast.success('Project deleted', `"${projectName}" has been deleted successfully`)
+
+        // If we deleted the current project, switch to another one
+        const remainingProjects = allProjects.filter(p => p.id !== projectId)
+        if (remainingProjects.length > 0) {
+          const mostRecentProject = remainingProjects[0] // Already sorted by lastOpenedAt DESC
+          await window.electronAPI?.process.setCurrentProject(mostRecentProject.id)
+          onSelectProject?.(mostRecentProject.id)
+          toast.info('Switched project', `Now viewing ${mostRecentProject.name}`)
+        }
+
+        // Notify parent to refresh
+        onProjectUpdated?.()
+
+        // Close modal and reset state
+        setShowDeleteModal(false)
+        setDeleteConfirmation('')
+        onClose()
+      } else {
+        toast.error('Delete failed', result?.error || 'Failed to delete project')
+      }
+    } catch (error) {
+      console.error('Error deleting project:', error)
+      toast.error('Error', error instanceof Error ? error.message : 'Failed to delete project')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -174,7 +277,6 @@ function ProjectSettings({
                 <h2 className="text-base font-semibold text-white">
                   {isSetupMode ? 'Complete Project Setup' : 'Project Settings'}
                 </h2>
-                <p className="text-[11px] text-gray-500 mt-0.5">{projectName}</p>
               </div>
               {!isSetupMode && (
                 <button
@@ -258,12 +360,37 @@ function ProjectSettings({
                       <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
                         Project Name
                       </label>
-                      <input
-                        type="text"
-                        value={editedName}
-                        onChange={(e) => setEditedName(e.target.value)}
-                        className="w-full bg-dark-bg/50 border border-dark-border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-primary/50 transition-all"
-                      />
+                      <div className="flex items-center gap-2">
+                        {isEditingName ? (
+                          <input
+                            type="text"
+                            value={editedName}
+                            onChange={(e) => setEditedName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') {
+                                setEditedName(projectName)
+                                setIsEditingName(false)
+                              }
+                            }}
+                            onBlur={() => setIsEditingName(false)}
+                            className="flex-1 bg-dark-bg/50 border border-primary/50 rounded-lg px-3 py-2 text-sm text-white outline-none transition-all"
+                            autoFocus
+                          />
+                        ) : (
+                          <>
+                            <div className="flex-1 bg-dark-bg/30 border border-dark-border/50 rounded-lg px-3 py-2 text-sm text-white">
+                              {projectName}
+                            </div>
+                            <button
+                              onClick={() => setIsEditingName(true)}
+                              className="px-3 py-2 bg-dark-bg/50 hover:bg-dark-bg border border-dark-border hover:border-primary/50 rounded-lg text-xs text-gray-300 hover:text-white font-medium transition-all flex items-center gap-1.5"
+                            >
+                              <Edit3 size={12} />
+                              Edit Name
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
@@ -284,8 +411,11 @@ function ProjectSettings({
                     Project Location
                   </h3>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-dark-bg/30 border border-dark-border/50 rounded-lg px-3 py-2 text-xs text-gray-400 font-mono truncate">
-                      {projectPath}
+                    <div
+                      className="flex-1 bg-dark-bg/30 border border-dark-border/50 rounded-lg px-3 py-2 text-xs text-gray-400 font-mono overflow-hidden"
+                      title={projectPath}
+                    >
+                      {formatPath(projectPath)}
                     </div>
                     <button
                       onClick={handleOpenInFinder}
@@ -471,70 +601,75 @@ function ProjectSettings({
                 onClick={onClose}
                 className="px-4 py-2 bg-dark-bg/50 hover:bg-dark-bg text-gray-300 text-sm font-medium rounded-lg transition-all"
               >
-                Cancel
+                {hasUnsavedChanges ? 'Cancel' : 'Close'}
               </button>
             )}
-            <button
-              onClick={async () => {
-                if (isSetupMode && onSetupComplete) {
-                  // Save environment configuration
-                  try {
-                    setIsInstallingDeps(true)
-                    setInstallProgress([])
+            {!isSetupMode && hasUnsavedChanges && (
+              <button
+                onClick={handleSaveChanges}
+                className="px-4 py-2 text-sm font-medium rounded-lg transition-all bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20"
+              >
+                Save Changes
+              </button>
+            )}
+            {isSetupMode && (
+              <button
+                onClick={async () => {
+                  if (onSetupComplete) {
+                    // Save environment configuration
+                    try {
+                      setIsInstallingDeps(true)
+                      setInstallProgress([])
 
-                    const result = await window.electronAPI?.projects.saveEnvConfig(projectId, apiKeyValues)
+                      const result = await window.electronAPI?.projects.saveEnvConfig(projectId, apiKeyValues)
 
-                    if (result?.success) {
-                      toast.success('Configuration saved!', 'Environment variables written to .env')
+                      if (result?.success) {
+                        toast.success('Configuration saved!', 'Environment variables written to .env')
 
-                      // Start npm install
-                      toast.info('Installing dependencies...', 'This may take a few minutes')
+                        // Start npm install
+                        toast.info('Installing dependencies...', 'This may take a few minutes')
 
-                      // Listen for progress
-                      window.electronAPI?.onDependencyProgress?.((data: string) => {
-                        setInstallProgress(prev => [...prev, data])
-                      })
+                        // Listen for progress
+                        window.electronAPI?.onDependencyProgress?.((data: string) => {
+                          setInstallProgress(prev => [...prev, data])
+                        })
 
-                      const installResult = await window.electronAPI?.projects.installDependencies(projectId)
+                        const installResult = await window.electronAPI?.projects.installDependencies(projectId)
 
-                      setIsInstallingDeps(false)
+                        setIsInstallingDeps(false)
 
-                      if (installResult?.success) {
-                        toast.success('Setup complete!', 'Dependencies installed successfully')
-                        onSetupComplete()
+                        if (installResult?.success) {
+                          toast.success('Setup complete!', 'Dependencies installed successfully')
+                          onSetupComplete()
+                        } else {
+                          toast.error('Dependency installation failed', installResult?.error || 'Unknown error')
+                        }
                       } else {
-                        toast.error('Dependency installation failed', installResult?.error || 'Unknown error')
+                        setIsInstallingDeps(false)
+                        toast.error('Failed to save configuration', result?.error || 'Unknown error')
                       }
-                    } else {
+                    } catch (error) {
                       setIsInstallingDeps(false)
-                      toast.error('Failed to save configuration', result?.error || 'Unknown error')
+                      console.error('Error during setup:', error)
+                      toast.error('Setup failed', error instanceof Error ? error.message : 'Unknown error')
                     }
-                  } catch (error) {
-                    setIsInstallingDeps(false)
-                    console.error('Error during setup:', error)
-                    toast.error('Setup failed', error instanceof Error ? error.message : 'Unknown error')
                   }
-                } else {
-                  toast.success('Settings saved', 'Your changes have been applied')
-                  onClose()
-                }
-              }}
-              disabled={(isSetupMode && !isSetupComplete) || isInstallingDeps}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                (isSetupMode && !isSetupComplete) || isInstallingDeps
-                  ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
-                  : isSetupMode
-                  ? 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
-                  : 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
-              }`}
-            >
-              {isInstallingDeps ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin inline-block mr-2" />
-                  Installing Dependencies...
-                </>
-              ) : isSetupMode ? 'Complete Setup' : 'Save Changes'}
-            </button>
+                }}
+                disabled={!isSetupComplete || isInstallingDeps}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                  !isSetupComplete || isInstallingDeps
+                    ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                    : 'bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20'
+                }`}
+              >
+                {isInstallingDeps ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin inline-block mr-2" />
+                    Installing Dependencies...
+                  </>
+                ) : 'Complete Setup'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -544,7 +679,12 @@ function ProjectSettings({
         <div className="fixed inset-0 z-[310] flex items-center justify-center">
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setShowDeleteModal(false)}
+            onClick={() => {
+              if (!isDeleting) {
+                setShowDeleteModal(false)
+                setDeleteConfirmation('')
+              }
+            }}
           />
           <div className="relative w-[450px] bg-dark-card border border-red-500/30 rounded-xl shadow-2xl p-5 overflow-hidden">
             {/* Background Image */}
@@ -571,14 +711,25 @@ function ProjectSettings({
 
             <div className="mb-4 relative z-10">
               <label className="block text-xs font-medium text-gray-400 mb-2">
-                Type <span className="font-mono text-white">{projectId}</span> to confirm:
+                Type <span className="font-mono text-white">{projectName}</span> to confirm:
               </label>
               <input
                 type="text"
                 value={deleteConfirmation}
                 onChange={(e) => setDeleteConfirmation(e.target.value)}
-                placeholder={projectId}
-                className="w-full bg-dark-bg/50 border border-dark-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-red-500/50 transition-all"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && deleteConfirmation === projectName && !isDeleting) {
+                    handleDeleteProject()
+                  }
+                  if (e.key === 'Escape' && !isDeleting) {
+                    setShowDeleteModal(false)
+                    setDeleteConfirmation('')
+                  }
+                }}
+                disabled={isDeleting}
+                placeholder={projectName}
+                className="w-full bg-dark-bg/50 border border-dark-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 outline-none focus:border-red-500/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                autoFocus
               />
             </div>
 
@@ -588,20 +739,24 @@ function ProjectSettings({
                   setShowDeleteModal(false)
                   setDeleteConfirmation('')
                 }}
-                className="flex-1 px-4 py-2 bg-dark-bg/50 hover:bg-dark-bg text-gray-300 text-sm font-medium rounded-lg transition-all"
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2 bg-dark-bg/50 hover:bg-dark-bg text-gray-300 text-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteProject}
-                disabled={deleteConfirmation !== projectId}
-                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  deleteConfirmation === projectId
+                disabled={deleteConfirmation !== projectName || isDeleting}
+                className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                  deleteConfirmation === projectName && !isDeleting
                     ? 'bg-red-500 hover:bg-red-600 text-white'
                     : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                Delete Project
+                {isDeleting && (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                )}
+                {isDeleting ? 'Deleting...' : 'Delete Project'}
               </button>
             </div>
           </div>

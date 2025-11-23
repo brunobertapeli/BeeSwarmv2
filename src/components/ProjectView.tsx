@@ -834,11 +834,13 @@ Please read the manifest to understand what my website is about, then create an 
         }}
         projectName={currentProject?.name || 'Untitled Project'}
         projectId={currentProjectId || '1'}
-        projectPath="~/Documents/CodeDeck/Projects/ecommerce-dashboard"
+        projectPath={currentProject?.path || ''}
         isSetupMode={isProjectSetupMode}
         requiredTechConfigs={newProjectData?.requiredTechConfigs || []}
         onSetupComplete={handleSetupComplete}
         initialTab={settingsInitialTab}
+        onProjectUpdated={() => setRefreshKey(prev => prev + 1)}
+        onSelectProject={handleSelectProject}
       />
 
       {/* Terminal Modal */}
