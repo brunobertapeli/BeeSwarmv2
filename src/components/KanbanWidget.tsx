@@ -44,6 +44,8 @@ function KanbanWidget() {
   const [selectedCard, setSelectedCard] = useState<{ columnId: string; card: KanbanCard } | null>(null)
   const [modalTitle, setModalTitle] = useState('')
   const [modalContent, setModalContent] = useState('')
+  const [draggingCard, setDraggingCard] = useState<{ columnId: string; cardId: string } | null>(null)
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
   const widgetRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const editInputRef = useRef<HTMLTextAreaElement>(null)
@@ -172,6 +174,70 @@ function KanbanWidget() {
   const cancelEdit = () => {
     setEditingCard(null)
     setEditingText('')
+  }
+
+  // Drag and drop handlers
+  const handleCardDragStart = (e: React.DragEvent, columnId: string, cardId: string) => {
+    setDraggingCard({ columnId, cardId })
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleCardDragEnd = () => {
+    setDraggingCard(null)
+    setDragOverColumn(null)
+  }
+
+  const handleColumnDragOver = (e: React.DragEvent, columnId: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverColumn(columnId)
+  }
+
+  const handleColumnDragLeave = () => {
+    setDragOverColumn(null)
+  }
+
+  const handleColumnDrop = (e: React.DragEvent, targetColumnId: string) => {
+    e.preventDefault()
+    setDragOverColumn(null)
+
+    if (!draggingCard) return
+
+    const { columnId: sourceColumnId, cardId } = draggingCard
+
+    // Find the card being moved
+    let cardToMove: KanbanCard | null = null
+    setKanbanColumns((cols = []) => {
+      const sourceCol = cols.find(col => col.id === sourceColumnId)
+      if (sourceCol) {
+        cardToMove = sourceCol.cards.find(card => card.id === cardId) || null
+      }
+      return cols
+    })
+
+    if (!cardToMove) return
+
+    // Move the card to the new column
+    setKanbanColumns((cols = []) =>
+      cols.map(col => {
+        if (col.id === sourceColumnId) {
+          // Remove card from source column
+          return {
+            ...col,
+            cards: col.cards.filter(card => card.id !== cardId)
+          }
+        } else if (col.id === targetColumnId) {
+          // Add card to target column
+          return {
+            ...col,
+            cards: [...col.cards, cardToMove!]
+          }
+        }
+        return col
+      })
+    )
+
+    setDraggingCard(null)
   }
 
   // Focus input when editing starts
@@ -304,17 +370,86 @@ function KanbanWidget() {
       {/* Header */}
       <div
         ref={headerRef}
-        className="relative px-4 border-b border-dark-border/50 flex items-center justify-between cursor-move select-none"
-        style={{ height: '37px', minHeight: '37px' }}
+        className="relative px-4 border-b border-dark-border/50 cursor-move select-none"
+        style={{ minHeight: '37px', paddingTop: '6px', paddingBottom: '6px' }}
       >
-        <h3 className="text-sm font-semibold text-gray-200">Kanban Board</h3>
-        <button
-          onClick={() => setKanbanEnabled(false)}
-          className="p-1 hover:bg-dark-bg/50 rounded-lg transition-colors"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <X size={16} className="text-gray-400 hover:text-white" />
-        </button>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-gray-200">Kanban Board</h3>
+
+            {/* Column Summary with Priority Breakdown */}
+            <div className="flex items-center gap-1">
+              {(() => {
+                // Priority config with short labels
+                const priorityConfig: Record<Priority, { color: string; short: string }> = {
+                  'Critical': { color: 'text-pink-400', short: 'C' },
+                  'Off track': { color: 'text-red-400', short: 'O' },
+                  'Important': { color: 'text-purple-400', short: 'I' },
+                  'High': { color: 'text-orange-400', short: 'H' },
+                  'Medium': { color: 'text-yellow-400', short: 'M' },
+                  'Low': { color: 'text-blue-400', short: 'L' }
+                }
+
+                return columns.map((column) => {
+                  // Calculate priority counts for this column
+                  const priorityCounts: Record<Priority, number> = {
+                    'Low': 0,
+                    'Medium': 0,
+                    'High': 0,
+                    'Important': 0,
+                    'Critical': 0,
+                    'Off track': 0
+                  }
+
+                  column.cards.forEach(card => {
+                    priorityCounts[card.priority as Priority]++
+                  })
+
+                  // Build priority breakdown string
+                  const priorityBreakdown = Object.entries(priorityConfig)
+                    .map(([priority, config]) => {
+                      const count = priorityCounts[priority as Priority]
+                      if (count === 0) return null
+                      return (
+                        <span key={priority} className={`${config.color} font-medium`}>
+                          {config.short}:{count}
+                        </span>
+                      )
+                    })
+                    .filter(Boolean)
+
+                  return (
+                    <div
+                      key={column.id}
+                      className="flex items-center gap-1.5 bg-dark-bg/50 rounded-lg px-2 py-0.5"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-gray-400">{column.title}:</span>
+                        <span className="text-[11px] font-bold text-primary">{column.cards.length}</span>
+                      </div>
+                      {priorityBreakdown.length > 0 && (
+                        <>
+                          <div className="h-2.5 w-px bg-dark-border/50" />
+                          <div className="flex items-center gap-1 text-[10px]">
+                            {priorityBreakdown}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                })
+              })()}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setKanbanEnabled(false)}
+            className="p-1 hover:bg-dark-bg/50 rounded-lg transition-colors"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <X size={16} className="text-gray-400 hover:text-white" />
+          </button>
+        </div>
       </div>
 
       {/* Kanban Columns */}
@@ -322,7 +457,14 @@ function KanbanWidget() {
         {columns.map(column => (
           <div
             key={column.id}
-            className="flex-shrink-0 w-[280px] bg-dark-bg/30 rounded-xl border border-dark-border/30 p-3"
+            className={`flex-shrink-0 w-[280px] bg-dark-bg/30 rounded-xl border p-3 transition-all ${
+              dragOverColumn === column.id
+                ? 'border-primary/50 bg-primary/5'
+                : 'border-dark-border/30'
+            }`}
+            onDragOver={(e) => handleColumnDragOver(e, column.id)}
+            onDragLeave={handleColumnDragLeave}
+            onDrop={(e) => handleColumnDrop(e, column.id)}
           >
             {/* Column Header */}
             <div className="flex items-center justify-between mb-3">
@@ -349,8 +491,17 @@ function KanbanWidget() {
                 return (
                   <div
                     key={card.id}
+                    draggable={!isEditing}
+                    onDragStart={(e) => handleCardDragStart(e, column.id, card.id)}
+                    onDragEnd={handleCardDragEnd}
                     onClick={() => !isEditing && openCardModal(column.id, card)}
-                    className="bg-dark-card/80 border border-dark-border/50 rounded-lg p-3 hover:border-primary/30 transition-all group cursor-pointer"
+                    className={`bg-dark-card/80 border rounded-lg p-3 transition-all group ${
+                      draggingCard?.cardId === card.id
+                        ? 'opacity-50 cursor-grabbing'
+                        : 'cursor-grab hover:border-primary/30 cursor-pointer'
+                    } ${
+                      isEditing ? 'border-primary/50' : 'border-dark-border/50'
+                    }`}
                   >
                     {isEditing ? (
                       <textarea
