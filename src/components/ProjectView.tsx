@@ -841,6 +841,7 @@ Please read the manifest to understand what my website is about, then create an 
         initialTab={settingsInitialTab}
         onProjectUpdated={() => setRefreshKey(prev => prev + 1)}
         onSelectProject={handleSelectProject}
+        deployServices={currentProject?.deployServices || null}
       />
 
       {/* Terminal Modal */}

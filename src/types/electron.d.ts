@@ -3,6 +3,12 @@ export interface TemplateLibrary {
   description: string
 }
 
+export interface EnvFile {
+  path: string
+  label: string
+  description: string
+}
+
 export interface Template {
   _id: string
   id: string
@@ -18,6 +24,8 @@ export interface Template {
   techStack: string[]
   libraries?: TemplateLibrary[]
   screenshot?: string
+  envFiles?: EnvFile[]
+  deployServices?: string[]
 }
 
 export interface Project {
@@ -31,6 +39,8 @@ export interface Project {
   configCompleted: boolean
   envVars: string | null
   dependenciesInstalled: boolean
+  envFiles?: string | null // JSON array of { path, label, description }
+  deployServices?: string | null // JSON array of deployment services
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -427,6 +437,21 @@ export interface ElectronAPI {
         position: { x: number; y: number };
         size: { width: number; height: number };
       } | null;
+      error?: string;
+    }>;
+    readEnvFiles: (id: string) => Promise<{
+      success: boolean;
+      envFiles?: Array<{
+        path: string;
+        label: string;
+        description: string;
+        variables: Record<string, string>;
+        exists: boolean;
+      }>;
+      error?: string;
+    }>;
+    writeEnvFile: (id: string, filePath: string, variables: Record<string, string>) => Promise<{
+      success: boolean;
       error?: string;
     }>;
   }

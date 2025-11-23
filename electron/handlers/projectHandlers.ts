@@ -405,6 +405,81 @@ export function registerProjectHandlers() {
     }
   })
 
+  // Read project env files
+  ipcMain.handle('project:read-env-files', async (_event, projectId: string) => {
+    try {
+      console.log('🔍 Reading env files for project:', projectId)
+
+      // SECURITY: Validate user owns this project
+      const project = validateProjectOwnership(projectId)
+      console.log('🔍 Project validated:', { id: project.id, path: project.path, envFiles: project.envFiles })
+
+      // Get envFiles configuration from project
+      const envFilesConfig = project.envFiles ? JSON.parse(project.envFiles) : []
+      console.log('🔍 EnvFiles config:', envFilesConfig)
+
+      if (envFilesConfig.length === 0) {
+        console.log('⚠️ No envFiles configured for this project')
+        return {
+          success: true,
+          envFiles: []
+        }
+      }
+
+      // Read all env files
+      const envFiles = envService.readProjectEnvFiles(project.path, envFilesConfig)
+      console.log('🔍 Env files read from disk:', envFiles)
+
+      return {
+        success: true,
+        envFiles
+      }
+    } catch (error) {
+      console.error('❌ Error reading env files:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to read env files'
+      }
+    }
+  })
+
+  // Write project env file
+  ipcMain.handle('project:write-env-file', async (_event, projectId: string, filePath: string, variables: Record<string, string>) => {
+    try {
+      // SECURITY: Validate user owns this project
+      const project = validateProjectOwnership(projectId)
+
+      // Write env file
+      envService.writeProjectEnvFile(project.path, filePath, variables)
+
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('❌ Error writing env file:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to write env file'
+      }
+    }
+  })
+
   // Save Kanban widget state
   ipcMain.handle('project:save-kanban-state', async (_event, projectId: string, kanbanState: { enabled: boolean; position: { x: number; y: number }; size: { width: number; height: number } }) => {
     try {

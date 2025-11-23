@@ -245,29 +245,50 @@ Two log files in the user's project codebase provide instant feedback:
 <environment_variables_system>
 
 ## How It Works
-CodeDeck automatically detects NEW entries in .env files and adds them to Project Settings.
-Required Steps
+CodeDeck automatically detects NEW entries in .env files and adds them to Project Settings > Environment Variables.
+
+## Required Steps
 When the user requests an API or service that requires secure credentials:
 
-
-Locate the EXISTING .env file in the project
-Add a new entry for the required credential(s):
-
+1. Locate the EXISTING .env file in the project
+2. Add a new entry for the required credential(s) with a blank value:
+   ```
    OPENAI_API_KEY=
    STRIPE_SECRET_KEY=
+   ```
 
-Inform the user that the service won't work until they add the required credentials in the 'Project Settings'
+## Informing the User
 
-CRITICAL: Correct Format
-✅ CORRECT:
+When a service requires credentials that are missing, inform the user with this exact format:
+
+**Template:**
+```
+The [SERVICE_NAME] service requires credentials to function. Please add your [CREDENTIAL_TYPE] in <env>Project Settings > Environment Variables</env>.
+```
+
+**Examples:**
+- `The Stripe service requires credentials to function. Please add your API key in <env>Project Settings > Environment Variables</env>.`
+- `The MongoDB service requires credentials to function. Please add your connection string in <env>Project Settings > Environment Variables</env>.`
+
+**Important:** Always wrap "Project Settings > Environment Variables" in `<env>` tags to enable the click event in CodeDeck.
+
+## CRITICAL: Correct Format
+
+✅ **CORRECT:**
+```
 OPENAI_API_KEY=
 DATABASE_URL=
 STRIPE_SECRET_KEY=
-❌ INCORRECT:
+```
+
+❌ **INCORRECT:**
+```
 OPENAI_API_KEY=your_api_key_here
 DATABASE_URL=paste_your_url_here
 STRIPE_SECRET_KEY=sk_test_...
-Always leave the value blank after the = sign. Never add placeholder text.
+```
+
+**Always leave the value blank after the = sign. Never add placeholder text.**
 
 </environment_variables_system>
 

@@ -97,6 +97,50 @@ class EnvService {
       throw error
     }
   }
+
+  /**
+   * Read all env files for a project based on envFiles configuration
+   * @param projectPath - Absolute path to project directory
+   * @param envFiles - Array of env file configurations from template
+   * @returns Array of env file data with path, label, description, and variables
+   */
+  readProjectEnvFiles(
+    projectPath: string,
+    envFiles: Array<{ path: string; label: string; description: string }>
+  ): Array<{
+    path: string
+    label: string
+    description: string
+    variables: Record<string, string>
+    exists: boolean
+  }> {
+    return envFiles.map(envFile => {
+      const fullPath = path.join(projectPath, envFile.path)
+      const exists = fs.existsSync(fullPath)
+
+      return {
+        path: envFile.path,
+        label: envFile.label,
+        description: envFile.description,
+        variables: exists ? this.readEnvFile(projectPath, envFile.path) : {},
+        exists
+      }
+    })
+  }
+
+  /**
+   * Write variables to a specific env file
+   * @param projectPath - Absolute path to project directory
+   * @param filePath - Relative path to env file (e.g., ".env" or "frontend/.env")
+   * @param variables - Object with key-value pairs to write
+   */
+  writeProjectEnvFile(
+    projectPath: string,
+    filePath: string,
+    variables: Record<string, string>
+  ): void {
+    this.writeEnvFile(projectPath, variables, filePath)
+  }
 }
 
 export const envService = new EnvService()

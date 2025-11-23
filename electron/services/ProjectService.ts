@@ -43,6 +43,14 @@ class ProjectService {
       // Step 2: Create project in database with 'creating' status
       // Generate project record first to get ID (used as immutable folder name)
       const tempPath = 'temp' // Temporary, will be updated after we have the ID
+
+      console.log('🔍 Template data:', {
+        id: template.id,
+        name: template.name,
+        deployServices: template.deployServices,
+        envFiles: template.envFiles
+      })
+
       const project = databaseService.createProject({
         userId: userId, // SECURITY: Store userId with project
         name: projectName,
@@ -51,8 +59,15 @@ class ProjectService {
         templateName: template.name,
         status: 'creating',
         deployServices: template.deployServices ? JSON.stringify(template.deployServices) : null,
+        envFiles: template.envFiles ? JSON.stringify(template.envFiles) : null,
         imagePath: template.imagePath || null,
         websiteImportAutoPromptSent: null
+      })
+
+      console.log('🔍 Project created with:', {
+        id: project.id,
+        deployServices: project.deployServices,
+        envFiles: project.envFiles
       })
 
       // Now that we have project ID, generate the real path using ID as folder name

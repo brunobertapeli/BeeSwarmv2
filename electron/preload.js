@@ -78,6 +78,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showInFinder: (id) => ipcRenderer.invoke('project:show-in-finder', id),
     saveEnvConfig: (id, envVars) => ipcRenderer.invoke('project:save-env-config', id, envVars),
     getEnvConfig: (id) => ipcRenderer.invoke('project:get-env-config', id),
+    readEnvFiles: (id) => ipcRenderer.invoke('project:read-env-files', id),
+    writeEnvFile: (id, filePath, variables) => ipcRenderer.invoke('project:write-env-file', id, filePath, variables),
     installDependencies: (id) => ipcRenderer.invoke('project:install-dependencies', id),
     saveKanbanState: (id, kanbanState) => ipcRenderer.invoke('project:save-kanban-state', id, kanbanState),
     getKanbanState: (id) => ipcRenderer.invoke('project:get-kanban-state', id),

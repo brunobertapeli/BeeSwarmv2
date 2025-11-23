@@ -19,6 +19,7 @@ export interface Project {
   claudeContext: string | null // Claude context (JSON string with tokens, cost, etc.)
   websiteImportAutoPromptSent: number | null // Timestamp when auto-prompt was sent for website imports
   deployServices: string | null // JSON array of deployment services
+  envFiles: string | null // JSON array of { path, label, description }
   imagePath: string | null // Path to template images
   kanbanState: string | null // JSON string with { enabled, position, size }
   stickyNotesState: string | null // JSON string with sticky notes array
@@ -358,6 +359,12 @@ class DatabaseService {
         this.db.exec('ALTER TABLE projects ADD COLUMN analyticsWidgetState TEXT')
       }
 
+      // Migration 20: Add envFiles column if it doesn't exist
+      const hasEnvFiles = tableInfo.some(col => col.name === 'envFiles')
+      if (!hasEnvFiles) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN envFiles TEXT')
+      }
+
       // Future migrations can be added here
     } catch (error) {
       console.error('❌ Migration failed:', error)
@@ -387,8 +394,8 @@ class DatabaseService {
     }
 
     const sql = `
-      INSERT INTO projects (id, userId, name, path, templateId, templateName, status, isFavorite, configCompleted, envVars, dependenciesInstalled, claudeSessionId, deployServices, imagePath, createdAt, lastOpenedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, userId, name, path, templateId, templateName, status, isFavorite, configCompleted, envVars, dependenciesInstalled, claudeSessionId, deployServices, envFiles, imagePath, createdAt, lastOpenedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
 
     try {
@@ -406,6 +413,7 @@ class DatabaseService {
         newProject.dependenciesInstalled ? 1 : 0,
         newProject.claudeSessionId,
         newProject.deployServices,
+        newProject.envFiles,
         newProject.imagePath,
         newProject.createdAt,
         newProject.lastOpenedAt

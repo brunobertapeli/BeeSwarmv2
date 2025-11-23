@@ -31,6 +31,11 @@ export interface Template {
     description: string
   }>
   deployServices?: string[]
+  envFiles?: Array<{
+    path: string
+    label: string
+    description: string
+  }>
   imagePath?: string
   screenshot?: string
 }

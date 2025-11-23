@@ -12,7 +12,10 @@ import {
   Circle,
   Eye,
   EyeOff,
-  Edit3
+  Edit3,
+  Copy,
+  Plus,
+  Check
 } from 'lucide-react'
 import type { TechConfig } from './TemplateSelector'
 import { useAppStore } from '../store/appStore'
@@ -30,9 +33,10 @@ interface ProjectSettingsProps {
   isSetupMode?: boolean
   requiredTechConfigs?: TechConfig[]
   onSetupComplete?: () => void
-  initialTab?: 'general' | 'apikeys' | 'deployment'
+  initialTab?: 'general' | 'environment' | 'deployment'
   onProjectUpdated?: () => void
   onSelectProject?: (projectId: string) => void
+  deployServices?: string | null // JSON array of deployment services
 }
 
 // Store API key values by key name
@@ -51,7 +55,8 @@ function ProjectSettings({
   onSetupComplete,
   initialTab = 'general',
   onProjectUpdated,
-  onSelectProject
+  onSelectProject,
+  deployServices
 }: ProjectSettingsProps) {
   const { netlifyConnected, setNetlifyConnected, currentProjectId } = useAppStore()
   const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
@@ -61,14 +66,28 @@ function ProjectSettings({
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [apiKeyValues, setApiKeyValues] = useState<ApiKeyValues>({})
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set())
-  const [activeTab, setActiveTab] = useState<'general' | 'apikeys' | 'deployment'>(initialTab)
+  const [activeTab, setActiveTab] = useState<'general' | 'environment' | 'deployment'>(initialTab)
   const [isInstallingDeps, setIsInstallingDeps] = useState(false)
   const [installProgress, setInstallProgress] = useState<string[]>([])
   const [isEditingName, setIsEditingName] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [envFiles, setEnvFiles] = useState<Array<{
+    path: string
+    label: string
+    description: string
+    variables: Record<string, string>
+    exists: boolean
+  }>>([])
+  const [loadingEnvFiles, setLoadingEnvFiles] = useState(false)
+  const [envFileChanges, setEnvFileChanges] = useState<Record<string, Record<string, string>>>({})
+  const [savedEnvFileValues, setSavedEnvFileValues] = useState<Record<string, Record<string, string>>>({})
+  const [visibleEnvVars, setVisibleEnvVars] = useState<Set<string>>(new Set())
+  const [addingVarForFile, setAddingVarForFile] = useState<string | null>(null)
+  const [newVarKey, setNewVarKey] = useState('')
+  const [newVarValue, setNewVarValue] = useState('')
 
   // Track if there are unsaved changes
-  const hasUnsavedChanges = editedName.trim() !== projectName && editedName.trim() !== ''
+  const hasUnsavedChanges = editedName.trim() !== projectName && editedName.trim() !== '' || Object.keys(envFileChanges).length > 0
 
   // Format path to show meaningful parts: ~/.../{last-2-folders}
   const formatPath = (path: string) => {
@@ -104,6 +123,45 @@ function ProjectSettings({
       setActiveTab(initialTab)
     }
   }, [isOpen, initialTab])
+
+  // Load env files when tab is opened
+  useEffect(() => {
+    const loadEnvFiles = async () => {
+      if (!isOpen || isSetupMode || activeTab !== 'environment') {
+        console.log('🔍 Skipping env files load:', { isOpen, isSetupMode, activeTab })
+        return
+      }
+
+      console.log('🔍 Loading env files for project:', projectId)
+      setLoadingEnvFiles(true)
+      try {
+        const result = await window.electronAPI?.projects.readEnvFiles(projectId)
+        console.log('🔍 Env files result:', result)
+
+        if (result?.success && result.envFiles) {
+          console.log('🔍 Env files loaded:', result.envFiles)
+          setEnvFiles(result.envFiles)
+          // Initialize changes object and saved values
+          const initialChanges: Record<string, Record<string, string>> = {}
+          result.envFiles.forEach(file => {
+            initialChanges[file.path] = { ...file.variables }
+          })
+          setEnvFileChanges(initialChanges)
+          setSavedEnvFileValues(initialChanges) // Track what was saved
+          console.log('🔍 Initial changes:', initialChanges)
+        } else {
+          console.log('⚠️ No env files in result or not successful')
+        }
+      } catch (error) {
+        console.error('❌ Failed to load env files:', error)
+        toast.error('Failed to load', 'Could not load environment variables')
+      } finally {
+        setLoadingEnvFiles(false)
+      }
+    }
+
+    loadEnvFiles()
+  }, [isOpen, isSetupMode, activeTab, projectId])
 
   // Handle freeze frame when settings opens/closes
   useEffect(() => {
@@ -141,6 +199,39 @@ function ProjectSettings({
   const setupProgress = totalRequiredKeys > 0 ? (configuredKeys / totalRequiredKeys) * 100 : 100
   const isSetupComplete = setupProgress === 100
 
+  // Calculate how many environment variables need attention (are empty in saved state)
+  const emptyEnvVarsCount = Object.entries(savedEnvFileValues).reduce((total, [_filePath, vars]) => {
+    const emptyCount = Object.values(vars).filter(value => !value || value.trim() === '').length
+    return total + emptyCount
+  }, 0)
+
+  // Parse deployment services from JSON
+  const parsedDeployServices = deployServices ? JSON.parse(deployServices) : []
+
+  // Deployment service configurations
+  const deploymentServiceConfigs: Record<string, {
+    name: string
+    logo: string
+    description: string
+    docUrl?: string
+  }> = {
+    netlify: {
+      name: 'Netlify',
+      logo: '/src/assets/images/netlify.svg',
+      description: 'Deploy with instant rollbacks and automatic HTTPS'
+    },
+    vercel: {
+      name: 'Vercel',
+      logo: '/src/assets/images/vercel.svg',
+      description: 'Deploy with edge functions and instant cache invalidation'
+    },
+    cloudflare: {
+      name: 'Cloudflare Pages',
+      logo: '/src/assets/images/cloudflare.svg',
+      description: 'Deploy with global CDN and Workers'
+    }
+  }
+
   const toggleKeyVisibility = (keyName: string) => {
     setVisibleKeys(prev => {
       const newSet = new Set(prev)
@@ -157,30 +248,69 @@ function ProjectSettings({
     setApiKeyValues(prev => ({ ...prev, [keyName]: value }))
   }
 
-  const handleSaveChanges = async () => {
-    // Handle project rename if name changed
-    if (hasUnsavedChanges) {
-      const result = await window.electronAPI?.projects.rename(projectId, editedName.trim())
-      if (result?.success && result.project) {
-        toast.success('Project renamed', `Project renamed to "${result.project.name}"`)
-        onProjectUpdated?.()
-        setIsEditingName(false)
-      } else if (result && 'reason' in result && result.reason === 'claude_active') {
-        toast.warning(
-          'Cannot rename project',
-          'Claude is currently working on this project. Please wait for Claude to complete or stop the session first.'
-        )
-        setEditedName(projectName)
-        return
-      } else if (result?.error) {
-        toast.error('Rename failed', result.error)
-        setEditedName(projectName)
-        return
+  const toggleEnvVarVisibility = (varKey: string) => {
+    setVisibleEnvVars(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(varKey)) {
+        newSet.delete(varKey)
+      } else {
+        newSet.add(varKey)
       }
-    }
+      return newSet
+    })
+  }
 
-    toast.success('Settings saved', 'Your changes have been applied')
-    onClose()
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    toast.success('Copied', `${label} copied to clipboard`)
+  }
+
+  const handleSaveChanges = async () => {
+    try {
+      // Handle project rename if name changed
+      if (editedName.trim() !== projectName && editedName.trim() !== '') {
+        const result = await window.electronAPI?.projects.rename(projectId, editedName.trim())
+        if (result?.success && result.project) {
+          toast.success('Project renamed', `Project renamed to "${result.project.name}"`)
+          onProjectUpdated?.()
+          setIsEditingName(false)
+        } else if (result && 'reason' in result && result.reason === 'claude_active') {
+          toast.warning(
+            'Cannot rename project',
+            'Claude is currently working on this project. Please wait for Claude to complete or stop the session first.'
+          )
+          setEditedName(projectName)
+          return
+        } else if (result?.error) {
+          toast.error('Rename failed', result.error)
+          setEditedName(projectName)
+          return
+        }
+      }
+
+      // Handle env file changes
+      if (Object.keys(envFileChanges).length > 0) {
+        for (const [filePath, variables] of Object.entries(envFileChanges)) {
+          // Find original file to check if variables changed
+          const originalFile = envFiles.find(f => f.path === filePath)
+          if (originalFile && JSON.stringify(originalFile.variables) !== JSON.stringify(variables)) {
+            const result = await window.electronAPI?.projects.writeEnvFile(projectId, filePath, variables)
+            if (!result?.success) {
+              toast.error('Save failed', `Failed to save ${filePath}`)
+              return
+            }
+          }
+        }
+        // Update saved values after successful save
+        setSavedEnvFileValues({ ...envFileChanges })
+      }
+
+      toast.success('Settings saved', 'Your changes have been applied')
+      onClose()
+    } catch (error) {
+      console.error('Error saving changes:', error)
+      toast.error('Save failed', error instanceof Error ? error.message : 'Unknown error')
+    }
   }
 
   const handleOpenInFinder = async () => {
@@ -321,14 +451,20 @@ function ProjectSettings({
                   General
                 </button>
                 <button
-                  onClick={() => setActiveTab('apikeys')}
-                  className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-all ${
-                    activeTab === 'apikeys'
+                  onClick={() => setActiveTab('environment')}
+                  className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-all flex items-center gap-2 ${
+                    activeTab === 'environment'
                       ? 'border-primary text-white'
                       : 'border-transparent text-gray-500 hover:text-gray-300'
                   }`}
                 >
-                  API Keys
+                  Environment Variables
+                  {emptyEnvVarsCount > 0 && (
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 border border-yellow-500/30 rounded text-[10px] font-semibold text-yellow-400">
+                      <AlertTriangle size={9} />
+                      {emptyEnvVarsCount}
+                    </span>
+                  )}
                 </button>
                 <button
                   onClick={() => setActiveTab('deployment')}
@@ -453,32 +589,35 @@ function ProjectSettings({
               </>
             )}
 
-            {/* API Keys Tab (or Setup Mode) */}
-            {(isSetupMode || activeTab === 'apikeys') && (
+            {/* Environment Variables Tab (or Setup Mode with API Keys) */}
+            {(isSetupMode || activeTab === 'environment') && (
               <section className={isSetupMode ? 'ring-2 ring-primary/30 rounded-lg p-4 -m-4' : ''}>
                 <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                   <Key size={14} className="text-primary" />
-                  API Keys Configuration
+                  {isSetupMode ? 'API Keys Configuration' : 'Environment Variables'}
                   {isSetupMode && <span className="text-xs text-primary font-normal">(Required)</span>}
                 </h3>
 
-                {isSetupMode && requiredTechConfigs.length > 0 && (
-                  <div className="mb-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle size={14} className="text-primary flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-xs font-medium text-white mb-1">Complete Service Configuration</p>
-                        <p className="text-[11px] text-gray-400">
-                          Configure the API keys below for each service required by this template.
-                        </p>
+                {/* Setup Mode: Show API Keys Configuration */}
+                {isSetupMode && (
+                  <>
+                    {requiredTechConfigs.length > 0 && (
+                      <div className="mb-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle size={14} className="text-primary flex-shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="text-xs font-medium text-white mb-1">Complete Service Configuration</p>
+                            <p className="text-[11px] text-gray-400">
+                              Configure the API keys below for each service required by this template.
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                )}
+                    )}
 
-                <div className="space-y-5">
-                  {requiredTechConfigs.length > 0 ? (
-                    requiredTechConfigs.map((tech) => (
+                    <div className="space-y-5">
+                      {requiredTechConfigs.length > 0 ? (
+                        requiredTechConfigs.map((tech) => (
                       <div key={tech.name} className="space-y-3">
                         {/* Tech Header */}
                         <div className="flex items-center gap-2.5">
@@ -542,12 +681,288 @@ function ProjectSettings({
                         </div>
                       </div>
                     ))
-                  ) : (
-                    <p className="text-xs text-gray-500 text-center py-8">
-                      No API keys required for this project template.
+                      ) : (
+                        <p className="text-xs text-gray-500 text-center py-8">
+                          No API keys required for this project template.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Normal Mode: Show Environment Variables from .env files */}
+                {!isSetupMode && (
+                  <div className="space-y-4">
+                    <p className="text-xs text-gray-500 mb-4">
+                      Manage environment variables for your project. Changes will be saved to your .env files.
                     </p>
-                  )}
-                </div>
+
+                    {loadingEnvFiles ? (
+                      <p className="text-xs text-gray-400 text-center py-8">
+                        Loading environment variables...
+                      </p>
+                    ) : envFiles.length === 0 ? (
+                      <p className="text-xs text-gray-500 text-center py-8">
+                        No environment files configured for this project.
+                      </p>
+                    ) : (
+                      <div className="space-y-6">
+                        {envFiles.map((envFile) => (
+                          <div key={envFile.path} className="space-y-3">
+                            {/* File Header */}
+                            <div className="flex items-start gap-2">
+                              <div className="flex-1">
+                                <h4 className="text-sm font-semibold text-white">{envFile.label}</h4>
+                                <p className="text-[10px] text-gray-500 mt-0.5">{envFile.description}</p>
+                                <p className="text-[10px] text-gray-600 font-mono mt-1">{envFile.path}</p>
+                              </div>
+                              {!envFile.exists && (
+                                <span className="text-[10px] px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">
+                                  File will be created
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Variables - Split into Required (empty) and Configured */}
+                            <div className="pl-0 space-y-4">
+                              {(() => {
+                                const allVars = Object.entries(envFileChanges[envFile.path] || {})
+                                const savedVars = savedEnvFileValues[envFile.path] || {}
+                                // Check against SAVED values, not current input
+                                const emptyVars = allVars.filter(([key, _]) => !savedVars[key] || savedVars[key].trim() === '')
+                                const configuredVars = allVars.filter(([key, _]) => savedVars[key] && savedVars[key].trim() !== '')
+
+                                return (
+                                  <>
+                                    {/* Empty/Required Variables - Highlighted */}
+                                    {emptyVars.length > 0 && (
+                                      <div className="space-y-2">
+                                        <div className="flex items-center gap-2">
+                                          <AlertTriangle size={12} className="text-yellow-500" />
+                                          <h5 className="text-[11px] font-semibold text-yellow-500 uppercase tracking-wide">
+                                            Action Required ({emptyVars.length})
+                                          </h5>
+                                        </div>
+                                        <div className="space-y-2">
+                                          {emptyVars.map(([key, value]) => {
+                                            const varId = `${envFile.path}:${key}`
+                                            const isVisible = visibleEnvVars.has(varId)
+
+                                            return (
+                                              <div key={key} className="flex items-center gap-2 group">
+                                                <div className="flex-1 flex items-center gap-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2.5 font-mono text-xs">
+                                                  <span className="text-yellow-400 font-semibold">{key}</span>
+                                                  <span className="text-gray-600">=</span>
+                                                  <input
+                                                    type={isVisible ? 'text' : 'password'}
+                                                    value={value}
+                                                    onChange={(e) => {
+                                                      setEnvFileChanges(prev => ({
+                                                        ...prev,
+                                                        [envFile.path]: {
+                                                          ...prev[envFile.path],
+                                                          [key]: e.target.value
+                                                        }
+                                                      }))
+                                                    }}
+                                                    placeholder={`Add your ${key.toLowerCase().replace(/_/g, ' ')} here`}
+                                                    className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none min-w-0"
+                                                  />
+                                                </div>
+                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                  <button
+                                                    onClick={() => toggleEnvVarVisibility(varId)}
+                                                    className="p-1.5 hover:bg-dark-bg/50 rounded transition-all"
+                                                    title={isVisible ? 'Hide value' : 'Show value'}
+                                                  >
+                                                    {isVisible ? (
+                                                      <EyeOff size={12} className="text-gray-400" />
+                                                    ) : (
+                                                      <Eye size={12} className="text-gray-400" />
+                                                    )}
+                                                  </button>
+                                                  {value && (
+                                                    <button
+                                                      onClick={() => copyToClipboard(value, key)}
+                                                      className="p-1.5 hover:bg-dark-bg/50 rounded transition-all"
+                                                      title="Copy value"
+                                                    >
+                                                      <Copy size={12} className="text-gray-400" />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Configured Variables */}
+                                    {configuredVars.length > 0 && (
+                                      <div className="space-y-2">
+                                        {emptyVars.length > 0 && (
+                                          <div className="flex items-center gap-2">
+                                            <CheckCircle2 size={12} className="text-primary" />
+                                            <h5 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                                              Configured ({configuredVars.length})
+                                            </h5>
+                                          </div>
+                                        )}
+                                        <div className="space-y-2">
+                                          {configuredVars.map(([key, value]) => {
+                                            const varId = `${envFile.path}:${key}`
+                                            const isVisible = visibleEnvVars.has(varId)
+
+                                            return (
+                                              <div key={key} className="flex items-center gap-2 group">
+                                                <div className="flex-1 flex items-center gap-1.5 bg-dark-bg/30 border border-dark-border/50 rounded-lg px-3 py-2 font-mono text-xs hover:border-dark-border transition-colors">
+                                                  <span className="text-primary font-semibold">{key}</span>
+                                                  <span className="text-gray-600">=</span>
+                                                  <input
+                                                    type={isVisible ? 'text' : 'password'}
+                                                    value={value}
+                                                    onChange={(e) => {
+                                                      setEnvFileChanges(prev => ({
+                                                        ...prev,
+                                                        [envFile.path]: {
+                                                          ...prev[envFile.path],
+                                                          [key]: e.target.value
+                                                        }
+                                                      }))
+                                                    }}
+                                                    placeholder={`Add your ${key.toLowerCase().replace(/_/g, ' ')} here`}
+                                                    className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none min-w-0"
+                                                  />
+                                                </div>
+                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                  <button
+                                                    onClick={() => toggleEnvVarVisibility(varId)}
+                                                    className="p-1.5 hover:bg-dark-bg/50 rounded transition-all"
+                                                    title={isVisible ? 'Hide value' : 'Show value'}
+                                                  >
+                                                    {isVisible ? (
+                                                      <EyeOff size={12} className="text-gray-400" />
+                                                    ) : (
+                                                      <Eye size={12} className="text-gray-400" />
+                                                    )}
+                                                  </button>
+                                                  <button
+                                                    onClick={() => copyToClipboard(value, key)}
+                                                    className="p-1.5 hover:bg-dark-bg/50 rounded transition-all"
+                                                    title="Copy value"
+                                                  >
+                                                    <Copy size={12} className="text-gray-400" />
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {allVars.length === 0 && (
+                                      <p className="text-[11px] text-gray-600 italic">No variables defined</p>
+                                    )}
+                                  </>
+                                )
+                              })()}
+
+                              {/* Add new variable - Inline form */}
+                              {addingVarForFile === envFile.path ? (
+                                <div className="space-y-2 pt-2 border-t border-dark-border/30">
+                                  <p className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">New Variable</p>
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 flex items-center gap-1.5 bg-dark-bg/50 border border-primary/30 rounded-lg px-3 py-2 font-mono text-xs">
+                                      <input
+                                        type="text"
+                                        value={newVarKey}
+                                        onChange={(e) => setNewVarKey(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                                        placeholder="VARIABLE_NAME"
+                                        className="w-32 bg-transparent text-primary font-semibold placeholder-gray-600 outline-none"
+                                        autoFocus
+                                      />
+                                      <span className="text-gray-600">=</span>
+                                      <input
+                                        type="text"
+                                        value={newVarValue}
+                                        onChange={(e) => setNewVarValue(e.target.value)}
+                                        placeholder="value"
+                                        className="flex-1 bg-transparent text-white placeholder-gray-600 outline-none min-w-0"
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' && newVarKey.trim()) {
+                                            setEnvFileChanges(prev => ({
+                                              ...prev,
+                                              [envFile.path]: {
+                                                ...prev[envFile.path],
+                                                [newVarKey.trim()]: newVarValue
+                                              }
+                                            }))
+                                            setNewVarKey('')
+                                            setNewVarValue('')
+                                            setAddingVarForFile(null)
+                                          } else if (e.key === 'Escape') {
+                                            setNewVarKey('')
+                                            setNewVarValue('')
+                                            setAddingVarForFile(null)
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        if (newVarKey.trim()) {
+                                          setEnvFileChanges(prev => ({
+                                            ...prev,
+                                            [envFile.path]: {
+                                              ...prev[envFile.path],
+                                              [newVarKey.trim()]: newVarValue
+                                            }
+                                          }))
+                                          setNewVarKey('')
+                                          setNewVarValue('')
+                                          setAddingVarForFile(null)
+                                        }
+                                      }}
+                                      disabled={!newVarKey.trim()}
+                                      className="p-1.5 bg-primary hover:bg-primary-dark disabled:bg-dark-bg/50 disabled:cursor-not-allowed rounded transition-all"
+                                      title="Add variable"
+                                    >
+                                      <Check size={12} className="text-white" />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setNewVarKey('')
+                                        setNewVarValue('')
+                                        setAddingVarForFile(null)
+                                      }}
+                                      className="p-1.5 hover:bg-dark-bg/50 rounded transition-all"
+                                      title="Cancel"
+                                    >
+                                      <X size={12} className="text-gray-500" />
+                                    </button>
+                                  </div>
+                                  <p className="text-[10px] text-gray-600">
+                                    Press <kbd className="px-1 py-0.5 bg-dark-bg/50 border border-dark-border/50 rounded text-[9px]">Enter</kbd> to add or <kbd className="px-1 py-0.5 bg-dark-bg/50 border border-dark-border/50 rounded text-[9px]">Esc</kbd> to cancel
+                                  </p>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setAddingVarForFile(envFile.path)}
+                                  className="flex items-center gap-1.5 text-[11px] text-primary hover:text-primary-dark transition-colors group"
+                                >
+                                  <Plus size={12} className="group-hover:scale-110 transition-transform" />
+                                  Add Variable
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </section>
             )}
 
@@ -556,40 +971,75 @@ function ProjectSettings({
               <section>
                 <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                   <Rocket size={14} className="text-primary" />
-                  Deployment
+                  Deployment Services
                 </h3>
-                <div className="space-y-2">
-                  <button
-                    onClick={handleToggleNetlify}
-                    className="w-full flex items-center justify-between p-3 bg-dark-bg/30 border border-dark-border/50 hover:border-dark-border rounded-lg transition-all group"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded flex items-center justify-center bg-dark-bg/50">
-                        <img
-                          src="/src/assets/images/netlify.svg"
-                          alt="Netlify"
-                          className="w-5 h-5"
-                          style={{
-                            filter: netlifyConnected ? 'none' : 'grayscale(100%) brightness(0.5)'
-                          }}
-                        />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-xs font-medium text-white">Netlify</p>
-                        <p className="text-[10px] text-gray-500">
-                          {netlifyConnected ? 'Connected' : 'Not connected'}
-                        </p>
-                      </div>
-                    </div>
-                    <span className={`text-[10px] font-medium px-2 py-1 rounded ${
-                      netlifyConnected
-                        ? 'bg-primary/20 text-primary'
-                        : 'bg-gray-700/50 text-gray-500'
-                    }`}>
-                      {netlifyConnected ? 'Connected' : 'Connect'}
-                    </span>
-                  </button>
-                </div>
+
+                {parsedDeployServices.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Info size={16} className="text-gray-600 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">
+                      No deployment services configured for this template.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {parsedDeployServices.map((serviceId: string) => {
+                      const config = deploymentServiceConfigs[serviceId]
+                      if (!config) return null
+
+                      const isConnected = serviceId === 'netlify' ? netlifyConnected : false
+                      const handleClick = serviceId === 'netlify' ? handleToggleNetlify : () => {}
+
+                      return (
+                        <button
+                          key={serviceId}
+                          onClick={handleClick}
+                          className="w-full flex items-center justify-between p-3 bg-dark-bg/30 border border-dark-border/50 hover:border-dark-border rounded-lg transition-all group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded flex items-center justify-center bg-dark-bg/50">
+                              <img
+                                src={config.logo}
+                                alt={config.name}
+                                className="w-5 h-5"
+                                style={{
+                                  filter: isConnected ? 'none' : 'grayscale(100%) brightness(0.5)'
+                                }}
+                              />
+                            </div>
+                            <div className="text-left">
+                              <p className="text-xs font-medium text-white">{config.name}</p>
+                              <p className="text-[10px] text-gray-500">
+                                {isConnected ? 'Connected' : config.description}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {config.docUrl && (
+                              <a
+                                href={config.docUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="p-1.5 hover:bg-dark-bg/50 rounded transition-all"
+                                title="View documentation"
+                              >
+                                <ExternalLink size={12} className="text-gray-500" />
+                              </a>
+                            )}
+                            <span className={`text-[10px] font-medium px-2 py-1 rounded ${
+                              isConnected
+                                ? 'bg-primary/20 text-primary'
+                                : 'bg-gray-700/50 text-gray-500'
+                            }`}>
+                              {isConnected ? 'Connected' : 'Connect'}
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </section>
             )}
           </div>
