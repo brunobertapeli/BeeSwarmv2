@@ -86,6 +86,7 @@ IMPORTANT: Always use the TodoWrite tool to plan and track tasks throughout the 
 # CODEDECK Internal Systems - **VERY VERY IMPORTANT**
 
 <codedeck_image_system>
+
 ## CRITICAL: CodeDeck's Mandatory Image Management System
 
 CodeDeck has a mandatory image management system that requires exact compliance with the following workflow:
@@ -94,25 +95,27 @@ CodeDeck has a mandatory image management system that requires exact compliance 
 - CodeDeck is a platform where **non-technical users** can build software without coding knowledge
 - CodeDeck includes an automated image management system that operates after each development cycle:
   - User request → Claude response → commit → dev server restart
-  - CodeDeck's local Node.js server automatically detects new images and uses Canvas to generate placeholders
+  - CodeDeck's local Node.js server automatically detects new images in `manifest.json` and uses Canvas to generate placeholders
 
 ### When to Use This System
 Use CodeDeck's image management system whenever the user requests:
 - Adding a NEW image
 - Resizing/redimensioning an existing image
-- Any other operation that you judge should trigger CodeDeck image placeholder generation
+- Any other operation that requires image placeholder generation
 
 ### Required Steps (Follow Exactly)
 
 1. **Choose a descriptive filename**
-   - Examples: `hero.png`, `avatar.png`
+   - Examples: `hero.png`, `team-photo.png`, `product-thumbnail.jpg`
+   - Use semantic names that describe the image purpose
 
 2. **Add the image tag to the codebase**
-   - Place it wherever the image should appear in the code
+   - Place `<img>` tag wherever the image should appear in the code
+   - Use the chosen filename in the `src` attribute
 
 3. **Add an entry to `src/frontend/public/manifest.json`**
    
-   Use this exact format:
+   Use this **exact format**:
    ```json
    {
      "name": "filename.png",
@@ -121,21 +124,60 @@ Use CodeDeck's image management system whenever the user requests:
      "status": "pending"
    }
    ```
+   
+   **Example:**
+   ```json
+   {
+     "name": "hero.png",
+     "path": "images/hero.png",
+     "dimensions": "1200x600",
+     "status": "pending"
+   }
+   ```
 
-4. **Inform the user**
-   - Explain that you've added a PLACEHOLDER image
-   - Tell them they can use **CodeDeck Edit Mode** to replace it by:
-     - Uploading an image from their computer, OR
-     - Using AI to generate an image
+4. **Inform the user with this exact format:**
+   
+   ```
+   I've added [NUMBER] placeholder image(s) to your project. After the server restarts, use <editmode>Edit Mode</editmode> to replace them by uploading images from your computer or generating new ones with AI.
+   ```
+   
+   **Examples:**
+   - `I've added 1 placeholder image to your project. After the server restarts, use <editmode>Edit Mode</editmode> to replace it by uploading an image from your computer or generating a new one with AI.`
+   - `I've added 3 placeholder images to your project. After the server restarts, use <editmode>Edit Mode</editmode> to replace them by uploading images from your computer or generating new ones with AI.`
 
 ### Special Case: Resizing Images
-**IMPORTANT:** When the user asks to resize an existing image:
-- DELETE the old image entry from manifest.json (IF EXISTS)
-- ADD a new entry with the updated dimensions
-- This triggers CodeDeck's image management system to regenerate the placeholder
 
-### Critical Warning
-**Failure to follow this convention breaks CodeDeck's image management system**
+**IMPORTANT:** When the user asks to resize an existing image:
+
+1. **DELETE** the old image entry from `manifest.json` (if it exists)
+2. **ADD** a new entry with the updated dimensions
+3. This triggers CodeDeck's image management system to regenerate the placeholder
+
+**Example:**
+```json
+// Old entry (DELETE THIS)
+{
+  "name": "hero.png",
+  "path": "images/hero.png",
+  "dimensions": "800x400",
+  "status": "pending"
+}
+
+// New entry (ADD THIS)
+{
+  "name": "hero.png",
+  "path": "images/hero.png",
+  "dimensions": "1200x600",
+  "status": "pending"
+}
+```
+
+### Critical Rules
+
+- **Always wrap "Edit Mode" in `<editmode>` tags** to enable the click event in CodeDeck
+- **Never use placeholder text in src attributes** - use the actual filename
+- **Always use semantic, descriptive filenames** - avoid generic names like `image1.png`
+- **Failure to follow this convention breaks CodeDeck's image management system**
 
 </codedeck_image_system>
 

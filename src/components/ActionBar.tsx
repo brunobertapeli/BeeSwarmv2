@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Image as ImageIcon,
   Settings,
@@ -39,11 +39,13 @@ interface ActionBarProps {
   onChatClick?: () => void
   onImagesClick?: () => void
   onSettingsClick?: () => void
+  onOpenSettings?: (tab: 'general' | 'environment' | 'deployment') => void // Open settings to specific tab
   onConsoleClick?: () => void
   autoOpen?: boolean
   autoPinned?: boolean
   autoMessage?: string
   onAutoMessageSent?: () => void
+  onRefreshEnvCount?: () => void // Callback to allow parent to trigger env count refresh
 }
 
 type ViewMode = 'desktop' | 'mobile'
@@ -70,14 +72,16 @@ function ActionBar({
   onChatClick,
   onImagesClick,
   onSettingsClick,
+  onOpenSettings,
   onConsoleClick,
   autoOpen = false,
   autoPinned = false,
   autoMessage,
-  onAutoMessageSent
+  onAutoMessageSent,
+  onRefreshEnvCount
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, modalFreezeActive } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, modalFreezeActive, setStatusSheetExpanded } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
@@ -96,10 +100,34 @@ function ActionBar({
   const [planModeToggle, setPlanModeToggle] = useState(false) // Only for next message, resets after send
   const [attachments, setAttachments] = useState<Array<{id: string, type: 'image' | 'file', name: string, preview?: string}>>([])
   const [showScreenshotModal, setShowScreenshotModal] = useState(false)
+  const [emptyEnvVarsCount, setEmptyEnvVarsCount] = useState(0)
   const [screenshotData, setScreenshotData] = useState<string | null>(null)
   const textareaRef = useRef<ContentEditableInputRef>(null)
   const actionBarRef = useRef<HTMLDivElement>(null)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Function to fetch and calculate empty env vars count
+  const fetchEmptyEnvVarsCount = useCallback(async () => {
+    if (!projectId || !window.electronAPI?.projects) return
+
+    try {
+      const result = await window.electronAPI.projects.readEnvFiles(projectId)
+
+      if (result?.success && result.envFiles) {
+        // Calculate empty vars count (same logic as ProjectSettings)
+        const emptyCount = result.envFiles.reduce((total: number, envFile: any) => {
+          const emptyVarsInFile = Object.values(envFile.variables).filter(
+            (value: any) => !value || value.trim() === ''
+          ).length
+          return total + emptyVarsInFile
+        }, 0)
+
+        setEmptyEnvVarsCount(emptyCount)
+      }
+    } catch (error) {
+      console.error('Failed to fetch env vars count:', error)
+    }
+  }, [projectId])
   const plusMenuRef = useRef<HTMLDivElement>(null)
   const tweakMenuRef = useRef<HTMLDivElement>(null)
   const autoMessageSentRef = useRef(false) // Track if auto-message was already sent
@@ -129,6 +157,19 @@ function ActionBar({
       }
     })
   }, [])
+
+  // Load empty env vars count on mount and when projectId changes
+  useEffect(() => {
+    fetchEmptyEnvVarsCount()
+  }, [projectId, fetchEmptyEnvVarsCount])
+
+  // Expose refresh function to parent via callback
+  useEffect(() => {
+    if (onRefreshEnvCount) {
+      // Store the function reference so parent can call it
+      (window as any).__refreshEnvCountForActionBar = fetchEmptyEnvVarsCount
+    }
+  }, [onRefreshEnvCount, fetchEmptyEnvVarsCount])
 
   // Listen for Claude status changes and context updates
   useEffect(() => {
@@ -920,6 +961,27 @@ function ActionBar({
               console.error('Failed to send plan approval to Claude:', error)
             }
           }}
+          onXMLTagClick={(tag, content) => {
+            // Handle interactive XML tag clicks
+            if (tag === 'env') {
+              // Open project settings at environment variables tab
+              onOpenSettings?.('environment')
+            } else if (tag === 'editmode') {
+              // Enable edit mode when editmode tag is clicked
+              setEditModeEnabled(true)
+              setStatusSheetExpanded(false)
+              toast.info('Edit Mode activated', 'Press E again to toggle, or click images to replace them')
+            }
+            // Future: Add more tag handlers here (e.g., <docs>, <file>, etc.)
+          }}
+          onXMLTagDetected={(tag, content) => {
+            // Handle XML tag detection (when message appears)
+            if (tag === 'env') {
+              // Refresh env vars count when <env> tag is detected in Claude's message
+              fetchEmptyEnvVarsCount()
+            }
+            // Future: Add more tag detection handlers here
+          }}
         />
 
       {/* Action Bar */}
@@ -1481,6 +1543,11 @@ function ActionBar({
               className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
             >
               <Settings size={15} className="text-gray-400 hover:text-primary transition-colors" />
+              {emptyEnvVarsCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center bg-yellow-500 text-[9px] font-bold text-black rounded-full px-1">
+                  {emptyEnvVarsCount}
+                </span>
+              )}
               <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                 Settings
               </span>

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, 
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { KeywordHighlight } from './KeywordHighlight'
+import { InteractiveXMLHighlight } from './InteractiveXMLHighlight'
 
 // Import workflow icons
 import AnthropicIcon from '../assets/images/anthropic.svg'
@@ -71,6 +72,8 @@ interface StatusSheetProps {
   onStopClick?: () => void
   onApprovePlan?: () => void // Callback when user approves plan
   onRejectPlan?: () => void // Callback when user rejects plan (keep planning)
+  onXMLTagClick?: (tag: string, content: string) => void // Callback when interactive XML tag is clicked
+  onXMLTagDetected?: (tag: string, content: string) => void // Callback when XML tag is detected in message
 }
 
 // Helper: Check if block has a plan waiting for approval
@@ -110,7 +113,7 @@ function safeParse(jsonString: string | null | undefined, fallback: any = null):
   }
 }
 
-function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, onApprovePlan, onRejectPlan }: StatusSheetProps) {
+function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, onApprovePlan, onRejectPlan, onXMLTagClick, onXMLTagDetected }: StatusSheetProps) {
   const { deploymentStatus, showStatusSheet, setShowStatusSheet, viewMode } = useAppStore()
   const { layoutState, statusSheetExpanded, setStatusSheetExpanded, setModalFreezeActive, setModalFreezeImage } = useLayoutStore()
   const [isExpanded, setIsExpanded] = useState(false)
@@ -1470,10 +1473,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                       overflow: 'hidden'
                                                     }}
                                                   >
-                                                    <KeywordHighlight
+                                                    <InteractiveXMLHighlight
                                                       text={message.content}
-                                                      keywords={keywords}
-                                                      blockId={block.id}
+                                                      onXMLClick={onXMLTagClick}
+                                                      onXMLDetected={onXMLTagDetected}
                                                     />
                                                   </div>
                                                   {hasOverflow && (

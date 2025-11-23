@@ -50,7 +50,7 @@ function ProjectView() {
 
   const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState } = useLayoutStore()
   const toast = useToast()
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'apikeys' | 'deployment'>('general')
+  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'environment' | 'deployment'>('general')
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -474,6 +474,11 @@ Please read the manifest to understand what my website is about, then create an 
     setShowProjectSettings(true)
   }
 
+  const handleOpenSettings = (tab: 'general' | 'environment' | 'deployment') => {
+    setSettingsInitialTab(tab)
+    setShowProjectSettings(true)
+  }
+
   const handleSetupComplete = () => {
     // Mark setup as complete
     setProjectSetupMode(false)
@@ -795,11 +800,13 @@ Please read the manifest to understand what my website is about, then create an 
               onChatClick={handleChatClick}
               onImagesClick={handleImagesClick}
               onSettingsClick={handleSettingsClick}
+              onOpenSettings={handleOpenSettings}
               onConsoleClick={handleConsoleClick}
               autoOpen={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
               autoPinned={websiteImport.isWebsiteImport && websiteImport.isFirstOpen}
               autoMessage={websiteImportPrompt}
               onAutoMessageSent={handleWebsiteImportPromptSent}
+              onRefreshEnvCount={() => {}}
             />
           </div>
         </div>
@@ -830,6 +837,10 @@ Please read the manifest to understand what my website is about, then create an 
           // Only allow closing if not in setup mode
           if (!isProjectSetupMode) {
             setShowProjectSettings(false)
+            // Refresh env count in ActionBar after settings close
+            if ((window as any).__refreshEnvCountForActionBar) {
+              (window as any).__refreshEnvCountForActionBar()
+            }
           }
         }}
         projectName={currentProject?.name || 'Untitled Project'}
