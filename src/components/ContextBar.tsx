@@ -76,8 +76,8 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
             await window.electronAPI?.preview.hide(activeProjectId)
           }
         }
-      } else {
-        // Closing tooltip - deactivate freeze frame
+      } else if (!showAddendumModal) {
+        // Only deactivate freeze frame if addendum modal is also closed
         setModalFreezeActive(false)
         // Only show browser back if in DEFAULT state
         if (activeProjectId && layoutState === 'DEFAULT') {
@@ -87,7 +87,7 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
     }
 
     handleFreezeFrame()
-  }, [showTooltip, projectId, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
+  }, [showTooltip, showAddendumModal, projectId, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   const handleToggleTooltip = () => {
     setShowTooltip(!showTooltip)
@@ -488,14 +488,12 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999]"
-            onClick={(e) => handleCancelAddendum(e)}
           />
 
           {/* Dialog */}
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4" onClick={(e) => handleCancelAddendum(e)}>
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
             <div
               className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[500px] overflow-hidden relative"
-              onClick={(e) => e.stopPropagation()}
             >
               {/* Background Image */}
               <div
