@@ -86,7 +86,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveStickyNotesState: (id, stickyNotesState) => ipcRenderer.invoke('project:save-sticky-notes-state', id, stickyNotesState),
     getStickyNotesState: (id) => ipcRenderer.invoke('project:get-sticky-notes-state', id),
     saveAnalyticsWidgetState: (id, widgetState) => ipcRenderer.invoke('project:save-analytics-widget-state', id, widgetState),
-    getAnalyticsWidgetState: (id) => ipcRenderer.invoke('project:get-analytics-widget-state', id)
+    getAnalyticsWidgetState: (id) => ipcRenderer.invoke('project:get-analytics-widget-state', id),
+    saveProjectAssetsWidgetState: (id, widgetState) => ipcRenderer.invoke('project:save-project-assets-widget-state', id, widgetState),
+    getProjectAssetsWidgetState: (id) => ipcRenderer.invoke('project:get-project-assets-widget-state', id),
+    getAssetsStructure: (id) => ipcRenderer.invoke('project:get-assets-structure', id)
   },
 
   // Listen for dependency install progress
@@ -433,12 +436,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File methods
   files: {
     replaceTextInProject: (projectId, originalText, newText) => ipcRenderer.invoke('files:replace-text-in-project', projectId, originalText, newText),
-    replaceTextBySelector: (projectId, elementInfo, originalText, newText) => ipcRenderer.invoke('files:replace-text-by-selector', projectId, elementInfo, originalText, newText)
+    replaceTextBySelector: (projectId, elementInfo, originalText, newText) => ipcRenderer.invoke('files:replace-text-by-selector', projectId, elementInfo, originalText, newText),
+    readFileAsBase64: (filePath) => ipcRenderer.invoke('files:read-as-base64', filePath),
+    saveBase64Image: (filePath, base64Data) => ipcRenderer.invoke('files:save-base64-image', filePath, base64Data)
   },
 
   // Analytics methods
   analytics: {
     getData: (projectId, timeRange) => ipcRenderer.invoke('analytics:get-data', projectId, timeRange),
     getActiveUsers: (projectId) => ipcRenderer.invoke('analytics:get-active-users', projectId)
+  },
+
+  // Shell methods
+  shell: {
+    openPath: (path) => ipcRenderer.invoke('shell:open-path', path),
+    showItemInFolder: (path) => ipcRenderer.invoke('shell:show-item-in-folder', path)
   }
 })

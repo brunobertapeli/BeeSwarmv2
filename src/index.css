@@ -343,3 +343,12 @@ body {
     -webkit-transform: scaleY(1.0);
   }
 }
+
+/* Fabric.js Canvas Container - ensure it fills parent */
+.canvas-container {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}

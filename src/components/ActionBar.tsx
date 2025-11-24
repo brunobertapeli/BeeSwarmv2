@@ -20,7 +20,8 @@ import {
   Kanban,
   BarChart3,
   LayoutGrid,
-  Camera
+  Camera,
+  FolderOpen
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore, type DeploymentStatus } from '../store/appStore'
@@ -81,7 +82,7 @@ function ActionBar({
   onRefreshEnvCount
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, modalFreezeActive, setStatusSheetExpanded } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, modalFreezeActive, setStatusSheetExpanded } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
@@ -342,11 +343,19 @@ function ActionBar({
           toggleAnalytics()
         }
       }
+
+      // F - Toggle Project Assets Widget (only in TOOLS mode, and not when modal is open)
+      if (e.key.toLowerCase() === 'f' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+        if (layoutState === 'TOOLS') {
+          e.preventDefault()
+          toggleProjectAssets()
+        }
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setEditModeEnabled, modalFreezeActive]) // Re-run when modal state changes
+  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setEditModeEnabled, modalFreezeActive]) // Re-run when modal state changes
 
   // Listen for global shortcuts from Electron main process
   useEffect(() => {
@@ -744,6 +753,18 @@ function ActionBar({
     toast.info(
       newState ? 'Analytics Enabled' : 'Analytics Disabled',
       newState ? 'Analytics widget shown' : 'Analytics widget hidden'
+    )
+  }
+
+  const toggleProjectAssets = () => {
+    // Only allow in TOOLS mode
+    if (layoutState !== 'TOOLS') return
+
+    const newState = !projectAssetsWidgetEnabled
+    setProjectAssetsWidgetEnabled(newState)
+    toast.info(
+      newState ? 'Project Assets Enabled' : 'Project Assets Disabled',
+      newState ? 'Project Assets widget shown' : 'Project Assets widget hidden'
     )
   }
 
@@ -1445,6 +1466,27 @@ function ActionBar({
                       />
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle Analytics (A)
+                      </span>
+                    </motion.button>
+
+                    <motion.button
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2, delay: 0.25 }}
+                      onClick={toggleProjectAssets}
+                      className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
+                    >
+                      <FolderOpen
+                        size={15}
+                        className={`transition-colors ${
+                          projectAssetsWidgetEnabled
+                            ? 'text-orange-500'
+                            : 'text-gray-400 hover:text-orange-400'
+                        }`}
+                      />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                        Toggle Project Assets (F)
                       </span>
                     </motion.button>
                   </motion.div>

@@ -22,7 +22,7 @@ class PlaceholderImageService {
   /**
    * Generate placeholder images from manifest.json in a project
    * @param projectPath - Absolute path to project directory
-   * @param imagesPath - Relative path to images directory (e.g., "frontend/public", "public/images")
+   * @param imagesPath - Relative path to images directory (e.g., "frontend/public/assets/images")
    * @returns Number of placeholders generated
    */
   async generatePlaceholders(projectPath: string, imagesPath?: string): Promise<number> {
@@ -45,32 +45,8 @@ class PlaceholderImageService {
           return 0;
         }
       } else {
-        // Fallback: Look for manifest.json in common locations
-        const manifestPaths = [
-          path.join(projectPath, 'public', 'images', 'manifest.json'),
-          path.join(projectPath, 'frontend', 'public', 'images', 'manifest.json'),
-          path.join(projectPath, 'client', 'public', 'images', 'manifest.json'),
-          path.join(projectPath, 'src', 'assets', 'images', 'manifest.json'),
-          path.join(projectPath, 'images', 'manifest.json'),
-        ];
-
-        // Find the first manifest that exists
-        for (const candidatePath of manifestPaths) {
-          try {
-            await fs.access(candidatePath);
-            manifestPath = candidatePath;
-            manifestDir = path.dirname(candidatePath);
-            console.log('✅ [PlaceholderImageService] Found manifest at:', manifestPath);
-            break;
-          } catch {
-            // File doesn't exist, continue searching
-          }
-        }
-
-        if (!manifestPath || !manifestDir) {
-          console.log('ℹ️ [PlaceholderImageService] No manifest.json found, skipping placeholder generation');
-          return 0;
-        }
+        console.log('⚠️ [PlaceholderImageService] No imagesPath provided, skipping placeholder generation');
+        return 0;
       }
 
       // Read and parse manifest

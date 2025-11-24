@@ -18,6 +18,7 @@ import HelpChat from './HelpChat'
 import KanbanWidget from './KanbanWidget'
 import StickyNoteWidget from './StickyNoteWidget'
 import AnalyticsWidget from './AnalyticsWidget'
+import ProjectAssetsWidget from './ProjectAssetsWidget'
 import { ModalPortal } from './ModalPortal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
@@ -48,7 +49,7 @@ function ProjectView() {
     setSelectedDevice,
   } = useAppStore()
 
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState } = useLayoutStore()
   const toast = useToast()
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'environment' | 'deployment'>('general')
   const [projects, setProjects] = useState<Project[]>([])
@@ -141,8 +142,9 @@ function ProjectView() {
       loadKanbanState(currentProjectId)
       loadStickyNotesState(currentProjectId)
       loadAnalyticsWidgetState(currentProjectId)
+      loadProjectAssetsWidgetState(currentProjectId)
     }
-  }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState])
+  }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState, loadProjectAssetsWidgetState])
 
   // Handle freeze frame when UserProfile opens/closes
   useEffect(() => {
@@ -817,6 +819,9 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Analytics Widget */}
       {analyticsWidgetEnabled && layoutState === 'TOOLS' && <AnalyticsWidget />}
+
+      {/* Project Assets Widget */}
+      {projectAssetsWidgetEnabled && layoutState === 'TOOLS' && <ProjectAssetsWidget />}
 
       {/* Sticky Notes */}
       {layoutState === 'TOOLS' && stickyNotes.map((note) => (

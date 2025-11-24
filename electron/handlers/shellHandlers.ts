@@ -13,4 +13,25 @@ export function registerShellHandlers(): void {
       throw error;
     }
   });
+
+  // Open path in default application
+  ipcMain.handle('shell:open-path', async (_event, path: string) => {
+    try {
+      const error = await shell.openPath(path)
+      return error || '' // Returns empty string on success, error message on failure
+    } catch (error) {
+      console.error('❌ Error opening path:', error)
+      return error instanceof Error ? error.message : 'Failed to open path'
+    }
+  })
+
+  // Show item in file explorer/finder
+  ipcMain.handle('shell:show-item-in-folder', async (_event, path: string) => {
+    try {
+      shell.showItemInFolder(path)
+    } catch (error) {
+      console.error('❌ Error showing item in folder:', error)
+      throw error
+    }
+  })
 }

@@ -135,6 +135,13 @@ interface LayoutStoreState {
   setAnalyticsWidgetSize: (size: { width: number; height: number }) => void;
   loadAnalyticsWidgetState: (projectId: string) => Promise<void>;
 
+  // Project Assets widget state
+  projectAssetsWidgetEnabled: boolean;
+  setProjectAssetsWidgetEnabled: (enabled: boolean) => void;
+  projectAssetsWidgetPosition: { x: number; y: number };
+  setProjectAssetsWidgetPosition: (position: { x: number; y: number }) => void;
+  loadProjectAssetsWidgetState: (projectId: string) => Promise<void>;
+
   // Helper to check if in specific state
   isState: (state: LayoutState) => boolean;
 
@@ -217,6 +224,25 @@ const debouncedSaveAnalyticsWidgetState = (projectId: string, widgetState: {
   }, 500); // 500ms debounce
 };
 
+// Debounce helper for saving Project Assets widget state
+let saveProjectAssetsTimeout: NodeJS.Timeout | null = null;
+const debouncedSaveProjectAssetsWidgetState = (projectId: string, widgetState: {
+  enabled: boolean;
+  position: { x: number; y: number };
+}) => {
+  if (saveProjectAssetsTimeout) {
+    clearTimeout(saveProjectAssetsTimeout);
+  }
+
+  saveProjectAssetsTimeout = setTimeout(async () => {
+    try {
+      await window.electronAPI?.projects.saveProjectAssetsWidgetState(projectId, widgetState);
+    } catch (error) {
+      console.error('Failed to save Project Assets widget state:', error);
+    }
+  }, 500); // 500ms debounce
+};
+
 export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   // State
   layoutState: 'DEFAULT', // Start in DEFAULT state
@@ -246,6 +272,10 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   analyticsWidgetEnabled: false,
   analyticsWidgetPosition: { x: 940, y: 43 }, // Position next to Kanban
   analyticsWidgetSize: { width: 600, height: 405 },
+
+  // Project Assets widget initial state
+  projectAssetsWidgetEnabled: false,
+  projectAssetsWidgetPosition: { x: 450, y: 250 }, // Center-ish position that's always visible
 
   // Setters
   setLayoutState: (state) => set({ layoutState: state }),
@@ -547,6 +577,56 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         analyticsWidgetEnabled: false,
         analyticsWidgetPosition: { x: 940, y: 43 },
         analyticsWidgetSize: { width: 600, height: 405 }
+      });
+    }
+  },
+
+  // Project Assets widget functions
+  setProjectAssetsWidgetEnabled: (enabled) => {
+    set({ projectAssetsWidgetEnabled: enabled });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveProjectAssetsWidgetState(currentProjectId, {
+        enabled,
+        position: state.projectAssetsWidgetPosition
+      });
+    }
+  },
+
+  setProjectAssetsWidgetPosition: (position) => {
+    set({ projectAssetsWidgetPosition: position });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveProjectAssetsWidgetState(currentProjectId, {
+        enabled: state.projectAssetsWidgetEnabled,
+        position
+      });
+    }
+  },
+
+  loadProjectAssetsWidgetState: async (projectId: string) => {
+    try {
+      const result = await window.electronAPI?.projects.getProjectAssetsWidgetState(projectId);
+      if (result?.success && result.widgetState) {
+        set({
+          projectAssetsWidgetEnabled: result.widgetState.enabled,
+          projectAssetsWidgetPosition: result.widgetState.position
+        });
+      } else {
+        // Reset to defaults if no saved state
+        set({
+          projectAssetsWidgetEnabled: false,
+          projectAssetsWidgetPosition: { x: 450, y: 250 }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load Project Assets widget state:', error);
+      // Reset to defaults on error
+      set({
+        projectAssetsWidgetEnabled: false,
+        projectAssetsWidgetPosition: { x: 450, y: 250 }
       });
     }
   },

@@ -439,6 +439,34 @@ export interface ElectronAPI {
       } | null;
       error?: string;
     }>;
+    saveProjectAssetsWidgetState: (id: string, widgetState: {
+      enabled: boolean;
+      position: { x: number; y: number };
+    }) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    getProjectAssetsWidgetState: (id: string) => Promise<{
+      success: boolean;
+      widgetState?: {
+        enabled: boolean;
+        position: { x: number; y: number };
+      } | null;
+      error?: string;
+    }>;
+    getAssetsStructure: (id: string) => Promise<{
+      success: boolean;
+      assets?: Array<{
+        name: string;
+        type: 'folder' | 'file';
+        children?: any[];
+        fileType?: 'image' | 'audio' | 'font' | 'other';
+        size?: string;
+        dimensions?: string;
+        path?: string;
+      }>;
+      error?: string;
+    }>;
     readEnvFiles: (id: string) => Promise<{
       success: boolean;
       envFiles?: Array<{
@@ -584,6 +612,8 @@ export interface ElectronAPI {
 
   shell: {
     openExternal: (url: string) => Promise<void>
+    openPath: (path: string) => Promise<string>
+    showItemInFolder: (path: string) => Promise<void>
   }
 
   image: {
@@ -989,6 +1019,8 @@ export interface ElectronAPI {
       modifiedFiles?: string[]
       error?: string
     }>
+    readFileAsBase64: (filePath: string) => Promise<string>
+    saveBase64Image: (filePath: string, base64Data: string) => Promise<{ success: boolean; error?: string }>
   }
 
   analytics: {
@@ -1029,6 +1061,7 @@ export interface ElectronAPI {
       error?: string
     }>
   }
+
 }
 
 declare global {

@@ -7,6 +7,9 @@ import { dependencyService } from '../services/DependencyService'
 import { getCurrentUserId, getCurrentUserEmail } from '../main'
 import { requireAuth, validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware'
 import { claudeService } from '../services/ClaudeService'
+import fs from 'fs'
+import path from 'path'
+import sizeOf from 'image-size'
 
 export function registerProjectHandlers() {
   // Create new project from template
@@ -647,6 +650,203 @@ export function registerProjectHandlers() {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get Analytics widget state'
+      }
+    }
+  })
+
+  // Save Project Assets widget state
+  ipcMain.handle('project:save-project-assets-widget-state', async (_event, projectId: string, widgetState: any) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      databaseService.saveProjectAssetsWidgetState(projectId, widgetState)
+
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('❌ Error saving Project Assets widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save Project Assets widget state'
+      }
+    }
+  })
+
+  // Get Project Assets widget state
+  ipcMain.handle('project:get-project-assets-widget-state', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      const widgetState = databaseService.getProjectAssetsWidgetState(projectId)
+
+      return {
+        success: true,
+        widgetState
+      }
+    } catch (error) {
+      console.error('❌ Error getting Project Assets widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Project Assets widget state'
+      }
+    }
+  })
+
+  // Get project assets folder structure
+  ipcMain.handle('project:get-assets-structure', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      const project = databaseService.getProjectById(projectId)
+
+      if (!project) {
+        return {
+          success: false,
+          error: 'Project not found'
+        }
+      }
+
+      // Get imagePath and extract assets folder (go one level up from images)
+      if (!project.imagePath) {
+        return {
+          success: true,
+          assets: [] // No assets path configured
+        }
+      }
+
+      // imagePath is like "frontend/public/assets/images"
+      // We want "frontend/public/assets"
+      const assetsPath = path.join(project.path, path.dirname(project.imagePath))
+
+      // Check if assets folder exists
+      if (!fs.existsSync(assetsPath)) {
+        return {
+          success: true,
+          assets: [] // Assets folder doesn't exist
+        }
+      }
+
+      // Recursively read folder structure
+      const readFolderStructure = (folderPath: string): any[] => {
+        try {
+          const items = fs.readdirSync(folderPath, { withFileTypes: true })
+          const result: any[] = []
+
+          for (const item of items) {
+            // Skip hidden files, node_modules, and manifest.json
+            if (item.name.startsWith('.') || item.name === 'node_modules' || item.name === 'manifest.json') {
+              continue
+            }
+
+            const itemPath = path.join(folderPath, item.name)
+            const relativePath = path.relative(project.path, itemPath)
+
+            if (item.isDirectory()) {
+              // It's a folder
+              const children = readFolderStructure(itemPath)
+              result.push({
+                name: item.name,
+                type: 'folder',
+                children,
+                path: itemPath, // Full absolute path for folder operations
+                relativePath // Relative path from project root
+              })
+            } else {
+              // It's a file
+              const stats = fs.statSync(itemPath)
+              const ext = path.extname(item.name).toLowerCase()
+
+              // Determine file type
+              let fileType = 'other'
+              if (['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico'].includes(ext)) {
+                fileType = 'image'
+              } else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(ext)) {
+                fileType = 'audio'
+              } else if (['.woff', '.woff2', '.ttf', '.otf', '.eot'].includes(ext)) {
+                fileType = 'font'
+              }
+
+              // Format file size
+              const formatSize = (bytes: number): string => {
+                if (bytes < 1024) return `${bytes} B`
+                if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+                return `${Math.round(bytes / (1024 * 1024))} MB`
+              }
+
+              // Get image dimensions if it's an image
+              let dimensions: string | undefined
+              if (fileType === 'image') {
+                try {
+                  // Read file as buffer for image-size
+                  const buffer = fs.readFileSync(itemPath)
+                  const size = sizeOf(buffer)
+                  if (size.width && size.height) {
+                    dimensions = `${size.width}x${size.height}`
+                  }
+                } catch (error) {
+                  // Silently ignore errors reading dimensions
+                  console.log(`⚠️ Could not read dimensions for ${item.name}`)
+                }
+              }
+
+              result.push({
+                name: item.name,
+                type: 'file',
+                fileType,
+                size: formatSize(stats.size),
+                dimensions,
+                path: itemPath, // Full absolute path for file operations
+                relativePath // Relative path from project root
+              })
+            }
+          }
+
+          return result
+        } catch (error) {
+          console.error('Error reading folder:', folderPath, error)
+          return []
+        }
+      }
+
+      const assets = readFolderStructure(assetsPath)
+
+      return {
+        success: true,
+        assets
+      }
+    } catch (error) {
+      console.error('❌ Error getting assets structure:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get assets structure'
       }
     }
   })

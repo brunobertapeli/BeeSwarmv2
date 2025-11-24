@@ -363,3 +363,41 @@ function replaceTextInElement(
 function escapeRegExp(string: string): string {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+/**
+ * Read file as base64
+ */
+ipcMain.handle('files:read-as-base64', async (_event, filePath: string) => {
+  try {
+    const buffer = await fs.readFile(filePath);
+    return buffer.toString('base64');
+  } catch (error) {
+    console.error('❌ Error reading file as base64:', error);
+    throw error;
+  }
+});
+
+/**
+ * Save base64 image to file
+ */
+ipcMain.handle('files:save-base64-image', async (_event, filePath: string, base64Data: string) => {
+  try {
+    console.log('💾 [FileHandlers] Saving image to:', filePath);
+
+    // Remove data URL prefix if present (e.g., "data:image/png;base64,")
+    const base64Content = base64Data.replace(/^data:image\/\w+;base64,/, '');
+
+    // Convert base64 to buffer and save
+    const buffer = Buffer.from(base64Content, 'base64');
+    await fs.writeFile(filePath, buffer);
+
+    console.log('✅ [FileHandlers] Image saved successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ [FileHandlers] Error saving image:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save image'
+    };
+  }
+});

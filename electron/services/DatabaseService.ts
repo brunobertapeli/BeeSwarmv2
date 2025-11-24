@@ -24,6 +24,7 @@ export interface Project {
   kanbanState: string | null // JSON string with { enabled, position, size }
   stickyNotesState: string | null // JSON string with sticky notes array
   analyticsWidgetState: string | null // JSON string with { enabled, position, size }
+  projectAssetsWidgetState: string | null // JSON string with { enabled, position }
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -65,6 +66,11 @@ export interface AnalyticsWidgetState {
   enabled: boolean
   position: { x: number; y: number }
   size: { width: number; height: number }
+}
+
+export interface ProjectAssetsWidgetState {
+  enabled: boolean
+  position: { x: number; y: number }
 }
 
 export interface ChatBlock {
@@ -357,6 +363,12 @@ class DatabaseService {
       const hasAnalyticsWidgetState = tableInfo.some(col => col.name === 'analyticsWidgetState')
       if (!hasAnalyticsWidgetState) {
         this.db.exec('ALTER TABLE projects ADD COLUMN analyticsWidgetState TEXT')
+      }
+
+      // Migration 20: Add projectAssetsWidgetState column if it doesn't exist
+      const hasProjectAssetsWidgetState = tableInfo.some(col => col.name === 'projectAssetsWidgetState')
+      if (!hasProjectAssetsWidgetState) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN projectAssetsWidgetState TEXT')
       }
 
       // Migration 20: Add envFiles column if it doesn't exist
@@ -818,6 +830,47 @@ class DatabaseService {
       return JSON.parse(project.analyticsWidgetState) as AnalyticsWidgetState
     } catch (error) {
       console.error('❌ Failed to parse Analytics widget state:', error)
+      return null
+    }
+  }
+
+  /**
+   * Save Project Assets widget state for a project
+   */
+  saveProjectAssetsWidgetState(projectId: string, widgetState: ProjectAssetsWidgetState): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save Project Assets widget state after database closed - ignoring')
+      return
+    }
+
+    const stateJson = JSON.stringify(widgetState)
+    const sql = 'UPDATE projects SET projectAssetsWidgetState = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(stateJson, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save Project Assets widget state:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get Project Assets widget state for a project
+   */
+  getProjectAssetsWidgetState(projectId: string): ProjectAssetsWidgetState | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!project?.projectAssetsWidgetState) {
+      return null
+    }
+
+    try {
+      return JSON.parse(project.projectAssetsWidgetState) as ProjectAssetsWidgetState
+    } catch (error) {
+      console.error('❌ Failed to parse Project Assets widget state:', error)
       return null
     }
   }

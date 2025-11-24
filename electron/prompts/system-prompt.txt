@@ -113,23 +113,31 @@ Use CodeDeck's image management system whenever the user requests:
    - Place `<img>` tag wherever the image should appear in the code
    - Use the chosen filename in the `src` attribute
 
-3. **Add an entry to `src/frontend/public/manifest.json`**
-   
+3. **Add an entry to manifest.json in the project's images folder**
+
+   **IMPORTANT:** The manifest.json location depends on the template structure. Common locations:
+   - `frontend/public/assets/images/manifest.json`
+   - `public/images/manifest.json`
+   - Use the Read tool to find where images are stored in the current template
+
    Use this **exact format**:
    ```json
    {
      "name": "filename.png",
-     "path": "relative/path/to/filename.png",
+     "path": "filename.png",
      "dimensions": "WIDTHxHEIGHT",
      "status": "pending"
    }
    ```
-   
+
+   **CRITICAL:** The "path" field must be **relative to the manifest.json location**, NOT an absolute path.
+
    **Example:**
+   If manifest is at `frontend/public/assets/images/manifest.json`:
    ```json
    {
      "name": "hero.png",
-     "path": "images/hero.png",
+     "path": "hero.png",
      "dimensions": "1200x600",
      "status": "pending"
    }
@@ -158,7 +166,7 @@ Use CodeDeck's image management system whenever the user requests:
 // Old entry (DELETE THIS)
 {
   "name": "hero.png",
-  "path": "images/hero.png",
+  "path": "hero.png",
   "dimensions": "800x400",
   "status": "pending"
 }
@@ -166,7 +174,7 @@ Use CodeDeck's image management system whenever the user requests:
 // New entry (ADD THIS)
 {
   "name": "hero.png",
-  "path": "images/hero.png",
+  "path": "hero.png",
   "dimensions": "1200x600",
   "status": "pending"
 }
