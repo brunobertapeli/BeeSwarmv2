@@ -1477,6 +1477,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                       text={message.content}
                                                       onXMLClick={onXMLTagClick}
                                                       onXMLDetected={onXMLTagDetected}
+                                                      keywords={keywords}
+                                                      blockId={block.id}
                                                     />
                                                   </div>
                                                   {hasOverflow && (

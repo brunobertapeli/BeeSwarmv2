@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Settings, ExternalLink } from 'lucide-react'
+import { KeywordHighlight } from './KeywordHighlight'
 
 interface InteractiveXMLHighlightProps {
   text: string
   onXMLClick?: (tag: string, content: string) => void
   onXMLDetected?: (tag: string, content: string) => void // Called when XML tag is found in text
+  keywords?: Record<string, string> // Optional keywords for highlighting
+  blockId?: string // Block ID for keyword tracking
 }
 
 interface XMLSegment {
@@ -24,7 +27,7 @@ interface XMLSegment {
  * - Hover effects with scaling
  * - Icon based on tag type
  */
-export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected }: InteractiveXMLHighlightProps) {
+export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected, keywords, blockId }: InteractiveXMLHighlightProps) {
   const [hoveredSegment, setHoveredSegment] = useState<number | null>(null)
 
   // Detect XML tags and notify parent
@@ -188,7 +191,17 @@ export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected }: Int
           )
         }
 
-        // Regular text segment
+        // Regular text segment - apply keyword highlighting if keywords provided
+        if (keywords && blockId && Object.keys(keywords).length > 0) {
+          return (
+            <KeywordHighlight
+              key={idx}
+              text={segment.text}
+              keywords={keywords}
+              blockId={blockId}
+            />
+          )
+        }
         return <span key={idx}>{segment.text}</span>
       })}
 

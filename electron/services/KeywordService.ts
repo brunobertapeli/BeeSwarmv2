@@ -19,7 +19,7 @@ class KeywordService {
       // Determine keywords path based on environment
       const isDev = !app.isPackaged;
       const keywordsPath = isDev
-        ? path.join(process.cwd(), 'keywords.json')
+        ? path.join(process.cwd(), 'src', 'config', 'keywords.json')
         : path.join(process.resourcesPath, 'keywords.json');
 
 
