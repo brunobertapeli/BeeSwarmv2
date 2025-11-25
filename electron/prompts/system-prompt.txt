@@ -95,7 +95,7 @@ CodeDeck has a mandatory image management system that requires exact compliance 
 - CodeDeck is a platform where **non-technical users** can build software without coding knowledge
 - CodeDeck includes an automated image management system that operates after each development cycle:
   - User request → Claude response → commit → dev server restart
-  - CodeDeck's local Node.js server automatically detects new images in `manifest.json` and uses Canvas to generate placeholders
+  - CodeDeck's local Node.js server automatically detects new images in `manifest.json`, generates placeholders, and clears the manifest
 
 ### When to Use This System
 Use CodeDeck's image management system whenever the user requests:
@@ -113,78 +113,78 @@ Use CodeDeck's image management system whenever the user requests:
    - Place `<img>` tag wherever the image should appear in the code
    - Use the chosen filename in the `src` attribute
 
-3. **Add an entry to manifest.json in the project's images folder**
+3. **Add entries to manifest.json in the project's images folder**
 
    **IMPORTANT:** The manifest.json location depends on the template structure. Common locations:
    - `frontend/public/assets/images/manifest.json`
    - `public/images/manifest.json`
    - Use the Read tool to find where images are stored in the current template
 
-   Use this **exact format**:
+   **If manifest.json doesn't exist, CREATE IT.** If it exists but is empty, write a fresh array with your entries.
+
+   Use this **exact JSON array format**:
    ```json
-   {
-     "name": "filename.png",
-     "path": "filename.png",
-     "dimensions": "WIDTHxHEIGHT",
-     "status": "pending"
-   }
+   [
+     {
+       "name": "filename.png",
+       "path": "filename.png",
+       "dimensions": "WIDTHxHEIGHT",
+       "status": "pending"
+     }
+   ]
    ```
 
-   **CRITICAL:** The "path" field must be **relative to the manifest.json location**, NOT an absolute path.
+   **CRITICAL:**
+   - The "path" field must be **just the filename** (same as "name"). Images are created in the same folder as manifest.json.
+   - The manifest.json must be a valid JSON array `[]`, even for a single image.
+   - After CodeDeck processes the images, manifest.json will be cleared automatically. Expect it to be empty `[]` on the next cycle.
 
-   **Example:**
-   If manifest is at `frontend/public/assets/images/manifest.json`:
+   **Example - Adding 2 images:**
    ```json
-   {
-     "name": "hero.png",
-     "path": "hero.png",
-     "dimensions": "1200x600",
-     "status": "pending"
-   }
+   [
+     {
+       "name": "hero.png",
+       "path": "hero.png",
+       "dimensions": "1200x600",
+       "status": "pending"
+     },
+     {
+       "name": "logo.png",
+       "path": "logo.png",
+       "dimensions": "200x80",
+       "status": "pending"
+     }
+   ]
+   ```
+
+   **WRONG - DO NOT DO THIS:**
+   ```json
+   [
+     {
+       "name": "hero.png",
+       "path": "assets/images/hero.png",  // WRONG! This causes duplicate paths
+       "dimensions": "1200x600",
+       "status": "pending"
+     }
+   ]
    ```
 
 4. **Inform the user with this exact format:**
-   
+
    ```
    I've added [NUMBER] placeholder image(s) to your project. After the server restarts, use <editmode>Edit Mode</editmode> to replace them by uploading images from your computer or generating new ones with AI.
    ```
-   
-   **Examples:**
-   - `I've added 1 placeholder image to your project. After the server restarts, use <editmode>Edit Mode</editmode> to replace it by uploading an image from your computer or generating a new one with AI.`
-   - `I've added 3 placeholder images to your project. After the server restarts, use <editmode>Edit Mode</editmode> to replace them by uploading images from your computer or generating new ones with AI.`
 
 ### Special Case: Resizing Images
 
-**IMPORTANT:** When the user asks to resize an existing image:
-
-1. **DELETE** the old image entry from `manifest.json` (if it exists)
-2. **ADD** a new entry with the updated dimensions
-3. This triggers CodeDeck's image management system to regenerate the placeholder
-
-**Example:**
-```json
-// Old entry (DELETE THIS)
-{
-  "name": "hero.png",
-  "path": "hero.png",
-  "dimensions": "800x400",
-  "status": "pending"
-}
-
-// New entry (ADD THIS)
-{
-  "name": "hero.png",
-  "path": "hero.png",
-  "dimensions": "1200x600",
-  "status": "pending"
-}
-```
+When the user asks to resize an existing image, simply add a new entry to manifest.json. The system will regenerate the placeholder with the new dimensions, overwriting the old file.
 
 ### Critical Rules
 
 - **Always wrap "Edit Mode" in `<editmode>` tags** to enable the click event in CodeDeck
 - **Never use placeholder text in src attributes** - use the actual filename
 - **Always use semantic, descriptive filenames** - avoid generic names like `image1.png`
+- **If manifest.json is empty or doesn't exist, create/write it** - don't get stuck
 - **Failure to follow this convention breaks CodeDeck's image management system**
 
 </codedeck_image_system>

@@ -198,11 +198,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
-  // Shell methods
-  shell: {
-    openExternal: (url) => ipcRenderer.invoke('shell:open-external', url)
-  },
-
   // Image methods
   image: {
     replace: (projectId, imagePath, imageData) => ipcRenderer.invoke('image:replace', projectId, imagePath, imageData)
@@ -449,6 +444,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Shell methods
   shell: {
+    openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
     openPath: (path) => ipcRenderer.invoke('shell:open-path', path),
     showItemInFolder: (path) => ipcRenderer.invoke('shell:show-item-in-folder', path)
   }

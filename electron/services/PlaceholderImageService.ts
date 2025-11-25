@@ -90,10 +90,8 @@ class PlaceholderImageService {
               continue;
             }
 
-            // Resolve image path relative to manifest directory
-            // Remove leading slash from entry.path if present
-            const relativePath = entry.path.startsWith('/') ? entry.path.slice(1) : entry.path;
-            const imagePath = path.join(manifestDir, relativePath);
+            // Images are created in the same folder as manifest.json
+            const imagePath = path.join(manifestDir, entry.name);
 
             // Check if image already exists
             try {
@@ -138,12 +136,9 @@ class PlaceholderImageService {
         }
       }
 
-      // Update manifest statuses
-      const updatedManifest = manifest.map(entry => ({
-        ...entry,
-        status: 'generated' as const
-      }));
-      await fs.writeFile(manifestPath, JSON.stringify(updatedManifest, null, 2), 'utf-8');
+      // Clear the manifest after processing (ready for next cycle)
+      await fs.writeFile(manifestPath, '[]', 'utf-8');
+      console.log('🧹 [PlaceholderImageService] Cleared manifest.json for next cycle');
 
       // Add a small safety delay to ensure all filesystem operations are complete
       // This prevents race conditions where dev server restarts before files are fully flushed
