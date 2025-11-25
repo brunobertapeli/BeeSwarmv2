@@ -10,8 +10,30 @@ import { previewService } from '../services/PreviewService';
 import { emitChatEvent } from './chatHandlers';
 import { spawn } from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
 import { getCurrentUserId } from '../main';
 import { validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware';
+
+/**
+ * Clear ephemeral log files in the project's codedeck/logs directory
+ */
+function clearLogFiles(projectPath: string): void {
+  const logsDir = path.join(projectPath, 'codedeck', 'logs');
+
+  try {
+    if (fs.existsSync(logsDir)) {
+      const files = fs.readdirSync(logsDir);
+      for (const file of files) {
+        const filePath = path.join(logsDir, file);
+        // Clear file contents instead of deleting (preserves file for git)
+        fs.writeFileSync(filePath, '');
+      }
+    }
+  } catch (error) {
+    // Silently ignore errors - logs are ephemeral
+    console.warn('Could not clear log files:', error);
+  }
+}
 
 let mainWindowContents: WebContents | null = null;
 
@@ -180,10 +202,22 @@ export function registerClaudeHandlers(): void {
   ipcMain.handle('claude:clear-session', async (_event, projectId: string) => {
     try {
       // SECURITY: Validate user owns this project
-      validateProjectOwnership(projectId);
-
+      const project = validateProjectOwnership(projectId);
 
       claudeService.clearSession(projectId);
+
+      // Clear ephemeral log files
+      if (project.path) {
+        clearLogFiles(project.path);
+      }
+
+      // Create a chat block to show in StatusSheet
+      const block = databaseService.createChatBlock(projectId, 'Initiated a Fresh Context Window', 'context_cleared');
+      databaseService.completeChatBlock(block.id);
+
+      // Emit events so StatusSheet updates
+      emitChatEvent('chat:block-created', projectId, block);
+      emitChatEvent('chat:block-completed', projectId, { ...block, isComplete: true, completedAt: Date.now() });
 
       // Add system message to terminal
       terminalAggregator.addSystemLine(

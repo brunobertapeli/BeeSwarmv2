@@ -272,7 +272,6 @@ Two log files in the user's project codebase provide instant feedback:
 ❌ Expect console.logs to appear without user interaction  
 ❌ Add console.logs and immediately check - code hasn't executed yet  
 ❌ Use verbose console.logs - trim them down programmatically  
-
 ---
 
 ## 🔄 Complete Workflow
@@ -289,6 +288,11 @@ Two log files in the user's project codebase provide instant feedback:
 3. Ask user to interact with feature
 4. Check `devtools.md` or `backend.md` for runtime logs
 5. Debug based on findings
+
+## COMMUNICATION WITH CODEDECK USERS
+When verifying functionality, keep confirmations brief:
+- Simply state: "I've confirmed using CodeDeck REAL-TIME DEBUGGING that the app runs"
+- Avoid listing every check performed
 
 </feedback_loop_for_logs>
 

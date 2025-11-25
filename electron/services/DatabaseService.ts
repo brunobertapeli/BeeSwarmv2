@@ -1261,7 +1261,8 @@ class DatabaseService {
         actions: row.actions,
         completedAt: row.completedAt,
         isComplete: Boolean(row.isComplete),
-        createdAt: row.createdAt
+        createdAt: row.createdAt,
+        interactionType: row.interactionType
       }))
     } catch (error) {
       console.error('❌ Failed to get chat history:', error)

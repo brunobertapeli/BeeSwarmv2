@@ -188,15 +188,69 @@ async function verifyCommitExists(
 }
 
 /**
+ * Reset ephemeral files before checkout (logs that shouldn't block restore)
+ */
+async function resetEphemeralFiles(projectPath: string): Promise<void> {
+  return new Promise((resolve) => {
+    // Reset codedeck/logs/ directory - these are ephemeral logging files
+    // that shouldn't block checkpoint restoration
+    const resetProcess = spawn('git', ['checkout', 'HEAD', '--', 'codedeck/logs/'], {
+      cwd: projectPath,
+    });
+
+    resetProcess.on('close', () => {
+      // Ignore errors - files might not exist in HEAD or might not be tracked
+      resolve();
+    });
+  });
+}
+
+/**
+ * Get the current branch name, or default to 'main' if in detached HEAD
+ */
+async function getCurrentBranch(projectPath: string): Promise<string> {
+  return new Promise((resolve) => {
+    // Try to get current branch name
+    const branchProcess = spawn('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd: projectPath,
+    });
+
+    let output = '';
+    branchProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+
+    branchProcess.on('close', (code) => {
+      const branch = output.trim();
+      // If HEAD (detached) or error, default to 'main'
+      if (code !== 0 || branch === 'HEAD' || !branch) {
+        resolve('main');
+      } else {
+        resolve(branch);
+      }
+    });
+  });
+}
+
+/**
  * Perform git checkout to a specific commit
+ * Uses -B to ensure we stay on a proper branch (not detached HEAD)
  */
 async function performGitCheckout(
   projectId: string,
   projectPath: string,
   commitHash: string
 ): Promise<{ success: boolean; error?: string }> {
+  // First, reset ephemeral files that shouldn't block checkout
+  await resetEphemeralFiles(projectPath);
+
+  // Get current branch name to maintain branch context
+  const branchName = await getCurrentBranch(projectPath);
+
   return new Promise((resolve) => {
-    const checkoutProcess = spawn('git', ['checkout', commitHash], {
+    // Use -B to create/reset branch at the target commit
+    // This avoids detached HEAD state and keeps history clean
+    const checkoutProcess = spawn('git', ['checkout', '-B', branchName, commitHash], {
       cwd: projectPath,
     });
 

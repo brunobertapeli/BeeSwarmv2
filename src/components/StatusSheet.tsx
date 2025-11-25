@@ -1,117 +1,27 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { ChevronDown, ChevronUp, Loader2, RotateCcw, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X, Brain, Clock, Server, MessageCircle, ClipboardCheck } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { ChevronDown, ChevronUp, Loader2, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X, Brain, Clock, Server, ClipboardCheck, Copy } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
-import { KeywordHighlight } from './KeywordHighlight'
 import { InteractiveXMLHighlight } from './InteractiveXMLHighlight'
 
-// Import workflow icons
+// Types
+import type { ConversationBlock, StatusSheetProps } from '../types/statusSheet'
+
+// Helpers
+import {
+  hasPlanWaitingApproval,
+  safeParse,
+  transformBlock,
+  estimatePromptLines,
+  getPromptFontSize,
+} from '../utils/statusSheetHelpers'
+
+// Assets
 import AnthropicIcon from '../assets/images/anthropic.svg'
 import GitIcon from '../assets/images/git.svg'
 import bgImage from '../assets/images/bg.jpg'
 import noiseBgImage from '../assets/images/noise_bg.png'
 import successSound from '../assets/sounds/success.wav'
-
-interface ConversationMessage {
-  type: 'user' | 'assistant' | 'tool' | 'thinking'
-  content: string
-  timestamp?: Date
-  toolName?: string // For highlighting tool names
-  toolId?: string // Unique ID for tool execution
-  toolDuration?: number // Duration in seconds for completed tools
-  thinkingDuration?: number // Duration in seconds for completed thinking
-}
-
-interface DeploymentStage {
-  label: string
-  isComplete: boolean
-}
-
-interface CompletionStats {
-  timeSeconds: number
-  inputTokens: number
-  outputTokens: number
-  cost: number
-}
-
-interface Action {
-  type: 'git_commit' | 'build' | 'dev_server' | 'checkpoint_restore'
-  status: 'in_progress' | 'success' | 'error'
-  message?: string
-  data?: any
-  timestamp: number
-}
-
-interface ConversationBlock {
-  id: string
-  type: 'conversation' | 'deployment' | 'initialization'
-  projectId?: string
-  userPrompt?: string
-  messages?: ConversationMessage[]
-  isComplete: boolean
-  commitHash?: string
-  filesChanged?: number
-  completionStats?: CompletionStats
-  summary?: string
-  actions?: Action[]
-  completionMessage?: string // Final message to show after everything
-  interactionType?: string | null // Type of interaction (user_message, claude_response, plan_ready, etc.)
-  // Deployment-specific fields
-  deploymentStages?: DeploymentStage[]
-  deploymentUrl?: string
-  // Initialization-specific fields
-  initializationStages?: DeploymentStage[]
-  templateName?: string
-}
-
-interface StatusSheetProps {
-  projectId?: string
-  actionBarRef?: React.RefObject<HTMLDivElement>
-  onMouseEnter?: () => void
-  onMouseLeave?: () => void
-  onStopClick?: () => void
-  onApprovePlan?: () => void // Callback when user approves plan
-  onRejectPlan?: () => void // Callback when user rejects plan (keep planning)
-  onXMLTagClick?: (tag: string, content: string) => void // Callback when interactive XML tag is clicked
-  onXMLTagDetected?: (tag: string, content: string) => void // Callback when XML tag is detected in message
-}
-
-// Helper: Check if block has a plan waiting for approval
-function hasPlanWaitingApproval(block: ConversationBlock): boolean {
-  // Must be complete
-  if (!block.isComplete) {
-    return false
-  }
-
-  // NEW: Check interactionType first (most reliable)
-  if (block.interactionType === 'plan_ready') {
-    return true
-  }
-
-  // FALLBACK: Check if tool summary contains ExitPlanMode
-  // For completed blocks, tools are grouped like "1x Grep, 1x ExitPlanMode"
-  if (block.messages) {
-    const toolMessages = block.messages.filter(m => m.type === 'tool')
-    for (const toolMsg of toolMessages) {
-      if (toolMsg.content.includes('ExitPlanMode')) {
-        return true
-      }
-    }
-  }
-
-  return false
-}
-
-// Helper: Safe JSON parse
-function safeParse(jsonString: string | null | undefined, fallback: any = null): any {
-  if (!jsonString) return fallback
-  try {
-    return JSON.parse(jsonString)
-  } catch (e) {
-    console.error('Failed to parse JSON:', e)
-    return fallback
-  }
-}
 
 function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, onApprovePlan, onRejectPlan, onXMLTagClick, onXMLTagDetected }: StatusSheetProps) {
   const { deploymentStatus, showStatusSheet, setShowStatusSheet, viewMode } = useAppStore()
@@ -138,218 +48,15 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   const prevLayoutStateRef = useRef<string>(layoutState)
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
-  // Random loading phrases - use block ID for consistent selection
-  const getLoadingPhrase = (blockId: string) => {
-    const phrases = [
-      'Warming up the engines...',
-      'Booting up the code engines...',
-      'Charging the circuits...',
-      'Activating the neural cores...',
-      'Charging the neural network...',
-      'Spinning up the AI nodes...',
-      'Linking the thought patterns...',
-      'Calibrating the reasoning unit...',
-      'Optimizing the neural flow...',
-    ]
-    // Use blockId to get consistent phrase for same block
-    const hash = blockId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-    return phrases[hash % phrases.length]
-  }
+  // Ref for currentOffset to fix stale closure in scroll handler
+  const currentOffsetRef = useRef(currentOffset)
+  currentOffsetRef.current = currentOffset
 
+  // Ref to prevent double-click on restore
+  const isRestoringRef = useRef(false)
 
-  // Estimate number of lines in user prompt
-  const estimatePromptLines = (text: string): number => {
-    if (!text) return 1
-    const charsPerLine = 50 // Approximate characters per line
-    const explicitLines = text.split('\n').length
-    const estimatedLines = Math.ceil(text.length / charsPerLine)
-    return Math.max(explicitLines, estimatedLines)
-  }
-
-  // Get font size class based on line count
-  const getPromptFontSize = (lineCount: number): string => {
-    if (lineCount >= 8) return 'text-[13px]' // Smaller for 8+ lines
-    if (lineCount >= 2) return 'text-[14px]' // Medium for 2-3 lines
-    return 'text-[15px]' // Default for 1 line
-  }
-
-  // Transform database block to UI block
-  const transformBlock = (block: any): ConversationBlock => {
-    const messages: ConversationMessage[] = []
-
-    // Add user message
-    messages.push({
-      type: 'user',
-      content: block.userPrompt,
-      timestamp: new Date(block.createdAt),
-    })
-
-    // Collect all Claude messages and tools with timestamps for chronological sorting
-    const timedMessages: ConversationMessage[] = []
-
-    // Parse Claude messages
-    if (block.claudeMessages) {
-      const claudeMessages = safeParse(block.claudeMessages, [])
-
-      // Handle both old format (string[]) and new format (object[])
-      if (Array.isArray(claudeMessages)) {
-        claudeMessages.forEach((msg: any) => {
-          if (typeof msg === 'string') {
-            // Old format - plain string (no timestamp, will be sorted to end)
-            timedMessages.push({
-              type: 'assistant',
-              content: msg,
-            })
-          } else if (msg.type === 'text') {
-            // New format - text message
-            timedMessages.push({
-              type: 'assistant',
-              content: msg.content,
-              timestamp: msg.timestamp ? new Date(msg.timestamp) : undefined,
-            })
-          } else if (msg.type === 'thinking') {
-            // New format - thinking message
-            timedMessages.push({
-              type: 'thinking',
-              content: msg.content,
-              timestamp: msg.timestamp ? new Date(msg.timestamp) : undefined,
-              thinkingDuration: msg.thinkingDuration,
-            })
-          }
-        })
-      }
-    }
-
-    // Parse tool executions
-    if (block.toolExecutions) {
-      const toolData = safeParse(block.toolExecutions, [])
-
-      if (block.isComplete) {
-        // Completed: show grouped summary
-        if (Array.isArray(toolData)) {
-          // Group the array
-          const grouped: Record<string, number> = {}
-          toolData.forEach((tool: any) => {
-            grouped[tool.toolName] = (grouped[tool.toolName] || 0) + 1
-          })
-          const toolMessages = Object.entries(grouped).map(([toolName, count]) =>
-            `${count}x ${toolName}`
-          ).join(', ')
-          // Only add tool message if there's actual content
-          if (toolMessages) {
-            timedMessages.push({
-              type: 'tool',
-              content: toolMessages,
-            })
-          }
-        } else if (toolData && typeof toolData === 'object') {
-          // Already grouped (legacy)
-          const toolMessages = Object.entries(toolData).map(([toolName, count]) =>
-            `${count}x ${toolName}`
-          ).join(', ')
-          // Only add tool message if there's actual content
-          if (toolMessages) {
-            timedMessages.push({
-              type: 'tool',
-              content: toolMessages,
-            })
-          }
-        }
-      } else {
-        // In progress: show verbose tool executions with timestamps
-        if (Array.isArray(toolData)) {
-          toolData.forEach((tool: any) => {
-            let toolMsg = `Claude using tool ${tool.toolName}`
-            if (tool.filePath) {
-              // Extract just the filename from path
-              const fileName = tool.filePath.split('/').pop() || tool.filePath
-              toolMsg += ` @ ${fileName}`
-            } else if (tool.command) {
-              toolMsg += ` @ ${tool.command}`
-            }
-
-            // Calculate duration if tool is complete
-            let toolDuration: number | undefined
-            if (tool.endTime && tool.startTime) {
-              toolDuration = Math.round((tool.endTime - tool.startTime) / 1000)
-            }
-
-            timedMessages.push({
-              type: 'tool',
-              content: toolMsg,
-              toolName: tool.toolName,
-              toolId: tool.toolId,
-              timestamp: tool.startTime ? new Date(tool.startTime) : undefined,
-              toolDuration: toolDuration,
-            })
-          })
-        }
-      }
-    }
-
-    // Sort all messages by timestamp (messages without timestamps go to end)
-    timedMessages.sort((a, b) => {
-      if (!a.timestamp && !b.timestamp) return 0
-      if (!a.timestamp) return 1
-      if (!b.timestamp) return -1
-      return a.timestamp.getTime() - b.timestamp.getTime()
-    })
-
-    // Add sorted messages to the main messages array
-    messages.push(...timedMessages)
-
-    // If no Claude messages yet, show random loading message
-    const hasAssistantMessages = messages.some(m => m.type === 'assistant' || m.type === 'thinking')
-    if (!hasAssistantMessages && !block.isComplete) {
-      messages.push({
-        type: 'assistant',
-        content: getLoadingPhrase(block.id),
-      })
-    }
-
-    // Parse completion stats
-    let completionStats: CompletionStats | undefined
-    if (block.completionStats) {
-      completionStats = safeParse(block.completionStats)
-    }
-
-    // Parse actions - check if this is an initialization block
-    let actions: Action[] | undefined
-    let initializationStages: { label: string; isComplete: boolean }[] | undefined
-    let templateName: string | undefined
-    let blockType: 'conversation' | 'initialization' = 'conversation'
-
-    if (block.actions) {
-      const parsedActions = safeParse(block.actions)
-
-      if (parsedActions) {
-        // Check if this is initialization data
-        if (parsedActions.type === 'initialization') {
-          blockType = 'initialization'
-          templateName = parsedActions.templateName
-          initializationStages = parsedActions.stages
-        } else if (Array.isArray(parsedActions)) {
-          actions = parsedActions
-        }
-      }
-    }
-
-    return {
-      id: block.id,
-      type: blockType,
-      projectId: block.projectId,
-      userPrompt: block.userPrompt,
-      messages,
-      isComplete: block.isComplete,
-      commitHash: block.commitHash || undefined,
-      filesChanged: block.filesChanged || undefined,
-      completionStats,
-      summary: block.summary || undefined,
-      actions,
-      initializationStages,
-      templateName,
-    }
-  }
+  // State for restore confirmation
+  const [confirmingRestoreBlockId, setConfirmingRestoreBlockId] = useState<string | null>(null)
 
   // Detect overflow for messages
   useEffect(() => {
@@ -427,8 +134,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     }
   }
 
-  // Handle restore to checkpoint
+  // Handle restore to checkpoint (with debounce protection)
   const handleRestoreCheckpoint = async (block: ConversationBlock) => {
+    // Prevent double-click
+    if (isRestoringRef.current) return
     if (!projectId || !window.electronAPI?.git || !block.commitHash) return
 
     // Safety check: Validate commit hash
@@ -445,15 +154,17 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       return
     }
 
+    isRestoringRef.current = true
     try {
       const result = await window.electronAPI.git.restoreCheckpoint(projectId, block.commitHash)
 
-      if (result.success) {
-      } else {
+      if (!result.success) {
         console.error(`❌ Failed to restore checkpoint: ${result.error}`)
       }
     } catch (error) {
       console.error('❌ Error restoring checkpoint:', error)
+    } finally {
+      isRestoringRef.current = false
     }
   }
 
@@ -713,9 +424,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   }, [allBlocks])
 
   // Infinite scroll - detect when user scrolls near top
+  // Uses refs for offset to avoid stale closure issues
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current
-    if (!scrollContainer || !isExpanded) return
+    if (!scrollContainer || !statusSheetExpanded) return
 
     const handleScroll = () => {
       const { scrollTop } = scrollContainer
@@ -728,7 +440,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
     scrollContainer.addEventListener('scroll', handleScroll)
     return () => scrollContainer.removeEventListener('scroll', handleScroll)
-  }, [isExpanded, hasMoreBlocks, isLoadingMore, currentOffset])
+  }, [statusSheetExpanded, hasMoreBlocks, isLoadingMore])
 
   // Check if there's any conversation history
   const hasHistory = allBlocks.length > 0
@@ -740,8 +452,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     : null
   const isWorking = currentBlock ? !currentBlock.isComplete : false
 
-  // Get display text and icon for collapsed state
-  const getCollapsedState = () => {
+  // Get display text and icon for collapsed state (memoized for performance)
+  const collapsedState = useMemo(() => {
     if (!currentBlock) {
       return { text: '', icon: null, needsAttention: false }
     }
@@ -765,6 +477,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       }
       const currentStage = currentBlock.initializationStages?.find((s) => !s.isComplete)
       return { text: currentStage ? currentStage.label : 'Setting up project...', icon: null, needsAttention: false }
+    }
+
+    if (currentBlock.type === 'context_cleared') {
+      return { text: 'Initiated a Fresh Context Window', icon: User, needsAttention: false }
     }
 
     // Check for in-progress actions
@@ -798,7 +514,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     }
 
     return { text: latestMessage?.content || '', icon: null, needsAttention: false }
-  }
+  }, [currentBlock, latestMessage])
 
   // Thumbnail is now captured by LayoutManager before hiding the BrowserView
   // and passed via the state-changed event (see ProjectView.tsx)
@@ -898,7 +614,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     setIsExpanded(false)
     setStatusSheetExpanded(false)
     setShowStatusSheet(false)
-  }, [setStatusSheetExpanded, setShowStatusSheet, layoutState])
+  }, [setStatusSheetExpanded, setShowStatusSheet])
 
   // Auto-collapse StatusSheet when clicking outside
   useEffect(() => {
@@ -998,7 +714,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
             {/* Collapsed State - Single Clickable Row */}
             {!isExpanded && (() => {
-              const collapsedState = getCollapsedState()
               const IconComponent = collapsedState.icon
 
               return (
@@ -1006,13 +721,13 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                   className={`px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10 h-[40px] overflow-hidden ${isCapturingFreeze ? 'opacity-50 pointer-events-none' : ''}`}
                   onClick={handleExpand}
                 >
-                  {currentBlock.type === 'deployment' || currentBlock.type === 'initialization' ? (
+                  {currentBlock?.type === 'deployment' || currentBlock?.type === 'initialization' ? (
                     <>
                       {isWorking ? (
                         <Loader2 size={14} className="text-primary animate-spin flex-shrink-0" />
                       ) : (
                         <>
-                          {currentBlock.type === 'deployment' ? (
+                          {currentBlock?.type === 'deployment' ? (
                             <Globe size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
                           ) : (
                             <Rocket size={14} className={`text-primary flex-shrink-0 ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
@@ -1160,6 +875,30 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                       )
                     }
 
+                    // Render context cleared block
+                    if (block.type === 'context_cleared') {
+                      return (
+                        <div key={block.id} className="bg-blue-500/5 rounded-lg p-3 border border-blue-500/20 relative mb-6">
+                          {/* Timestamp (top right) */}
+                          {block.completedAt && (
+                            <span className="absolute top-3 right-3 text-[11px] text-gray-500 z-10">
+                              {new Date(block.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                          <div className="flex items-center gap-3">
+                            <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center">
+                              <User size={14} className="text-blue-400" />
+                            </div>
+                            <div className="flex-1">
+                              <span className="text-[13px] font-medium text-blue-400">
+                                Initiated a Fresh Context Window
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    }
+
                     // Render deployment block (keep existing for now)
                     if (block.type === 'deployment') {
                       return (
@@ -1217,10 +956,8 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                     }
 
                     // Render conversation block with timeline workflow
-                    const hasGitAction = block.actions?.some(a => a.type === 'git_commit')
                     const hasDeployAction = block.actions?.some(a => a.type === 'dev_server')
                     const hasRestoreAction = block.actions?.some(a => a.type === 'checkpoint_restore')
-                    const gitAction = block.actions?.find(a => a.type === 'git_commit')
                     const deployAction = block.actions?.find(a => a.type === 'dev_server')
                     const restoreAction = block.actions?.find(a => a.type === 'checkpoint_restore')
                     const isRestoreBlock = hasRestoreAction || block.userPrompt?.startsWith('Restore to checkpoint')
@@ -1230,36 +967,26 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                       <div key={block.id} className="mb-6">
                         {/* Workflow Block Container */}
                         <div className="bg-white/[0.02] rounded-lg border border-white/10 p-4 relative">
-                          {/* Checkpoint or Stop button (top right) - only for non-restore blocks */}
-                          {!isRestoreBlock && (() => {
-                            const shouldShowRestore = block.isComplete && block.commitHash && block.commitHash !== 'unknown' && block.commitHash.length >= 7;
-
-                            return (
-                              <>
-                                {shouldShowRestore ? (
-                                  <button
-                                    onClick={() => handleRestoreCheckpoint(block)}
-                                    className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors group z-10"
-                                    title="Restore to this checkpoint"
-                                  >
-                                    <RotateCcw size={12} className="text-gray-400 group-hover:text-primary transition-colors" />
-                                  </button>
-                                ) : showStopButton ? (
-                                  <button
-                                    onClick={onStopClick}
-                                    className="absolute top-3 right-3 p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group z-10"
-                                    title="Stop generation"
-                                  >
-                                    <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
-                                  </button>
-                                ) : null}
-                              </>
-                            )
-                          })()}
+                          {/* Timestamp (top right) - all blocks */}
+                          {block.isComplete && block.completedAt && (
+                            <span className="absolute top-3 right-3 text-[11px] text-gray-500 z-10">
+                              {new Date(block.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                          {/* Stop button (top right) - only for non-restore blocks */}
+                          {!isRestoreBlock && showStopButton && (
+                            <button
+                              onClick={onStopClick}
+                              className="absolute top-3 right-3 p-1.5 hover:bg-red-500/10 rounded-lg transition-colors group z-10"
+                              title="Stop generation"
+                            >
+                              <Square size={12} className="text-gray-400 group-hover:text-red-400 transition-colors fill-current" />
+                            </button>
+                          )}
 
                           {/* RESTORE BLOCK - Timeline design matching other blocks */}
                           {isRestoreBlock ? (
-                            <div className="relative pr-8">
+                            <div className="relative">
                               {/* Continuous dotted line */}
                               <div className="absolute left-[12px] top-[12px] bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
 
@@ -1379,7 +1106,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                         const fontSize = getPromptFontSize(lineCount)
                                         const needsExpansion = lineCount > 10
                                         const isExpanded = expandedUserPrompts.has(block.id)
-                                        const maxLines = 3
 
                                         return (
                                           <div>
@@ -1845,8 +1571,15 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                             }
                                           </span>
                                           {git.status === 'success' && git.data?.commitHash && (
-                                            <span className="font-mono text-[12px] bg-white/[0.03] border border-white/10 px-2 py-0.5 rounded text-gray-400">
+                                            <span
+                                              className="group/hash font-mono text-[12px] bg-white/[0.03] border border-white/10 px-2 py-0.5 rounded text-gray-400 flex items-center gap-1 cursor-pointer hover:border-white/20 transition-colors"
+                                              onClick={() => {
+                                                navigator.clipboard.writeText(git.data?.commitHash || '')
+                                              }}
+                                              title="Click to copy hash"
+                                            >
                                               {git.data.commitHash}
+                                              <Copy size={10} className="opacity-0 group-hover/hash:opacity-100 transition-opacity text-gray-500" />
                                             </span>
                                           )}
                                           {git.status === 'success' && git.data?.filesChanged !== undefined && (
@@ -1865,6 +1598,41 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                               <span className="text-[12px] text-gray-500">
                                                 0.1s
                                               </span>
+                                              {/* Restore button */}
+                                              {block.commitHash && block.commitHash !== 'unknown' && block.commitHash.length >= 7 && (
+                                                <>
+                                                  <span className="text-gray-600 mx-2">|</span>
+                                                  {confirmingRestoreBlockId === block.id ? (
+                                                    <div className="flex items-center gap-1 px-2 py-0.5 bg-primary/[0.03] border border-primary/20 rounded">
+                                                      <span className="text-[12px] text-primary font-medium">Restore to this checkpoint?</span>
+                                                      <button
+                                                        onClick={() => {
+                                                          handleRestoreCheckpoint(block)
+                                                          setConfirmingRestoreBlockId(null)
+                                                        }}
+                                                        className="p-0.5 hover:bg-green-500/20 rounded transition-colors"
+                                                        title="Confirm restore"
+                                                      >
+                                                        <Check size={14} className="text-green-400" />
+                                                      </button>
+                                                      <button
+                                                        onClick={() => setConfirmingRestoreBlockId(null)}
+                                                        className="p-0.5 hover:bg-red-500/20 rounded transition-colors"
+                                                        title="Cancel"
+                                                      >
+                                                        <X size={14} className="text-red-400" />
+                                                      </button>
+                                                    </div>
+                                                  ) : (
+                                                    <button
+                                                      onClick={() => setConfirmingRestoreBlockId(block.id)}
+                                                      className="px-2 py-0.5 bg-primary/[0.03] hover:bg-primary/10 border border-primary/20 hover:border-primary/40 rounded text-[12px] text-primary font-medium transition-all"
+                                                    >
+                                                      Restore to this checkpoint
+                                                    </button>
+                                                  )}
+                                                </>
+                                              )}
                                             </>
                                           )}
                                           {git.status === 'in_progress' && (
