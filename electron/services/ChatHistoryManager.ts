@@ -156,6 +156,19 @@ class ChatHistoryManager extends EventEmitter {
         if (block.type === 'tool_use') {
           const toolName = block.name;
 
+          // IMPORTANT: Tool use ends the current thinking session
+          // Complete any active thinking before tracking the tool
+          if (activeBlock.thinkingStartTime) {
+            const thinkingMessages = activeBlock.claudeMessages.filter(m => m.type === 'thinking');
+            const activeThinking = thinkingMessages[thinkingMessages.length - 1];
+
+            if (activeThinking && !activeThinking.thinkingDuration) {
+              const duration = ((Date.now() - activeBlock.thinkingStartTime) / 1000).toFixed(0);
+              activeThinking.thinkingDuration = parseInt(duration);
+            }
+            activeBlock.thinkingStartTime = null; // Reset timer
+          }
+
           // LOGGING: Track tool usage and flag execution tools
           const isExecutionTool = ['Edit', 'Write', 'Bash', 'NotebookEdit'].includes(toolName);
           const isExitPlanMode = toolName === 'ExitPlanMode';

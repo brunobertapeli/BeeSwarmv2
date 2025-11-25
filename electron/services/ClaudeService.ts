@@ -248,7 +248,7 @@ class ClaudeService extends EventEmitter {
       cwd: projectPath, // Current working directory
       permissionMode, // Plan mode for exploration, bypass for execution
       maxTurns: 50, // Increased to allow more tool usage with thinking
-      signal: abortController.signal,
+      abortController, // SDK uses abortController, not signal
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(), // Path to claude CLI
       model: effectiveModel, // Always set model
       systemPrompt: {
@@ -337,14 +337,8 @@ class ClaudeService extends EventEmitter {
         currentSession.query = claudeQuery;
       }
 
-      // If resuming and model changed, use setModel() to preserve context
-      if (sessionId && existingSession?.context?.model && existingSession.context.model !== effectiveModel) {
-        try {
-          await claudeQuery.setModel(effectiveModel);
-        } catch (error) {
-          console.error(`❌ Failed to change model:`, error);
-        }
-      }
+      // Note: Model is set via options.model - SDK doesn't support runtime model changes
+      // The model will be used for all turns in this query
 
       for await (const msg of claudeQuery) {
 
@@ -383,14 +377,8 @@ class ClaudeService extends EventEmitter {
             session.context.cost += msg.total_cost_usd || 0;
             session.context.turns += 1; // Increment by 1 for this turn
 
-            // Update context window from modelUsage
-            if (msg.modelUsage) {
-              const modelEntries = Object.entries(msg.modelUsage);
-              if (modelEntries.length > 0) {
-                const [, modelData] = modelEntries[0];
-                session.context.contextWindow = (modelData as any).contextWindow || session.context.contextWindow;
-              }
-            }
+            // Note: SDK's SDKResultMessage doesn't include modelUsage
+            // Context window is kept at default (200k) or could be determined by model name
 
             // Save context to database for persistence across app restarts
             databaseService.saveClaudeContext(projectId, session.context);
@@ -412,12 +400,13 @@ class ClaudeService extends EventEmitter {
       }
 
     } catch (error: any) {
-      console.error(`❌ Claude session error for ${projectId}:`, error);
-
-      // Check if it was aborted
-      if (error.name === 'AbortError') {
+      // Check if it was aborted by user - this is expected behavior, not an error
+      if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+        // Silent handling - user intentionally stopped the operation
         this.updateStatus(projectId, 'idle');
       } else {
+        // Actual error - log and emit
+        console.error(`❌ Claude session error for ${projectId}:`, error);
         this.updateStatus(projectId, 'error');
         this.emit('claude-error', { projectId, error: error.message || String(error) });
       }
@@ -523,6 +512,8 @@ class ClaudeService extends EventEmitter {
 
   /**
    * Change model for active session
+   * Note: SDK doesn't support runtime model changes. The model preference is stored
+   * and will be applied on the next query() call.
    * @param projectId - Project identifier
    * @param modelName - Model to switch to (e.g., 'sonnet', 'opus', 'haiku')
    */
@@ -537,56 +528,43 @@ class ClaudeService extends EventEmitter {
 
     const session = this.sessions.get(projectId);
 
-    // If no session or session is idle/completed, just update the context
-    // The new model will be used on the next message
-    if (!session || !session.query || session.status === 'idle' || session.status === 'completed') {
-      if (session) {
-        session.context.model = modelName;
-        this.emit('claude-model-changed', { projectId, model: modelName });
-        this.emit('claude-context-updated', { projectId, context: session.context });
-      } else {
-        // Load existing context from database or create minimal context
-        const existingContext = databaseService.getClaudeContext(projectId);
-        const context = existingContext ? {
-          ...existingContext,
-          model: modelName // Update model in existing context
-        } : {
-          // Create minimal session to store the preference (new project)
-          tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
-          baseline: defaultBaseline,
-          cost: 0,
-          turns: 0,
-          model: modelName,
-          contextWindow: 200000
-        };
-
-        this.sessions.set(projectId, {
-          projectPath: '',
-          sessionId: null,
-          status: 'idle',
-          abortController: null,
-          query: null,
-          context
-        });
-
-        // Save updated context to database
-        databaseService.saveClaudeContext(projectId, context);
-
-        this.emit('claude-model-changed', { projectId, model: modelName });
-        this.emit('claude-context-updated', { projectId, context });
-      }
-      return;
-    }
-
-    // Session is active (running), use setModel()
-    try {
-      await session.query.setModel(modelName);
+    // Update the stored model preference - it will be used on next query
+    if (session) {
       session.context.model = modelName;
+      // Save updated context to database
+      databaseService.saveClaudeContext(projectId, session.context);
       this.emit('claude-model-changed', { projectId, model: modelName });
       this.emit('claude-context-updated', { projectId, context: session.context });
-    } catch (error) {
-      console.error(`❌ Failed to change model:`, error);
-      throw error;
+    } else {
+      // Load existing context from database or create minimal context
+      const existingContext = databaseService.getClaudeContext(projectId);
+      const context = existingContext ? {
+        ...existingContext,
+        model: modelName // Update model in existing context
+      } : {
+        // Create minimal session to store the preference (new project)
+        tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+        baseline: defaultBaseline,
+        cost: 0,
+        turns: 0,
+        model: modelName,
+        contextWindow: 200000
+      };
+
+      this.sessions.set(projectId, {
+        projectPath: '',
+        sessionId: null,
+        status: 'idle',
+        abortController: null,
+        query: null,
+        context
+      });
+
+      // Save updated context to database
+      databaseService.saveClaudeContext(projectId, context);
+
+      this.emit('claude-model-changed', { projectId, model: modelName });
+      this.emit('claude-context-updated', { projectId, context });
     }
   }
 
@@ -607,6 +585,8 @@ class ClaudeService extends EventEmitter {
   /**
    * Interrupt current generation (stop mid-execution)
    * Preserves session and allows resuming conversation
+   * Note: SDK's interrupt() is only available in streaming input mode.
+   * For simple string prompts, we rely on AbortController.
    * @param projectId - Project identifier
    */
   interrupt(projectId: string): void {
@@ -615,14 +595,9 @@ class ClaudeService extends EventEmitter {
       return;
     }
 
-
     try {
-      // Use SDK's interrupt method if available on query object
-      if (session.query && typeof (session.query as any).interrupt === 'function') {
-        (session.query as any).interrupt();
-      }
-
-      // Also abort via AbortController as fallback
+      // Abort via AbortController - this is the primary cancellation mechanism
+      // SDK's interrupt() only works with streaming input mode (AsyncIterable<SDKUserMessage>)
       session.abortController?.abort();
     } catch (error) {
       console.error(`❌ Error interrupting Claude session for ${projectId}:`, error);

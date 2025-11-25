@@ -168,9 +168,9 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
   // Get font size class based on line count
   const getPromptFontSize = (lineCount: number): string => {
-    if (lineCount >= 8) return 'text-xs' // Smaller for 8+ lines
-    if (lineCount >= 2) return 'text-[13px]' // Medium for 2-3 lines
-    return 'text-sm' // Default for 1 line
+    if (lineCount >= 8) return 'text-[13px]' // Smaller for 8+ lines
+    if (lineCount >= 2) return 'text-[14px]' // Medium for 2-3 lines
+    return 'text-[15px]' // Default for 1 line
   }
 
   // Transform database block to UI block
@@ -365,13 +365,21 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       setOverflowingMessages(newOverflowingMessages)
     }
 
-    // Check after render and on window resize
-    checkOverflow()
+    // Use requestAnimationFrame to ensure DOM is fully laid out before checking
+    // This fixes the issue where overflow isn't detected after app reload
+    const rafId = requestAnimationFrame(() => {
+      // Additional timeout to ensure styles are applied
+      setTimeout(checkOverflow, 50)
+    })
+
     const handleResize = () => checkOverflow()
     window.addEventListener('resize', handleResize)
 
-    return () => window.removeEventListener('resize', handleResize)
-  }, [allBlocks, expandedMessages])
+    return () => {
+      cancelAnimationFrame(rafId)
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [allBlocks, expandedMessages, isExpanded])
 
 
   // Load more blocks (for infinite scroll)
@@ -1011,7 +1019,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           )}
                         </>
                       )}
-                      <span className="text-xs text-gray-200 flex-1 line-clamp-1">{collapsedState.text}</span>
+                      <span className="text-[13px] text-gray-200 flex-1 line-clamp-1">{collapsedState.text}</span>
                       <ChevronUp size={14} className="text-gray-400" />
                     </>
                   ) : (
@@ -1021,7 +1029,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                       ) : IconComponent ? (
                         <IconComponent size={14} className={`flex-shrink-0 text-primary ${collapsedState.needsAttention ? 'icon-bounce' : ''}`} />
                       ) : null}
-                      <span className="text-xs text-gray-200 flex-1 line-clamp-1">
+                      <span className="text-[13px] text-gray-200 flex-1 line-clamp-1">
                         {collapsedState.text}
                       </span>
                       {/* Stop button - only show when working on conversation */}
@@ -1054,7 +1062,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                   className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 px-3 transition-colors"
                   onClick={handleCollapse}
                 >
-                  <span className="text-xs font-medium text-gray-300">Workflow Activity</span>
+                  <span className="text-[13px] font-medium text-gray-300">Workflow Activity</span>
                   <button className="p-1">
                     <ChevronDown size={14} className="text-gray-300" />
                   </button>
@@ -1066,7 +1074,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                   {isLoadingMore && (
                     <div className="flex items-center justify-center py-4">
                       <Loader2 size={16} className="text-primary animate-spin" />
-                      <span className="ml-2 text-xs text-gray-400">Loading older messages...</span>
+                      <span className="ml-2 text-[13px] text-gray-400">Loading older messages...</span>
                     </div>
                   )}
 
@@ -1126,7 +1134,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                               )}
                             </div>
                             <div className="flex-1">
-                              <span className="text-xs font-medium text-primary">
+                              <span className="text-[13px] font-medium text-primary">
                                 {block.isComplete ? 'Project Ready!' : `Setting up ${block.templateName || 'project'}`}
                               </span>
                             </div>
@@ -1141,7 +1149,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                 ) : (
                                   <Loader2 size={10} className="text-primary animate-spin flex-shrink-0" />
                                 )}
-                                <span className={`text-[11px] leading-relaxed ${stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
+                                <span className={`text-[12px] leading-relaxed ${stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
                                   }`}>
                                   {stage.label}
                                 </span>
@@ -1166,7 +1174,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                               )}
                             </div>
                             <div className="flex-1">
-                              <span className="text-xs font-medium text-primary">
+                              <span className="text-[13px] font-medium text-primary">
                                 {block.isComplete ? 'Deployment Complete' : 'Deploying to Netlify'}
                               </span>
                             </div>
@@ -1181,7 +1189,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                 ) : (
                                   <Loader2 size={10} className="text-primary animate-spin flex-shrink-0" />
                                 )}
-                                <span className={`text-[11px] leading-relaxed ${stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
+                                <span className={`text-[12px] leading-relaxed ${stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
                                   }`}>
                                   {stage.label}
                                 </span>
@@ -1196,7 +1204,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                 href={block.deploymentUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex items-center gap-2 text-[11px] text-primary hover:text-primary-dark transition-colors group"
+                                className="flex items-center gap-2 text-[12px] text-primary hover:text-primary-dark transition-colors group"
                               >
                                 <Globe size={11} />
                                 <span className="font-medium">{block.deploymentUrl}</span>
@@ -1267,7 +1275,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                   {/* Title + Status */}
                                   <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                                     <div className="flex items-center gap-2">
-                                      <span className="text-sm font-medium text-gray-200">
+                                      <span className="text-[15px] font-medium text-gray-200">
                                         {restoreAction?.status === 'in_progress'
                                           ? 'Restoring checkpoint...'
                                           : restoreAction?.status === 'success'
@@ -1281,7 +1289,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                         </div>
                                       )}
                                       {restoreAction?.status === 'success' && (
-                                        <span className="text-[10px] text-gray-500">
+                                        <span className="text-[12px] text-gray-500">
                                           0.1s
                                         </span>
                                       )}
@@ -1306,7 +1314,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     {/* Title + Status */}
                                     <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                                       <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-sm font-medium text-gray-200">
+                                        <span className="text-[15px] font-medium text-gray-200">
                                           {deployAction.status === 'in_progress'
                                             ? 'Starting dev server...'
                                             : deployAction.status === 'success'
@@ -1316,16 +1324,14 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                         </span>
                                         {deployAction.status === 'success' && deployAction.data?.url && (
                                           <>
-                                            <span className="text-gray-400 text-[11px]">•</span>
-                                            <a
-                                              href={deployAction.data.url}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[11px]"
+                                            <span className="text-gray-400 text-[12px]">•</span>
+                                            <button
+                                              onClick={() => window.electronAPI?.shell?.openExternal(deployAction.data.url)}
+                                              className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[12px]"
                                             >
                                               <span>{deployAction.data.url}</span>
                                               <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
-                                            </a>
+                                            </button>
                                           </>
                                         )}
                                         {deployAction.status === 'success' && (
@@ -1334,7 +1340,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                               <Check size={10} className="text-green-400" />
                                             </div>
                                             {deployAction.data?.restartTime && (
-                                              <span className="text-[10px] text-gray-500">
+                                              <span className="text-[12px] text-gray-500">
                                                 {deployAction.data.restartTime}s
                                               </span>
                                             )}
@@ -1391,7 +1397,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                   }
                                                   setExpandedUserPrompts(newSet)
                                                 }}
-                                                className="mt-1 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                                className="mt-1 text-[12px] text-primary hover:text-primary-light transition-colors"
                                               >
                                                 {isExpanded ? 'Show less' : 'Show more'}
                                               </button>
@@ -1416,7 +1422,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                   {/* Title + Status */}
                                   <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                                     <div className="flex items-center gap-2">
-                                      <span className="text-sm font-medium text-gray-200">
+                                      <span className="text-[15px] font-medium text-gray-200">
                                         Claude:
                                       </span>
                                       {block.isComplete && (
@@ -1425,7 +1431,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                         </div>
                                       )}
                                       {block.isComplete && block.completionStats && (
-                                        <span className="text-[10px] text-gray-500">
+                                        <span className="text-[12px] text-gray-500">
                                           {block.completionStats.timeSeconds}s
                                         </span>
                                       )}
@@ -1455,7 +1461,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                           <div className="flex items-start gap-2">
                                             {message.type === 'assistant' && (
                                               <>
-                                                <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '8px' }} />
+                                                <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '3px' }} />
                                                 <div className="flex-1 relative">
                                                   <div
                                                     ref={(el) => {
@@ -1465,7 +1471,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                         messageRefs.current.delete(messageId)
                                                       }
                                                     }}
-                                                    className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap"
+                                                    className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-wrap"
                                                     style={{
                                                       display: '-webkit-box',
                                                       WebkitBoxOrient: 'vertical',
@@ -1481,7 +1487,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                       blockId={block.id}
                                                     />
                                                   </div>
-                                                  {hasOverflow && (
+                                                  {(hasOverflow || isMessageExpanded) && (
                                                     <button
                                                       onClick={() => {
                                                         const newSet = new Set(expandedMessages)
@@ -1492,9 +1498,9 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                         }
                                                         setExpandedMessages(newSet)
                                                       }}
-                                                      className="ml-1 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                                      className="ml-1 text-[12px] text-primary hover:text-primary-light transition-colors"
                                                     >
-                                                      {isMessageExpanded ? 'Show less' : 'Show more'}
+                                                      {isMessageExpanded ? '(Show less)' : '(Show more)'}
                                                     </button>
                                                   )}
                                                 </div>
@@ -1503,7 +1509,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                             {message.type === 'tool' && message.toolName && (
                                               <>
                                                 <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
-                                                <span className="text-[11px] text-gray-400 leading-relaxed flex items-center gap-2">
+                                                <span className="text-[12px] text-gray-400 leading-relaxed flex items-center gap-2">
                                                   <span>
                                                     Claude using tool{' '}
                                                     <span className="text-primary font-medium">{message.toolName}</span>
@@ -1513,7 +1519,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                   </span>
                                                   {isLatestTool && message.toolDuration === undefined && (
                                                     // Only show timer for the latest active tool
-                                                    <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                    <span className="text-[12px] text-gray-500 flex items-center gap-1">
                                                       <Clock size={10} />
                                                       <>{latestToolTimer.get(block.id)?.toFixed(1) || '0.0'}s</>
                                                     </span>
@@ -1536,7 +1542,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                         }
                                                         setExpandedThinking(newSet)
                                                       }}
-                                                      className="flex items-center gap-2 text-[11px] text-purple-400 hover:text-purple-300 transition-colors"
+                                                      className="flex items-center gap-2 text-[12px] text-purple-400 hover:text-purple-300 transition-colors"
                                                     >
                                                       <Brain size={9} className="flex-shrink-0" style={{ marginLeft: '1px' }} />
                                                       <span className="font-medium">
@@ -1548,7 +1554,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                       />
                                                     </button>
                                                     {expandedThinking.has(messageId) && (
-                                                      <div className="mt-2 pl-6 text-[10px] text-gray-400 leading-relaxed whitespace-pre-wrap border-l-2 border-purple-500/30">
+                                                      <div className="mt-2 pl-6 text-[12px] text-gray-400 leading-relaxed whitespace-pre-wrap border-l-2 border-purple-500/30">
                                                         {message.content}
                                                       </div>
                                                     )}
@@ -1557,10 +1563,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                   // Active thinking - animated
                                                   <div className="flex items-center gap-2">
                                                     <Brain size={9} className="flex-shrink-0 text-purple-400" style={{ marginLeft: '1px' }} />
-                                                    <span className="text-[11px] text-purple-400 font-medium">
+                                                    <span className="text-[12px] text-purple-400 font-medium">
                                                       Thinking{thinkingDots}
                                                     </span>
-                                                    <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                    <span className="text-[12px] text-gray-500 flex items-center gap-1">
                                                       <Clock size={10} />
                                                       {thinkingTimers.get(block.id)?.toFixed(1) || '0.0'}s
                                                     </span>
@@ -1582,12 +1588,12 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                                     return (
                                       <div className="mt-3">
-                                        <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
+                                        <div className="flex items-center gap-2 flex-wrap text-[12px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
                                           {toolUsage && (
                                             <>
                                               <span className="text-gray-400 flex items-center gap-1">
                                                 <span className="text-gray-500">Used tools:</span>
-                                                <span className="font-mono text-gray-300">{toolUsage}</span>
+                                                <span className="font-mono text-gray-300 text-[11px]">{toolUsage}</span>
                                               </span>
                                               <span className="text-gray-600">|</span>
                                             </>
@@ -1595,18 +1601,18 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                           <span className="text-gray-400 flex items-center gap-1">
                                             <span className="text-gray-500">Tokens:</span>
                                             <ArrowUpCircle size={10} className="text-blue-400" />
-                                            <span>{block.completionStats.inputTokens}</span>
+                                            <span className="text-[11px]">{block.completionStats.inputTokens}</span>
                                             <span className="text-gray-600">→</span>
                                             <ArrowDownCircle size={10} className="text-green-400" />
-                                            <span>{block.completionStats.outputTokens}</span>
+                                            <span className="text-[11px]">{block.completionStats.outputTokens}</span>
                                           </span>
                                           <span className="text-gray-600">|</span>
-                                          <span className="text-gray-400 flex items-center gap-1">
+                                          <span className="text-gray-400 flex items-center gap-1 text-[11px]">
                                             <DollarSign size={10} />
                                             {block.completionStats.cost.toFixed(4)}
                                             <div className="group/info relative flex items-center">
                                               <Info size={10} className="text-gray-500 cursor-help" />
-                                              <div className="absolute right-0 bottom-full mb-2 bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[9px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/info:opacity-100 transition-opacity z-[150] shadow-xl">
+                                              <div className="absolute right-0 bottom-full mb-2 bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[10px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/info:opacity-100 transition-opacity z-[150] shadow-xl">
                                                 Billed to API users only.<br />
                                                 Included in Max plans.
                                               </div>
@@ -1630,7 +1636,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                           }
                                           setExpandedSummaries(newSet)
                                         }}
-                                        className="flex items-center gap-1.5 text-[10px] text-primary hover:text-primary-light transition-colors"
+                                        className="flex items-center gap-1.5 text-[12px] text-primary hover:text-primary-light transition-colors"
                                       >
                                         {expandedSummaries.has(block.id) ? (
                                           <ChevronUp size={10} />
@@ -1641,7 +1647,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                       </button>
 
                                       {expandedSummaries.has(block.id) && (
-                                        <div className="mt-2 pl-4 text-[10px] text-gray-300 leading-relaxed whitespace-pre-wrap">
+                                        <div className="mt-2 pl-4 text-[12px] text-gray-300 leading-relaxed whitespace-pre-wrap">
                                           {block.summary}
                                         </div>
                                       )}
@@ -1663,7 +1669,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     {/* Title */}
                                     <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                                       <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium text-gray-200">
+                                        <span className="text-[15px] font-medium text-gray-200">
                                           Plan ready for approval
                                         </span>
                                       </div>
@@ -1672,7 +1678,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                                   {/* Approval content */}
                                   <div className="ml-10">
-                                    <p className="text-[11px] text-gray-300 mb-3">
+                                    <p className="text-[12px] text-gray-300 mb-3">
                                       Review Claude's plan above. Choose an action below:
                                     </p>
                                     <div className="flex gap-2">
@@ -1682,7 +1688,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                             onApprovePlan()
                                           }
                                         }}
-                                        className="px-4 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 hover:border-primary/70 rounded text-[11px] text-primary font-medium transition-all"
+                                        className="px-4 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 hover:border-primary/70 rounded text-[12px] text-primary font-medium transition-all"
                                       >
                                         Yes, confirm
                                       </button>
@@ -1692,7 +1698,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                             onRejectPlan()
                                           }
                                         }}
-                                        className="px-4 py-2 bg-gray-500/20 hover:bg-gray-500/30 border border-gray-500/50 hover:border-gray-500/70 rounded text-[11px] text-gray-300 font-medium transition-all"
+                                        className="px-4 py-2 bg-gray-500/20 hover:bg-gray-500/30 border border-gray-500/50 hover:border-gray-500/70 rounded text-[12px] text-gray-300 font-medium transition-all"
                                       >
                                         No, keep planning
                                       </button>
@@ -1710,7 +1716,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     </div>
                                     <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                                       <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium text-gray-200">
+                                        <span className="text-[15px] font-medium text-gray-200">
                                           User approved plan
                                         </span>
                                         <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -1731,11 +1737,11 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                       <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6" />
                                     </div>
                                     <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap" style={{ marginTop: '3px' }}>
-                                      <span className="text-sm font-medium text-gray-200">
+                                      <span className="text-[15px] font-medium text-gray-200">
                                         Claude:
                                       </span>
                                       {implementationBlock.isComplete && implementationBlock.completionStats && (
-                                        <span className="text-[10px] text-gray-500">
+                                        <span className="text-[12px] text-gray-500">
                                           {implementationBlock.completionStats.timeSeconds}s
                                         </span>
                                       )}
@@ -1753,7 +1759,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                       .map((msg, msgIdx) => {
                                         if (msg.type === 'thinking') {
                                           return (
-                                            <div key={`impl-thinking-${msgIdx}`} className="mb-2 text-[11px] text-gray-500 italic">
+                                            <div key={`impl-thinking-${msgIdx}`} className="mb-2 text-[12px] text-gray-500 italic">
                                               Thought for {msg.thinkingDuration || '...'}s
                                             </div>
                                           )
@@ -1765,7 +1771,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                                         return (
                                           <div key={`impl-msg-${msgIdx}`} className="mb-3">
-                                            <div className="text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
+                                            <div className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
                                               {msg.content}
                                             </div>
                                           </div>
@@ -1779,12 +1785,12 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                                       return (
                                         <div className="mt-3">
-                                          <div className="flex items-center gap-2 flex-wrap text-[10px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
+                                          <div className="flex items-center gap-2 flex-wrap text-[12px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
                                             {toolUsage && (
                                               <>
                                                 <span className="text-gray-400 flex items-center gap-1">
                                                   <span className="text-gray-500">Used tools:</span>
-                                                  <span className="font-mono text-gray-300">{toolUsage}</span>
+                                                  <span className="font-mono text-gray-300 text-[11px]">{toolUsage}</span>
                                                 </span>
                                                 <span className="text-gray-600">|</span>
                                               </>
@@ -1792,13 +1798,13 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                             <span className="text-gray-400 flex items-center gap-1">
                                               <span className="text-gray-500">Tokens:</span>
                                               <ArrowUpCircle size={10} className="text-blue-400" />
-                                              <span>{implementationBlock.completionStats.inputTokens}</span>
+                                              <span className="text-[11px]">{implementationBlock.completionStats.inputTokens}</span>
                                               <span className="text-gray-600">→</span>
                                               <ArrowDownCircle size={10} className="text-green-400" />
-                                              <span>{implementationBlock.completionStats.outputTokens}</span>
+                                              <span className="text-[11px]">{implementationBlock.completionStats.outputTokens}</span>
                                             </span>
                                             <span className="text-gray-600">|</span>
-                                            <span className="text-gray-400 flex items-center gap-1">
+                                            <span className="text-gray-400 flex items-center gap-1 text-[11px]">
                                               <DollarSign size={10} />
                                               {implementationBlock.completionStats.cost.toFixed(4)}
                                             </span>
@@ -1830,7 +1836,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                       {/* Title + Status */}
                                       <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                                         <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="text-sm font-medium text-gray-200">
+                                          <span className="text-[15px] font-medium text-gray-200">
                                             {git.status === 'in_progress'
                                               ? 'Committing and pushing to GitHub...'
                                               : git.status === 'success'
@@ -1839,14 +1845,14 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                             }
                                           </span>
                                           {git.status === 'success' && git.data?.commitHash && (
-                                            <span className="font-mono text-[11px] bg-white/[0.03] border border-white/10 px-2 py-0.5 rounded text-gray-400">
+                                            <span className="font-mono text-[12px] bg-white/[0.03] border border-white/10 px-2 py-0.5 rounded text-gray-400">
                                               {git.data.commitHash}
                                             </span>
                                           )}
                                           {git.status === 'success' && git.data?.filesChanged !== undefined && (
                                             <>
-                                              <span className="text-gray-400 text-[11px]">•</span>
-                                              <span className="text-[11px] text-gray-400">
+                                              <span className="text-gray-400 text-[12px]">•</span>
+                                              <span className="text-[12px] text-gray-400">
                                                 {git.data.filesChanged} file{git.data.filesChanged !== 1 ? 's' : ''} changed
                                               </span>
                                             </>
@@ -1856,7 +1862,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                               <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
                                                 <Check size={10} className="text-green-400" />
                                               </div>
-                                              <span className="text-[10px] text-gray-500">
+                                              <span className="text-[12px] text-gray-500">
                                                 0.1s
                                               </span>
                                             </>
@@ -1891,7 +1897,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                       {/* Title + Status */}
                                       <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                                         <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="text-sm font-medium text-gray-200">
+                                          <span className="text-[15px] font-medium text-gray-200">
                                             {deploy.status === 'in_progress'
                                               ? 'Starting dev server...'
                                               : deploy.status === 'success'
@@ -1901,16 +1907,14 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                           </span>
                                           {deploy.status === 'success' && deploy.data?.url && (
                                             <>
-                                              <span className="text-gray-400 text-[11px]">•</span>
-                                              <a
-                                                href={deploy.data.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[11px]"
+                                              <span className="text-gray-400 text-[12px]">•</span>
+                                              <button
+                                                onClick={() => window.electronAPI?.shell?.openExternal(deploy.data.url)}
+                                                className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[12px]"
                                               >
                                                 <span>{deploy.data.url}</span>
                                                 <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
-                                              </a>
+                                              </button>
                                             </>
                                           )}
                                           {deploy.status === 'success' && (
@@ -1919,7 +1923,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                 <Check size={10} className="text-green-400" />
                                               </div>
                                               {deploy.data?.restartTime && (
-                                                <span className="text-[10px] text-gray-500">
+                                                <span className="text-[12px] text-gray-500">
                                                   {deploy.data.restartTime}s
                                                 </span>
                                               )}
@@ -1948,7 +1952,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     {/* Title + Status */}
                                     <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
                                       <div className="flex items-center gap-2">
-                                        <span className="text-sm font-medium text-gray-200">
+                                        <span className="text-[15px] font-medium text-gray-200">
                                           Stopped by user
                                         </span>
                                         <div className="flex-shrink-0 w-4 h-4 rounded-full bg-red-500/20 flex items-center justify-center">
