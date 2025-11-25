@@ -1553,176 +1553,202 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
 
           {/* Main Content */}
           <div className="relative flex-1 flex overflow-hidden">
-            {/* Left Toolbar - Icons with labels */}
-            <div className="relative z-10 w-20 border-r border-dark-border bg-dark-bg/30 py-3 flex flex-col items-center gap-1">
-              {tools.map((tool) => {
-                const isActive = selectedTool === tool.id || (tool.id === 'crop' && cropMode)
-                return (
-                  <button
-                    key={tool.id}
-                    onClick={() => {
-                      if (tool.id === 'crop') {
-                        handleCropToolSelect()
-                      } else {
-                        // Exit crop mode if switching to another tool
-                        if (cropMode) {
-                          cancelCrop()
+            {/* Floating Left Toolbar */}
+            <div className="absolute left-4 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-2">
+              <div className="bg-dark-bg/60 backdrop-blur-xl border border-white/10 p-2 rounded-2xl shadow-2xl flex flex-col gap-2">
+                {tools.map((tool) => {
+                  const isActive = selectedTool === tool.id || (tool.id === 'crop' && cropMode)
+                  return (
+                    <button
+                      key={tool.id}
+                      onClick={() => {
+                        if (tool.id === 'crop') {
+                          handleCropToolSelect()
+                        } else {
+                          // Exit crop mode if switching to another tool
+                          if (cropMode) {
+                            cancelCrop()
+                          }
+                          setSelectedTool(selectedTool === tool.id ? null : tool.id)
                         }
-                        setSelectedTool(selectedTool === tool.id ? null : tool.id)
-                      }
-                    }}
-                    className={`w-16 py-2 rounded-lg flex flex-col items-center justify-center gap-1 transition-all ${
-                      isActive
-                        ? `bg-${tool.color}-500/20 text-${tool.color}-400 border border-${tool.color}-500/50`
-                        : 'text-gray-400 hover:text-white hover:bg-dark-bg/50'
+                      }}
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 group relative ${isActive
+                        ? `bg-gradient-to-br from-${tool.color}-500/20 to-${tool.color}-500/5 text-${tool.color}-400 border border-${tool.color}-500/30 shadow-[0_0_15px_rgba(0,0,0,0.3)]`
+                        : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
+                        }`}
+                    >
+                      <tool.icon size={20} className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
+
+                      {/* Tooltip */}
+                      <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">
+                        {tool.label}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="bg-dark-bg/60 backdrop-blur-xl border border-white/10 p-2 rounded-2xl shadow-2xl flex flex-col gap-2">
+                {/* Transform buttons */}
+                <button
+                  onClick={() => handleRotate(90)}
+                  disabled={!isCanvasReady}
+                  className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/5 transition-all disabled:opacity-40 group relative"
+                >
+                  <RotateCw size={20} className="group-hover:rotate-90 transition-transform duration-300" />
+                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">
+                    Rotate
+                  </div>
+                </button>
+                <button
+                  onClick={handleFlipX}
+                  disabled={!isCanvasReady}
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 group relative ${flipX ? 'bg-primary/20 text-primary border border-primary/30' : 'text-gray-400 hover:text-white hover:bg-white/5'
                     }`}
-                  >
-                    <tool.icon size={18} />
-                    <span className="text-[10px] font-medium">{tool.label}</span>
-                  </button>
-                )
-              })}
+                >
+                  <FlipHorizontal size={20} />
+                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">
+                    Flip Horizontal
+                  </div>
+                </button>
+                <button
+                  onClick={handleFlipY}
+                  disabled={!isCanvasReady}
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 group relative ${flipY ? 'bg-primary/20 text-primary border border-primary/30' : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    }`}
+                >
+                  <FlipVertical size={20} />
+                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">
+                    Flip Vertical
+                  </div>
+                </button>
 
-              <div className="w-12 h-px bg-dark-border my-2" />
+                <div className="h-px w-8 bg-white/10 mx-auto my-1" />
 
-              {/* Transform buttons */}
-              <button
-                onClick={() => handleRotate(90)}
-                disabled={!isCanvasReady}
-                className="w-16 py-2 rounded-lg flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-white hover:bg-dark-bg/50 transition-all disabled:opacity-40"
-              >
-                <RotateCw size={16} />
-                <span className="text-[10px] font-medium">Rotate</span>
-              </button>
-              <button
-                onClick={handleFlipX}
-                disabled={!isCanvasReady}
-                className={`w-16 py-2 rounded-lg flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-40 ${
-                  flipX ? 'bg-primary/20 text-primary' : 'text-gray-400 hover:text-white hover:bg-dark-bg/50'
-                }`}
-              >
-                <FlipHorizontal size={16} />
-                <span className="text-[10px] font-medium">Flip H</span>
-              </button>
-              <button
-                onClick={handleFlipY}
-                disabled={!isCanvasReady}
-                className={`w-16 py-2 rounded-lg flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-40 ${
-                  flipY ? 'bg-primary/20 text-primary' : 'text-gray-400 hover:text-white hover:bg-dark-bg/50'
-                }`}
-              >
-                <FlipVertical size={16} />
-                <span className="text-[10px] font-medium">Flip V</span>
-              </button>
-
-              <div className="flex-1" />
-
-              {/* Undo button */}
-              <button
-                onClick={handleUndo}
-                disabled={!isCanvasReady || history.length === 0}
-                className={`w-16 py-2 rounded-lg flex flex-col items-center justify-center gap-1 transition-all disabled:opacity-40 ${
-                  history.length > 0
+                {/* Undo button */}
+                <button
+                  onClick={handleUndo}
+                  disabled={!isCanvasReady || history.length === 0}
+                  className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 group relative ${history.length > 0
                     ? 'text-blue-400 hover:text-blue-300 hover:bg-blue-500/10'
-                    : 'text-gray-500'
-                }`}
-              >
-                <Undo2 size={16} />
-                <span className="text-[10px] font-medium">Undo ({history.length})</span>
-              </button>
+                    : 'text-gray-600'
+                    }`}
+                >
+                  <Undo2 size={20} />
+                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">
+                    Undo ({history.length})
+                  </div>
+                </button>
+              </div>
             </div>
 
             {/* Center Area */}
-            <div className="flex-1 flex flex-col">
-              {/* Tool Options Bar - Always visible */}
-              <div className="relative z-10 px-4 py-3 border-b border-dark-border bg-dark-bg/40 flex items-center gap-4 min-h-[52px]">
-                {/* Placeholder when no tool selected */}
-                {!selectedTool && !cropMode && (
-                  <span className="text-sm text-gray-500">Select a tool to begin editing</span>
-                )}
+            <div className="flex-1 flex flex-col relative">
+              {/* Tool Options Bar - Floating at top */}
+              <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${(selectedTool || cropMode) ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'
+                }`}>
+                <div className="bg-dark-bg/80 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-6 min-w-[300px] justify-center">
 
-                {/* Adjust Tool Options */}
-                {selectedTool === 'adjust' && (
+                  {/* Adjust Tool Options */}
+                  {selectedTool === 'adjust' && (
                     <>
-                      <div className="flex items-center gap-2">
-                        <Sun size={14} className="text-gray-500" />
-                        <span className="text-xs text-gray-400 w-16">Brightness</span>
-                        <input
-                          type="range"
-                          min="-100"
-                          max="100"
-                          value={pendingAdjustments.brightness}
-                          onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, brightness: parseInt(e.target.value) })}
-                          className="w-24 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer accent-pink-500"
-                        />
-                        <span className="text-xs text-gray-500 w-8 text-right">{pendingAdjustments.brightness}</span>
+                      <div className="flex items-center gap-3 group">
+                        <Sun size={16} className="text-gray-400 group-hover:text-pink-400 transition-colors" />
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Brightness</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="-100"
+                              max="100"
+                              value={pendingAdjustments.brightness}
+                              onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, brightness: parseInt(e.target.value) })}
+                              className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-all"
+                            />
+                            <span className="text-xs font-mono text-gray-300 w-8 text-right">{pendingAdjustments.brightness}</span>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="w-px h-6 bg-dark-border" />
+                      <div className="w-px h-8 bg-white/10" />
 
-                      <div className="flex items-center gap-2">
-                        <Contrast size={14} className="text-gray-500" />
-                        <span className="text-xs text-gray-400 w-14">Contrast</span>
-                        <input
-                          type="range"
-                          min="-100"
-                          max="100"
-                          value={pendingAdjustments.contrast}
-                          onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, contrast: parseInt(e.target.value) })}
-                          className="w-24 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer accent-pink-500"
-                        />
-                        <span className="text-xs text-gray-500 w-8 text-right">{pendingAdjustments.contrast}</span>
+                      <div className="flex items-center gap-3 group">
+                        <Contrast size={16} className="text-gray-400 group-hover:text-pink-400 transition-colors" />
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Contrast</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="-100"
+                              max="100"
+                              value={pendingAdjustments.contrast}
+                              onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, contrast: parseInt(e.target.value) })}
+                              className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-all"
+                            />
+                            <span className="text-xs font-mono text-gray-300 w-8 text-right">{pendingAdjustments.contrast}</span>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="w-px h-6 bg-dark-border" />
+                      <div className="w-px h-8 bg-white/10" />
 
-                      <div className="flex items-center gap-2">
-                        <Droplets size={14} className="text-gray-500" />
-                        <span className="text-xs text-gray-400 w-16">Saturation</span>
-                        <input
-                          type="range"
-                          min="-100"
-                          max="100"
-                          value={pendingAdjustments.saturation}
-                          onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, saturation: parseInt(e.target.value) })}
-                          className="w-24 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer accent-pink-500"
-                        />
-                        <span className="text-xs text-gray-500 w-8 text-right">{pendingAdjustments.saturation}</span>
+                      <div className="flex items-center gap-3 group">
+                        <Droplets size={16} className="text-gray-400 group-hover:text-pink-400 transition-colors" />
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Saturation</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="-100"
+                              max="100"
+                              value={pendingAdjustments.saturation}
+                              onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, saturation: parseInt(e.target.value) })}
+                              className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-all"
+                            />
+                            <span className="text-xs font-mono text-gray-300 w-8 text-right">{pendingAdjustments.saturation}</span>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="w-px h-6 bg-dark-border" />
+                      <div className="w-px h-8 bg-white/10" />
 
-                      <div className="flex items-center gap-2">
-                        <CircleDot size={14} className="text-gray-500" />
-                        <span className="text-xs text-gray-400 w-8">Hue</span>
-                        <input
-                          type="range"
-                          min="0"
-                          max="360"
-                          value={pendingAdjustments.hue}
-                          onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, hue: parseInt(e.target.value) })}
-                          className="w-24 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer accent-pink-500"
-                        />
-                        <span className="text-xs text-gray-500 w-10 text-right">{pendingAdjustments.hue}°</span>
+                      <div className="flex items-center gap-3 group">
+                        <CircleDot size={16} className="text-gray-400 group-hover:text-pink-400 transition-colors" />
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Hue</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="range"
+                              min="0"
+                              max="360"
+                              value={pendingAdjustments.hue}
+                              onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, hue: parseInt(e.target.value) })}
+                              className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-all"
+                            />
+                            <span className="text-xs font-mono text-gray-300 w-10 text-right">{pendingAdjustments.hue}°</span>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="flex-1" />
+                      <div className="w-px h-8 bg-white/10" />
 
-                      <button
-                        onClick={() => setPendingAdjustments(appliedAdjustments)}
-                        className="px-2 py-1 text-xs text-gray-500 hover:text-white rounded transition-colors"
-                      >
-                        Reset
-                      </button>
-                      {hasUnappliedAdjustments && (
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={applyAdjustments}
-                          className="px-3 py-1.5 text-xs bg-pink-500/20 hover:bg-pink-500/30 border border-pink-500/50 text-pink-400 rounded-md transition-colors flex items-center gap-1"
+                          onClick={() => setPendingAdjustments(appliedAdjustments)}
+                          className="px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                         >
-                          <Check size={12} />
-                          Apply
+                          Reset
                         </button>
-                      )}
+                        {hasUnappliedAdjustments && (
+                          <button
+                            onClick={applyAdjustments}
+                            className="px-4 py-1.5 text-xs font-medium bg-pink-500 text-white rounded-lg shadow-lg shadow-pink-500/20 hover:bg-pink-400 hover:shadow-pink-500/40 transition-all flex items-center gap-1.5"
+                          >
+                            <Check size={14} />
+                            Apply
+                          </button>
+                        )}
+                      </div>
                     </>
                   )}
 
@@ -1740,109 +1766,119 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                           <button
                             key={f.key}
                             onClick={() => setPendingFilters({ ...pendingFilters, [f.key]: !pendingFilters[f.key as keyof FilterValues] })}
-                            className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${
-                              pendingFilters[f.key as keyof FilterValues]
-                                ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
-                                : 'bg-dark-bg/50 border-dark-border text-gray-400 hover:text-white hover:border-gray-500'
-                            }`}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${pendingFilters[f.key as keyof FilterValues]
+                              ? 'bg-orange-500/20 border-orange-500/50 text-orange-400 shadow-[0_0_10px_rgba(249,115,22,0.2)]'
+                              : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10 hover:border-white/20'
+                              }`}
                           >
                             {f.label}
                           </button>
                         ))}
                       </div>
 
-                      <div className="w-px h-6 bg-dark-border" />
+                      <div className="w-px h-8 bg-white/10" />
 
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">Blur</span>
-                        <input
-                          type="range"
-                          min="0"
-                          max="100"
-                          value={pendingFilters.blur}
-                          onChange={(e) => setPendingFilters({ ...pendingFilters, blur: parseInt(e.target.value) })}
-                          className="w-20 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer accent-orange-500"
-                        />
-                        <span className="text-xs text-gray-500 w-8">{pendingFilters.blur}%</span>
+                      <div className="flex items-center gap-3 group">
+                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider group-hover:text-orange-400 transition-colors">Blur</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={pendingFilters.blur}
+                            onChange={(e) => setPendingFilters({ ...pendingFilters, blur: parseInt(e.target.value) })}
+                            className="w-20 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all"
+                          />
+                          <span className="text-xs font-mono text-gray-300 w-8 text-right">{pendingFilters.blur}%</span>
+                        </div>
                       </div>
 
-                      <div className="w-px h-6 bg-dark-border" />
+                      <div className="w-px h-8 bg-white/10" />
 
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">Warmth</span>
-                        <input
-                          type="range"
-                          min="-100"
-                          max="100"
-                          value={pendingFilters.warmth}
-                          onChange={(e) => setPendingFilters({ ...pendingFilters, warmth: parseInt(e.target.value) })}
-                          className="w-20 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer accent-orange-500"
-                        />
-                        <span className="text-xs text-gray-500 w-8">{pendingFilters.warmth}</span>
+                      <div className="flex items-center gap-3 group">
+                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider group-hover:text-orange-400 transition-colors">Warmth</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="range"
+                            min="-100"
+                            max="100"
+                            value={pendingFilters.warmth}
+                            onChange={(e) => setPendingFilters({ ...pendingFilters, warmth: parseInt(e.target.value) })}
+                            className="w-20 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all"
+                          />
+                          <span className="text-xs font-mono text-gray-300 w-8 text-right">{pendingFilters.warmth}</span>
+                        </div>
                       </div>
 
-                      <div className="flex-1" />
+                      <div className="w-px h-8 bg-white/10" />
 
-                      <button
-                        onClick={() => setPendingFilters(appliedFilters)}
-                        className="px-2 py-1 text-xs text-gray-500 hover:text-white rounded transition-colors"
-                      >
-                        Reset
-                      </button>
-                      {hasUnappliedFilters && (
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={applyFilters}
-                          className="px-3 py-1.5 text-xs bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/50 text-orange-400 rounded-md transition-colors flex items-center gap-1"
+                          onClick={() => setPendingFilters(appliedFilters)}
+                          className="px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                         >
-                          <Check size={12} />
-                          Apply
+                          Reset
                         </button>
-                      )}
+                        {hasUnappliedFilters && (
+                          <button
+                            onClick={applyFilters}
+                            className="px-4 py-1.5 text-xs font-medium bg-orange-500 text-white rounded-lg shadow-lg shadow-orange-500/20 hover:bg-orange-400 hover:shadow-orange-500/40 transition-all flex items-center gap-1.5"
+                          >
+                            <Check size={14} />
+                            Apply
+                          </button>
+                        )}
+                      </div>
                     </>
                   )}
 
                   {/* Resize Tool Options */}
                   {selectedTool === 'resize' && (
                     <>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">W</span>
-                        <input
-                          type="number"
-                          value={resize.width}
-                          onChange={(e) => handleResizeWidth(parseInt(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 bg-dark-bg border border-dark-border rounded text-xs text-white focus:border-blue-500 focus:outline-none"
-                        />
-                        <span className="text-xs text-gray-500">px</span>
+                      <div className="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 focus-within:border-blue-500/50 transition-colors">
+                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Width</span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={resize.width}
+                            onChange={(e) => handleResizeWidth(parseInt(e.target.value) || 0)}
+                            className="w-16 bg-transparent text-sm font-mono text-white focus:outline-none text-right"
+                          />
+                          <span className="text-xs text-gray-500">px</span>
+                        </div>
                       </div>
 
                       <button
                         onClick={() => setResize({ ...resize, lockAspectRatio: !resize.lockAspectRatio })}
-                        className={`p-1.5 rounded transition-colors ${
-                          resize.lockAspectRatio
-                            ? 'text-blue-400 bg-blue-500/20'
-                            : 'text-gray-500 hover:text-white'
-                        }`}
+                        className={`p-2 rounded-lg transition-all ${resize.lockAspectRatio
+                          ? 'text-blue-400 bg-blue-500/20 border border-blue-500/30'
+                          : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'
+                          }`}
                         title={resize.lockAspectRatio ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
                       >
-                        {resize.lockAspectRatio ? <Link size={14} /> : <Unlink size={14} />}
+                        {resize.lockAspectRatio ? <Link size={16} /> : <Unlink size={16} />}
                       </button>
 
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">H</span>
-                        <input
-                          type="number"
-                          value={resize.height}
-                          onChange={(e) => handleResizeHeight(parseInt(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 bg-dark-bg border border-dark-border rounded text-xs text-white focus:border-blue-500 focus:outline-none"
-                        />
-                        <span className="text-xs text-gray-500">px</span>
+                      <div className="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 focus-within:border-blue-500/50 transition-colors">
+                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Height</span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={resize.height}
+                            onChange={(e) => handleResizeHeight(parseInt(e.target.value) || 0)}
+                            className="w-16 bg-transparent text-sm font-mono text-white focus:outline-none text-right"
+                          />
+                          <span className="text-xs text-gray-500">px</span>
+                        </div>
                       </div>
+
+                      <div className="w-px h-8 bg-white/10" />
 
                       <button
                         onClick={applyResize}
-                        className="px-3 py-1.5 text-xs bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/50 text-blue-400 rounded-md transition-colors flex items-center gap-1"
+                        className="px-4 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg shadow-lg shadow-blue-500/20 hover:bg-blue-400 hover:shadow-blue-500/40 transition-all flex items-center gap-1.5"
                       >
-                        <Check size={12} />
+                        <Check size={14} />
                         Apply
                       </button>
                     </>
@@ -1864,11 +1900,10 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                           <button
                             key={preset.key}
                             onClick={() => setAspectRatio(preset.key)}
-                            className={`px-2 py-1 text-xs rounded-md border transition-colors flex items-center gap-1 ${
-                              aspectRatioPreset === preset.key
-                                ? 'bg-green-500/20 border-green-500/50 text-green-400'
-                                : 'bg-dark-bg/50 border-dark-border text-gray-400 hover:text-white hover:border-gray-500'
-                            }`}
+                            className={`px-2 py-1 text-xs rounded-md border transition-colors flex items-center gap-1 ${aspectRatioPreset === preset.key
+                              ? 'bg-green-500/20 border-green-500/50 text-green-400'
+                              : 'bg-dark-bg/50 border-dark-border text-gray-400 hover:text-white hover:border-gray-500'
+                              }`}
                           >
                             <preset.icon size={12} />
                             {preset.label}
@@ -1948,6 +1983,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                       )}
                     </>
                   )}
+                </div>
               </div>
 
               {/* Canvas Area */}
@@ -1975,7 +2011,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                   </div>
                 )}
 
-                <div className="absolute bottom-3 left-3 bg-black/80 px-2 py-1 rounded text-xs text-gray-400 font-mono pointer-events-none z-10">
+                <div className="absolute bottom-3 left-3 bg-black/80 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-lg text-xs text-gray-300 font-mono pointer-events-none z-10 shadow-lg">
                   {getOutputDimensions().width} × {getOutputDimensions().height}px
                   {rotation !== 0 && <span className="ml-1 text-gray-500">({rotation}°)</span>}
                 </div>
@@ -2009,7 +2045,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                       return (
                         <div
                           key={region.id}
-                          className="absolute border-2 border-purple-400 pointer-events-auto group"
+                          className="absolute border-2 border-purple-400 pointer-events-auto group shadow-[0_0_15px_rgba(168,85,247,0.3)]"
                           style={{
                             left: screenX,
                             top: screenY,
@@ -2021,10 +2057,10 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                         >
                           <button
                             onClick={() => removeBlurRegion(region.id)}
-                            className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-400 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute -top-3 -right-3 w-6 h-6 bg-red-500 hover:bg-red-400 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg transform hover:scale-110"
                             title="Remove blur region"
                           >
-                            <X size={12} className="text-white" />
+                            <X size={14} className="text-white" />
                           </button>
                         </div>
                       )
@@ -2038,7 +2074,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                       const cssBlur = Math.round((blurIntensity / 2) * avgScale * 0.7)
                       return (
                         <div
-                          className="absolute border-2 border-dashed border-purple-400"
+                          className="absolute border-2 border-dashed border-purple-400/70"
                           style={{
                             left: bounds.left + currentBlurRect.x * bounds.scaleX,
                             top: bounds.top + currentBlurRect.y * bounds.scaleY,
@@ -2057,21 +2093,21 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
           </div>
 
           {/* Footer */}
-          <div className="relative z-10 px-4 py-3 border-t border-dark-border bg-dark-bg/50 flex items-center justify-between">
-            <span className="text-xs text-gray-500">
+          <div className="relative z-10 px-6 py-4 border-t border-white/5 bg-dark-bg/80 backdrop-blur-xl flex items-center justify-between">
+            <span className="text-xs text-gray-500 font-medium">
               Scroll to zoom • Drag to pan
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <button
                 onClick={handleClose}
-                className="px-4 py-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+                className="px-4 py-2 bg-dark-bg hover:bg-dark-bg/70 text-gray-300 text-sm font-medium rounded-lg transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={isSaving || !isCanvasReady}
-                className="px-5 py-1.5 bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>

@@ -214,7 +214,7 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
 
       {/* Modal */}
-      <div className="relative w-[700px] bg-dark-card border border-dark-border rounded-xl shadow-2xl overflow-hidden">
+      <div className="relative w-[700px] bg-dark-bg/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Background Image */}
         <div
           className="absolute inset-0 opacity-5 pointer-events-none"
@@ -226,29 +226,29 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
         />
 
         {/* Header */}
-        <div className="relative z-10 px-5 py-3 border-b border-dark-border bg-dark-bg/50 flex items-center justify-between">
+        <div className="relative z-10 px-6 py-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-white">Send Screenshot to Claude</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Add a description to help Claude understand what you need</p>
+            <h2 className="text-lg font-semibold text-white tracking-tight">Send Screenshot to Claude</h2>
+            <p className="text-xs text-gray-400 mt-0.5 font-medium">Add a description to help Claude understand what you need. You can also paint/point what you want changed using the pencil.</p>
           </div>
           <button
             onClick={handleClose}
-            className="p-2 rounded-lg hover:bg-dark-bg/80 transition-colors text-gray-400 hover:text-white"
+            className="p-2 rounded-xl hover:bg-white/10 transition-colors text-gray-400 hover:text-white group"
           >
-            <X size={18} />
+            <X size={20} className="group-hover:rotate-90 transition-transform duration-300" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="relative z-10 p-5 space-y-4">
+        <div className="relative z-10 p-5 space-y-4 flex flex-col h-full">
           {/* Screenshot Preview */}
-          <div className="relative bg-dark-bg rounded-lg border border-dark-border overflow-hidden flex flex-col items-center justify-center p-4">
-            <div className="relative inline-block flex-shrink-0">
+          <div className="relative bg-black/20 rounded-xl border border-white/10 overflow-hidden flex-1 flex flex-col items-center justify-center p-4 min-h-0">
+            <div className="relative inline-block shadow-2xl rounded-lg overflow-hidden max-h-full">
               <img
                 ref={imageRef}
                 src={screenshotSrc}
                 alt="Screenshot"
-                className="max-w-full max-h-[280px] object-contain rounded"
+                className="max-w-full max-h-[400px] object-contain"
               />
               <canvas
                 ref={canvasRef}
@@ -256,24 +256,28 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
                 onMouseMove={draw}
                 onMouseUp={stopDrawing}
                 onMouseLeave={stopDrawing}
-                className={`absolute top-0 left-0 rounded ${selectedColor ? 'cursor-crosshair' : 'cursor-default'}`}
+                className={`absolute top-0 left-0 ${selectedColor ? 'cursor-crosshair' : 'cursor-default'}`}
                 style={{ pointerEvents: selectedColor ? 'auto' : 'none' }}
               />
             </div>
+          </div>
 
-            {/* Tools - Below Screenshot, Centered */}
-            <div className="mt-4 flex items-center justify-center gap-2">
+          {/* Tools - Centered Below Screenshot */}
+          <div className="flex items-center justify-center">
+            <div className="flex items-center gap-3 bg-dark-bg/40 border border-white/10 px-4 py-2 rounded-full shadow-sm">
               {/* Clear Button */}
               <button
                 onClick={clearCanvas}
-                className="p-1.5 rounded-md bg-dark-bg/40 border border-dark-border/30 transition-all hover:border-dark-border/60 text-gray-400 hover:text-white"
+                className="p-2 rounded-full hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
                 title="Clear annotations"
               >
-                <Eraser size={14} />
+                <Eraser size={16} />
               </button>
 
+              <div className="w-px h-4 bg-white/10" />
+
               {/* Color Picker */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <AnimatePresence>
                   {showColorPicker && (
                     <motion.div
@@ -281,7 +285,7 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
                       animate={{ opacity: 1, width: 'auto' }}
                       exit={{ opacity: 0, width: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="flex items-center gap-1.5 overflow-hidden"
+                      className="flex items-center gap-2 overflow-hidden pr-2"
                     >
                       {colors.map((color, index) => (
                         <motion.button
@@ -294,7 +298,7 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
                             setSelectedColor(color.name)
                             setShowColorPicker(false)
                           }}
-                          className={`w-5 h-5 rounded-full ${color.bg} transition-all hover:scale-125 ring-1 ring-dark-border/30 hover:ring-2 hover:ring-white/20`}
+                          className={`w-6 h-6 rounded-full ${color.bg} transition-all hover:scale-125 ring-2 ring-transparent hover:ring-white/20 shadow-lg`}
                           title={color.name}
                         />
                       ))}
@@ -305,14 +309,13 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
                 {/* Pencil Button */}
                 <button
                   onClick={() => setShowColorPicker(!showColorPicker)}
-                  className={`p-1.5 rounded-md ${
-                    selectedColor
-                      ? 'bg-dark-bg/80'
-                      : 'bg-dark-bg/40'
-                  } border border-dark-border/30 transition-all hover:border-dark-border/60`}
+                  className={`p-2 rounded-full transition-all ${selectedColor
+                    ? 'bg-white/10 text-white ring-1 ring-white/20'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    }`}
                   title="Choose markup color"
                 >
-                  <Pencil size={14} className={`${getColorClass(selectedColor)} transition-colors`} />
+                  <Pencil size={16} className={selectedColor ? getColorClass(selectedColor) : ''} />
                 </button>
               </div>
             </div>
@@ -320,14 +323,14 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
 
           {/* Description Input */}
           <div className="space-y-2">
-            <label className="text-xs text-gray-400 font-medium uppercase tracking-wider">
-              What would you like Claude to do?
+            <label className="text-xs text-gray-400 font-medium uppercase tracking-wider ml-1">
+              Instructions
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g., Increase the padding on this button..."
-              className="w-full px-3 py-2.5 bg-dark-bg/50 border border-dark-border rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none h-[80px]"
+              placeholder="Describe what you want to change..."
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary/50 focus:bg-white/10 transition-all resize-none h-[80px]"
               autoFocus
             />
           </div>
@@ -336,17 +339,17 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
           <div className="flex items-center gap-3 justify-end pt-1">
             <button
               onClick={handleClose}
-              className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+              className="px-4 py-2 bg-dark-bg hover:bg-dark-bg/70 text-gray-300 text-sm font-medium rounded-lg transition-all"
             >
               Cancel
             </button>
             <button
               onClick={handleSend}
               disabled={!description.trim()}
-              className="px-5 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 disabled:bg-gray-600 disabled:border-0 disabled:cursor-not-allowed text-primary disabled:text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Send size={15} />
-              Send to Claude
+              <Send size={16} />
+              SEND TO CLAUDE
             </button>
           </div>
         </div>

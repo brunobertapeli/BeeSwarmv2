@@ -21,7 +21,8 @@ import {
   BarChart3,
   LayoutGrid,
   Camera,
-  FolderOpen
+  FolderOpen,
+  Github
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore, type DeploymentStatus } from '../store/appStore'
@@ -38,7 +39,7 @@ import noiseBgImage from '../assets/images/noise_bg.png'
 interface ActionBarProps {
   projectId?: string
   onChatClick?: () => void
-  onImagesClick?: () => void
+  onGitHubClick?: () => void
   onSettingsClick?: () => void
   onOpenSettings?: (tab: 'general' | 'environment' | 'deployment') => void // Open settings to specific tab
   onConsoleClick?: () => void
@@ -71,7 +72,7 @@ const DEPLOYMENT_STAGES = [
 function ActionBar({
   projectId,
   onChatClick,
-  onImagesClick,
+  onGitHubClick,
   onSettingsClick,
   onOpenSettings,
   onConsoleClick,
@@ -1527,12 +1528,12 @@ function ActionBar({
             </button>
 
             <button
-              onClick={onImagesClick}
+              onClick={onGitHubClick}
               className="p-1.5 hover:bg-dark-bg/50 rounded-lg transition-all icon-button-group relative"
             >
-              <ImageIcon size={15} className="text-gray-400 hover:text-primary transition-colors" />
+              <Github size={15} className="text-gray-400 hover:text-primary transition-colors" />
               <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
-                Images
+                GitHub (G)
               </span>
             </button>
 

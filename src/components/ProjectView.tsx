@@ -19,6 +19,7 @@ import KanbanWidget from './KanbanWidget'
 import StickyNoteWidget from './StickyNoteWidget'
 import AnalyticsWidget from './AnalyticsWidget'
 import ProjectAssetsWidget from './ProjectAssetsWidget'
+import GitHubSheet from './GitHubSheet'
 import { ModalPortal } from './ModalPortal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
 import bgImage from '../assets/images/bg.jpg'
@@ -60,6 +61,7 @@ function ProjectView() {
   const [showHelpChat, setShowHelpChat] = useState(false)
   const [helpChatFreezeReady, setHelpChatFreezeReady] = useState(false)
   const [researchAgentStatusExpanded, setResearchAgentStatusExpanded] = useState(false)
+  const [showGitHubSheet, setShowGitHubSheet] = useState(false)
 
   // Dev server and preview state
   const [serverStatus, setServerStatus] = useState<ProcessState>('stopped')
@@ -428,6 +430,12 @@ Please read the manifest to understand what my website is about, then create an 
         e.preventDefault()
         window.electronAPI?.layout.cycleState(currentProject.id)
       }
+
+      // G - Toggle GitHub Sheet
+      if (e.key.toLowerCase() === 'g' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        setShowGitHubSheet(prev => !prev)
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -456,10 +464,6 @@ Please read the manifest to understand what my website is about, then create an 
 
   const handleChatClick = () => {
     toast.info('Starting conversation...', 'Claude is ready to help you build!')
-  }
-
-  const handleImagesClick = () => {
-    toast.info('Image manager', 'Opening image management modal...')
   }
 
   const handleConsoleClick = () => {
@@ -800,7 +804,7 @@ Please read the manifest to understand what my website is about, then create an 
             <ActionBar
               projectId={currentProjectId || undefined}
               onChatClick={handleChatClick}
-              onImagesClick={handleImagesClick}
+              onGitHubClick={() => setShowGitHubSheet(true)}
               onSettingsClick={handleSettingsClick}
               onOpenSettings={handleOpenSettings}
               onConsoleClick={handleConsoleClick}
@@ -813,6 +817,12 @@ Please read the manifest to understand what my website is about, then create an 
           </div>
         </div>
       )}
+
+      {/* GitHub Sheet */}
+      <GitHubSheet
+        isOpen={showGitHubSheet}
+        onClose={() => setShowGitHubSheet(false)}
+      />
 
       {/* Kanban Widget */}
       {kanbanEnabled && layoutState === 'TOOLS' && <KanbanWidget />}
