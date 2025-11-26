@@ -36,9 +36,9 @@ function WhiteboardWidget() {
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastElementsCountRef = useRef<number>(0)
 
-  const MIN_WIDTH = 400
+  const MIN_WIDTH = 1005
   const MAX_WIDTH = 1600
-  const MIN_HEIGHT = 300
+  const MIN_HEIGHT = 500
   const MAX_HEIGHT = 1000
 
   // Load whiteboard data when project changes

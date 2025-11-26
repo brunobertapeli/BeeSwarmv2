@@ -379,7 +379,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   // Whiteboard widget initial state
   whiteboardWidgetEnabled: false,
   whiteboardWidgetPosition: { x: 5, y: 48 }, // Default position (5px from left, below header)
-  whiteboardWidgetSize: { width: 600, height: 400 },
+  whiteboardWidgetSize: { width: 1005, height: 500 },
   whiteboardWidgetZIndex: 53,
   whiteboardData: null,
 
@@ -817,7 +817,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         set({
           whiteboardWidgetEnabled: false,
           whiteboardWidgetPosition: { x: 5, y: 48 },
-          whiteboardWidgetSize: { width: 600, height: 400 },
+          whiteboardWidgetSize: { width: 1005, height: 500 },
           whiteboardWidgetZIndex: 53
         });
       }
@@ -827,7 +827,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       set({
         whiteboardWidgetEnabled: false,
         whiteboardWidgetPosition: { x: 5, y: 48 },
-        whiteboardWidgetSize: { width: 600, height: 400 },
+        whiteboardWidgetSize: { width: 1005, height: 500 },
         whiteboardWidgetZIndex: 53
       });
     }
