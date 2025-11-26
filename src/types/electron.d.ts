@@ -718,6 +718,68 @@ export interface ElectronAPI {
   }
 
   git: {
+    checkGhCli: () => Promise<{
+      success: boolean
+      installed?: boolean
+      authenticated?: boolean
+      error?: string
+    }>
+    getStatus: (projectId: string) => Promise<{
+      success: boolean
+      files?: Array<{ path: string; status: 'added' | 'modified' | 'deleted' | 'untracked' }>
+      hasChanges?: boolean
+      ahead?: number
+      behind?: number
+      branch?: string
+      error?: string
+    }>
+    getRemote: (projectId: string) => Promise<{
+      success: boolean
+      hasRemote?: boolean
+      url?: string
+      repoUrl?: string
+      isPrivate?: boolean
+      error?: string
+    }>
+    getLog: (projectId: string) => Promise<{
+      success: boolean
+      commits?: Array<{
+        hash: string
+        shortHash: string
+        message: string
+        date: string
+        author: string
+      }>
+      error?: string
+    }>
+    getUnpushed: (projectId: string) => Promise<{
+      success: boolean
+      commits?: Array<{
+        hash: string
+        shortHash: string
+        message: string
+        date: string
+        author: string
+      }>
+      ahead?: number
+      error?: string
+    }>
+    push: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    commitAndPush: (projectId: string, message: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    createRepo: (projectId: string, repoName: string, description: string, isPrivate: boolean) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    revertAndPush: (projectId: string, commitHash: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
     restoreCheckpoint: (projectId: string, commitHash: string) => Promise<{
       success: boolean
       commitHash?: string

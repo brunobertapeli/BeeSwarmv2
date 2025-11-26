@@ -822,6 +822,7 @@ Please read the manifest to understand what my website is about, then create an 
       <GitHubSheet
         isOpen={showGitHubSheet}
         onClose={() => setShowGitHubSheet(false)}
+        projectId={currentProjectId || undefined}
       />
 
       {/* Kanban Widget */}

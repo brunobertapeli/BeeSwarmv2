@@ -1,5 +1,6 @@
 import { ipcMain, WebContents } from 'electron';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
+import simpleGit, { SimpleGit, StatusResult, LogResult } from 'simple-git';
 import { databaseService } from '../services/DatabaseService';
 import { terminalAggregator } from '../services/TerminalAggregator';
 import { chatHistoryManager } from '../services/ChatHistoryManager';
@@ -19,6 +20,284 @@ export function setGitHandlersWindow(webContents: WebContents): void {
  * Register Git IPC handlers
  */
 export function registerGitHandlers(): void {
+  // Check if GitHub CLI is installed and authenticated
+  ipcMain.handle('git:check-gh-cli', async () => {
+    try {
+      // Check if gh is installed
+      try {
+        execSync('gh --version', { stdio: 'pipe' });
+      } catch {
+        return { success: true, installed: false, authenticated: false };
+      }
+
+      // Check if gh is authenticated
+      try {
+        execSync('gh auth status', { stdio: 'pipe' });
+        return { success: true, installed: true, authenticated: true };
+      } catch {
+        return { success: true, installed: true, authenticated: false };
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  // Get git status (uncommitted files)
+  ipcMain.handle('git:get-status', async (_event, projectId: string) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const git: SimpleGit = simpleGit(project.path);
+      const status: StatusResult = await git.status();
+
+      // Format files with their status
+      const files = [
+        ...status.created.map(f => ({ path: f, status: 'added' as const })),
+        ...status.modified.map(f => ({ path: f, status: 'modified' as const })),
+        ...status.deleted.map(f => ({ path: f, status: 'deleted' as const })),
+        ...status.not_added.map(f => ({ path: f, status: 'untracked' as const })),
+      ];
+
+      return {
+        success: true,
+        files,
+        hasChanges: files.length > 0,
+        ahead: status.ahead,
+        behind: status.behind,
+        branch: status.current || 'main',
+      };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  // Get remote origin URL
+  ipcMain.handle('git:get-remote', async (_event, projectId: string) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const git: SimpleGit = simpleGit(project.path);
+
+      try {
+        const remotes = await git.getRemotes(true);
+        const origin = remotes.find(r => r.name === 'origin');
+
+        if (origin && origin.refs.push) {
+          // Extract repo URL for GitHub link
+          let repoUrl = origin.refs.push;
+          // Convert SSH to HTTPS for browser
+          if (repoUrl.startsWith('git@github.com:')) {
+            repoUrl = repoUrl.replace('git@github.com:', 'https://github.com/').replace('.git', '');
+          } else if (repoUrl.endsWith('.git')) {
+            repoUrl = repoUrl.replace('.git', '');
+          }
+
+          // Try to get repo visibility using gh CLI
+          let isPrivate = true; // Default to private
+          try {
+            const repoInfo = execSync('gh repo view --json isPrivate', {
+              cwd: project.path,
+              stdio: 'pipe',
+            }).toString();
+            const parsed = JSON.parse(repoInfo);
+            isPrivate = parsed.isPrivate ?? true;
+          } catch {
+            // If gh fails, assume private
+          }
+
+          return { success: true, hasRemote: true, url: origin.refs.push, repoUrl, isPrivate };
+        }
+
+        return { success: true, hasRemote: false };
+      } catch {
+        return { success: true, hasRemote: false };
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  // Get unpushed commits (commits ahead of origin)
+  ipcMain.handle('git:get-unpushed', async (_event, projectId: string) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const git: SimpleGit = simpleGit(project.path);
+
+      try {
+        // Get current branch
+        const status = await git.status();
+        const branch = status.current || 'main';
+
+        // Get commits that are ahead of origin
+        const log: LogResult = await git.log([`origin/${branch}..HEAD`]);
+
+        const commits = log.all.map(commit => ({
+          hash: commit.hash,
+          shortHash: commit.hash.substring(0, 7),
+          message: commit.message,
+          date: commit.date,
+          author: commit.author_name,
+        }));
+
+        return { success: true, commits, ahead: status.ahead };
+      } catch {
+        // No remote tracking or no commits
+        return { success: true, commits: [], ahead: 0 };
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  // Get commit history
+  ipcMain.handle('git:get-log', async (_event, projectId: string) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const git: SimpleGit = simpleGit(project.path);
+
+      try {
+        const log: LogResult = await git.log({ maxCount: 50 });
+
+        const commits = log.all.map(commit => ({
+          hash: commit.hash,
+          shortHash: commit.hash.substring(0, 7),
+          message: commit.message,
+          date: commit.date,
+          author: commit.author_name,
+        }));
+
+        return { success: true, commits };
+      } catch {
+        // No commits yet
+        return { success: true, commits: [] };
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  // Push only (no commit needed since app auto-commits)
+  ipcMain.handle('git:push', async (_event, projectId: string) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const git: SimpleGit = simpleGit(project.path);
+      const status = await git.status();
+      const branch = status.current || 'main';
+
+      await git.push('origin', branch);
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  // Commit and push
+  ipcMain.handle('git:commit-and-push', async (_event, projectId: string, message: string) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const git: SimpleGit = simpleGit(project.path);
+
+      // Stage all changes
+      await git.add('.');
+
+      // Commit
+      await git.commit(message);
+
+      // Push
+      await git.push('origin', 'main');
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  // Create GitHub repo using gh CLI
+  ipcMain.handle('git:create-repo', async (_event, projectId: string, repoName: string, description: string, isPrivate: boolean) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const git: SimpleGit = simpleGit(project.path);
+
+      // Check if there are any commits, if not create an initial commit
+      try {
+        await git.log({ maxCount: 1 });
+      } catch {
+        // No commits yet - create initial commit
+        await git.add('.');
+        await git.commit('Initial commit');
+      }
+
+      const visibility = isPrivate ? '--private' : '--public';
+      const descFlag = description ? `--description "${description}"` : '';
+
+      // Use gh CLI to create repo and push
+      const command = `gh repo create "${repoName}" ${visibility} ${descFlag} --source=. --remote=origin --push`;
+
+      execSync(command, {
+        cwd: project.path,
+        stdio: 'pipe',
+      });
+
+      return { success: true };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      // Check for common errors
+      if (errorMsg.includes('already exists')) {
+        return { success: false, error: 'Repository name already exists on GitHub' };
+      }
+      return { success: false, error: errorMsg };
+    }
+  });
+
+  // Revert to commit and force push
+  ipcMain.handle('git:revert-and-push', async (_event, projectId: string, commitHash: string) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const git: SimpleGit = simpleGit(project.path);
+
+      // Hard reset to commit
+      await git.reset(['--hard', commitHash]);
+
+      // Force push
+      await git.push('origin', 'main', ['--force']);
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
   // Restore to checkpoint (commit hash)
   ipcMain.handle('git:restore-checkpoint', async (_event, projectId: string, commitHash: string) => {
     try {
@@ -192,9 +471,9 @@ async function verifyCommitExists(
  */
 async function resetEphemeralFiles(projectPath: string): Promise<void> {
   return new Promise((resolve) => {
-    // Reset codedeck/logs/ directory - these are ephemeral logging files
+    // Reset .codedeck/ directory - these are ephemeral logging files
     // that shouldn't block checkpoint restoration
-    const resetProcess = spawn('git', ['checkout', 'HEAD', '--', 'codedeck/logs/'], {
+    const resetProcess = spawn('git', ['checkout', 'HEAD', '--', '.codedeck/'], {
       cwd: projectPath,
     });
 

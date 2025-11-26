@@ -195,8 +195,8 @@ When the user asks to resize an existing image, simply add a new entry to manife
 
 ## Available Log Files
 Two log files in the user's project codebase provide instant feedback:
-- `codedeck/logs/backend.md` - Dev server, hot reload, build errors, Netlify Function logs
-- `codedeck/logs/devtools.md` - Browser console output (console.log, errors, warnings)
+- `.codedeck/backend.md` - Dev server, hot reload, build errors, Netlify Function logs
+- `.codedeck/devtools.md` - Browser console output (console.log, errors, warnings)
 
 ---
 
@@ -207,7 +207,7 @@ Two log files in the user's project codebase provide instant feedback:
 ### Standard Workflow:
 1. Make code changes
 2. Save the file
-3. **IMMEDIATELY read `codedeck/logs/backend.md`**
+3. **IMMEDIATELY read `.codedeck/backend.md`**
 4. Verify hot reload succeeded or identify errors
 
 **No user interaction needed for syntax/build errors!**
@@ -235,7 +235,7 @@ Two log files in the user's project codebase provide instant feedback:
 **Use ALWAYS after making changes**
 
 1. Save files
-2. Read `codedeck/logs/backend.md` immediately
+2. Read `.codedeck/backend.md` immediately
 3. Check for hot reload errors
 4. Fix if needed and repeat
 
@@ -247,7 +247,7 @@ Two log files in the user's project codebase provide instant feedback:
    console.log('🎯 [FEATURE] Step 1: Data received:', data)
    ```
 2. Ask user to interact with the feature
-3. Read `codedeck/logs/devtools.md` to see execution flow
+3. Read `codedeck/devtools.md` to see execution flow
 4. Debug based on findings
 
 ### Pattern 3: Backend Function Debugging (REQUIRES USER INTERACTION)
@@ -255,7 +255,7 @@ Two log files in the user's project codebase provide instant feedback:
 
 1. Add console.log in function
 2. Ask user to trigger the function
-3. Read `codedeck/logs/backend.md` for function execution logs
+3. Read `.codedeck/backend.md` for function execution logs
 
 ---
 
@@ -358,7 +358,7 @@ Other core features
 CRITICAL REQUIREMENTS
 1. Always Check Template Specific Instructions
 Before making ANY changes, read the template-specific instructions at:
-codedeck/template.md
+.codedeck/template.md
 This file contains essential information about:
 
 Template architecture
@@ -378,7 +378,7 @@ Only modify core functionality when the user explicitly requests it.
 3. Safe Modification Approach
 When the user requests changes:
 
-Read codedeck/template.md first
+Read .codedeck/template.md first
 Assess if the change affects core functionality
 If it does, confirm with the user that they want to modify it
 Proceed carefully, preserving existing integrations

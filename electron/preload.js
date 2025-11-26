@@ -332,6 +332,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Git methods
   git: {
+    checkGhCli: () => ipcRenderer.invoke('git:check-gh-cli'),
+    getStatus: (projectId) => ipcRenderer.invoke('git:get-status', projectId),
+    getRemote: (projectId) => ipcRenderer.invoke('git:get-remote', projectId),
+    getLog: (projectId) => ipcRenderer.invoke('git:get-log', projectId),
+    getUnpushed: (projectId) => ipcRenderer.invoke('git:get-unpushed', projectId),
+    push: (projectId) => ipcRenderer.invoke('git:push', projectId),
+    commitAndPush: (projectId, message) => ipcRenderer.invoke('git:commit-and-push', projectId, message),
+    createRepo: (projectId, repoName, description, isPrivate) => ipcRenderer.invoke('git:create-repo', projectId, repoName, description, isPrivate),
+    revertAndPush: (projectId, commitHash) => ipcRenderer.invoke('git:revert-and-push', projectId, commitHash),
     restoreCheckpoint: (projectId, commitHash) => ipcRenderer.invoke('git:restore-checkpoint', projectId, commitHash)
   },
 

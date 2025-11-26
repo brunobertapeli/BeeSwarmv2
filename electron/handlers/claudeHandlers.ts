@@ -15,7 +15,7 @@ import { getCurrentUserId } from '../main';
 import { validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware';
 
 /**
- * Clear ephemeral log files in the project's codedeck/logs directory
+ * Clear ephemeral log files in the project's .codedeck/ directory
  */
 function clearLogFiles(projectPath: string): void {
   const logsDir = path.join(projectPath, 'codedeck', 'logs');
@@ -948,7 +948,7 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
         terminalAggregator.addGitLine(projectId, '✅ Staged | ⏳ Committing...\n');
 
         // Commit with Claude-generated message
-        const commitMessage = 'feat: updates via Claude Code\n\n🤖 Generated with Claude Code';
+        const commitMessage = 'Auto Commit via Claude Code\n\n🤖 Generated with Claude Code';
         const commitProcess = spawn('git', ['commit', '-m', commitMessage], {
           cwd: projectPath,
         });
