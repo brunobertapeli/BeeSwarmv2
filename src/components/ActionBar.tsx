@@ -22,7 +22,8 @@ import {
   LayoutGrid,
   Camera,
   FolderOpen,
-  Github
+  Github,
+  PenTool
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore, type DeploymentStatus } from '../store/appStore'
@@ -83,7 +84,7 @@ function ActionBar({
   onRefreshEnvCount
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, modalFreezeActive, setStatusSheetExpanded } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, modalFreezeActive, setStatusSheetExpanded, bringWidgetToFront } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
@@ -352,11 +353,19 @@ function ActionBar({
           toggleProjectAssets()
         }
       }
+
+      // W - Toggle Whiteboard Widget (only in TOOLS mode, and not when modal is open)
+      if (e.key.toLowerCase() === 'w' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+        if (layoutState === 'TOOLS') {
+          e.preventDefault()
+          toggleWhiteboard()
+        }
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setEditModeEnabled, modalFreezeActive]) // Re-run when modal state changes
+  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, whiteboardWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setWhiteboardWidgetEnabled, setEditModeEnabled, modalFreezeActive]) // Re-run when modal state changes
 
   // Listen for global shortcuts from Electron main process
   useEffect(() => {
@@ -739,6 +748,9 @@ function ActionBar({
 
     const newState = !kanbanEnabled
     setKanbanEnabled(newState)
+    if (newState) {
+      bringWidgetToFront('kanban')
+    }
     toast.info(
       newState ? 'Kanban Enabled' : 'Kanban Disabled',
       newState ? 'Kanban board shown' : 'Kanban board hidden'
@@ -751,6 +763,9 @@ function ActionBar({
 
     const newState = !analyticsWidgetEnabled
     setAnalyticsWidgetEnabled(newState)
+    if (newState) {
+      bringWidgetToFront('analytics')
+    }
     toast.info(
       newState ? 'Analytics Enabled' : 'Analytics Disabled',
       newState ? 'Analytics widget shown' : 'Analytics widget hidden'
@@ -763,9 +778,27 @@ function ActionBar({
 
     const newState = !projectAssetsWidgetEnabled
     setProjectAssetsWidgetEnabled(newState)
+    if (newState) {
+      bringWidgetToFront('projectAssets')
+    }
     toast.info(
       newState ? 'Project Assets Enabled' : 'Project Assets Disabled',
       newState ? 'Project Assets widget shown' : 'Project Assets widget hidden'
+    )
+  }
+
+  const toggleWhiteboard = () => {
+    // Only allow in TOOLS mode
+    if (layoutState !== 'TOOLS') return
+
+    const newState = !whiteboardWidgetEnabled
+    setWhiteboardWidgetEnabled(newState)
+    if (newState) {
+      bringWidgetToFront('whiteboard')
+    }
+    toast.info(
+      newState ? 'Whiteboard Enabled' : 'Whiteboard Disabled',
+      newState ? 'Whiteboard widget shown' : 'Whiteboard widget hidden'
     )
   }
 
@@ -1488,6 +1521,27 @@ function ActionBar({
                       />
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle Project Assets (F)
+                      </span>
+                    </motion.button>
+
+                    <motion.button
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2, delay: 0.3 }}
+                      onClick={toggleWhiteboard}
+                      className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
+                    >
+                      <PenTool
+                        size={15}
+                        className={`transition-colors ${
+                          whiteboardWidgetEnabled
+                            ? 'text-purple-500'
+                            : 'text-gray-400 hover:text-purple-400'
+                        }`}
+                      />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                        Toggle Whiteboard (W)
                       </span>
                     </motion.button>
                   </motion.div>

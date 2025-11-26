@@ -25,6 +25,7 @@ export interface Project {
   stickyNotesState: string | null // JSON string with sticky notes array
   analyticsWidgetState: string | null // JSON string with { enabled, position, size }
   projectAssetsWidgetState: string | null // JSON string with { enabled, position }
+  whiteboardWidgetState: string | null // JSON string with { enabled, position, size }
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -47,6 +48,7 @@ export interface KanbanState {
   position: { x: number; y: number }
   size: { width: number; height: number }
   columns: KanbanColumn[]
+  zIndex: number
 }
 
 export interface StickyNote {
@@ -66,11 +68,20 @@ export interface AnalyticsWidgetState {
   enabled: boolean
   position: { x: number; y: number }
   size: { width: number; height: number }
+  zIndex: number
 }
 
 export interface ProjectAssetsWidgetState {
   enabled: boolean
   position: { x: number; y: number }
+  zIndex: number
+}
+
+export interface WhiteboardWidgetState {
+  enabled: boolean
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  zIndex: number
 }
 
 export interface ChatBlock {
@@ -375,6 +386,12 @@ class DatabaseService {
       const hasEnvFiles = tableInfo.some(col => col.name === 'envFiles')
       if (!hasEnvFiles) {
         this.db.exec('ALTER TABLE projects ADD COLUMN envFiles TEXT')
+      }
+
+      // Migration 21: Add whiteboardWidgetState column if it doesn't exist
+      const hasWhiteboardWidgetState = tableInfo.some(col => col.name === 'whiteboardWidgetState')
+      if (!hasWhiteboardWidgetState) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN whiteboardWidgetState TEXT')
       }
 
       // Future migrations can be added here
@@ -871,6 +888,47 @@ class DatabaseService {
       return JSON.parse(project.projectAssetsWidgetState) as ProjectAssetsWidgetState
     } catch (error) {
       console.error('❌ Failed to parse Project Assets widget state:', error)
+      return null
+    }
+  }
+
+  /**
+   * Save Whiteboard widget state for a project
+   */
+  saveWhiteboardWidgetState(projectId: string, widgetState: WhiteboardWidgetState): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save Whiteboard widget state after database closed - ignoring')
+      return
+    }
+
+    const stateJson = JSON.stringify(widgetState)
+    const sql = 'UPDATE projects SET whiteboardWidgetState = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(stateJson, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save Whiteboard widget state:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get Whiteboard widget state for a project
+   */
+  getWhiteboardWidgetState(projectId: string): WhiteboardWidgetState | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!project?.whiteboardWidgetState) {
+      return null
+    }
+
+    try {
+      return JSON.parse(project.whiteboardWidgetState) as WhiteboardWidgetState
+    } catch (error) {
+      console.error('❌ Failed to parse Whiteboard widget state:', error)
       return null
     }
   }

@@ -711,6 +711,63 @@ export function registerProjectHandlers() {
     }
   })
 
+  // Save Whiteboard widget state
+  ipcMain.handle('project:save-whiteboard-widget-state', async (_event, projectId: string, widgetState: { enabled: boolean; position: { x: number; y: number }; size: { width: number; height: number } }) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      databaseService.saveWhiteboardWidgetState(projectId, widgetState)
+
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('❌ Error saving Whiteboard widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save Whiteboard widget state'
+      }
+    }
+  })
+
+  // Get Whiteboard widget state
+  ipcMain.handle('project:get-whiteboard-widget-state', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      const widgetState = databaseService.getWhiteboardWidgetState(projectId)
+
+      return {
+        success: true,
+        widgetState
+      }
+    } catch (error) {
+      console.error('❌ Error getting Whiteboard widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Whiteboard widget state'
+      }
+    }
+  })
+
   // Get project assets folder structure
   ipcMain.handle('project:get-assets-structure', async (_event, projectId: string) => {
     try {

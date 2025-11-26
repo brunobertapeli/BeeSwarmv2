@@ -66,6 +66,7 @@ interface LayoutStoreState {
   setKanbanPosition: (position: { x: number; y: number }) => void;
   kanbanSize: { width: number; height: number };
   setKanbanSize: (size: { width: number; height: number }) => void;
+  kanbanZIndex: number;
   kanbanColumns: Array<{
     id: string;
     title: string;
@@ -133,6 +134,7 @@ interface LayoutStoreState {
   setAnalyticsWidgetPosition: (position: { x: number; y: number }) => void;
   analyticsWidgetSize: { width: number; height: number };
   setAnalyticsWidgetSize: (size: { width: number; height: number }) => void;
+  analyticsWidgetZIndex: number;
   loadAnalyticsWidgetState: (projectId: string) => Promise<void>;
 
   // Project Assets widget state
@@ -140,7 +142,21 @@ interface LayoutStoreState {
   setProjectAssetsWidgetEnabled: (enabled: boolean) => void;
   projectAssetsWidgetPosition: { x: number; y: number };
   setProjectAssetsWidgetPosition: (position: { x: number; y: number }) => void;
+  projectAssetsWidgetZIndex: number;
   loadProjectAssetsWidgetState: (projectId: string) => Promise<void>;
+
+  // Whiteboard widget state
+  whiteboardWidgetEnabled: boolean;
+  setWhiteboardWidgetEnabled: (enabled: boolean) => void;
+  whiteboardWidgetPosition: { x: number; y: number };
+  setWhiteboardWidgetPosition: (position: { x: number; y: number }) => void;
+  whiteboardWidgetSize: { width: number; height: number };
+  setWhiteboardWidgetSize: (size: { width: number; height: number }) => void;
+  whiteboardWidgetZIndex: number;
+  loadWhiteboardWidgetState: (projectId: string) => Promise<void>;
+
+  // Unified bring to front for all widgets and sticky notes
+  bringWidgetToFront: (widgetType: 'kanban' | 'analytics' | 'projectAssets' | 'whiteboard' | 'stickyNote', stickyNoteId?: string) => void;
 
   // Helper to check if in specific state
   isState: (state: LayoutState) => boolean;
@@ -165,6 +181,7 @@ const debouncedSaveKanbanState = (projectId: string, kanbanState: {
       priority: string;
     }>;
   }>;
+  zIndex: number;
 }) => {
   if (saveTimeout) {
     clearTimeout(saveTimeout);
@@ -210,6 +227,7 @@ const debouncedSaveAnalyticsWidgetState = (projectId: string, widgetState: {
   enabled: boolean;
   position: { x: number; y: number };
   size: { width: number; height: number };
+  zIndex: number;
 }) => {
   if (saveAnalyticsTimeout) {
     clearTimeout(saveAnalyticsTimeout);
@@ -229,6 +247,7 @@ let saveProjectAssetsTimeout: NodeJS.Timeout | null = null;
 const debouncedSaveProjectAssetsWidgetState = (projectId: string, widgetState: {
   enabled: boolean;
   position: { x: number; y: number };
+  zIndex: number;
 }) => {
   if (saveProjectAssetsTimeout) {
     clearTimeout(saveProjectAssetsTimeout);
@@ -239,6 +258,27 @@ const debouncedSaveProjectAssetsWidgetState = (projectId: string, widgetState: {
       await window.electronAPI?.projects.saveProjectAssetsWidgetState(projectId, widgetState);
     } catch (error) {
       console.error('Failed to save Project Assets widget state:', error);
+    }
+  }, 500); // 500ms debounce
+};
+
+// Debounce helper for saving Whiteboard widget state
+let saveWhiteboardTimeout: NodeJS.Timeout | null = null;
+const debouncedSaveWhiteboardWidgetState = (projectId: string, widgetState: {
+  enabled: boolean;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  zIndex: number;
+}) => {
+  if (saveWhiteboardTimeout) {
+    clearTimeout(saveWhiteboardTimeout);
+  }
+
+  saveWhiteboardTimeout = setTimeout(async () => {
+    try {
+      await window.electronAPI?.projects.saveWhiteboardWidgetState(projectId, widgetState);
+    } catch (error) {
+      console.error('Failed to save Whiteboard widget state:', error);
     }
   }, 500); // 500ms debounce
 };
@@ -259,6 +299,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   kanbanEnabled: false,
   kanbanPosition: { x: 20, y: 43 }, // Default position (3px padding from header)
   kanbanSize: { width: 900, height: 410 }, // Default size
+  kanbanZIndex: 50,
   kanbanColumns: [
     { id: 'todo', title: 'To Do', cards: [] },
     { id: 'progress', title: 'In Progress', cards: [] },
@@ -272,10 +313,18 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   analyticsWidgetEnabled: false,
   analyticsWidgetPosition: { x: 940, y: 43 }, // Position next to Kanban
   analyticsWidgetSize: { width: 600, height: 405 },
+  analyticsWidgetZIndex: 51,
 
   // Project Assets widget initial state
   projectAssetsWidgetEnabled: false,
   projectAssetsWidgetPosition: { x: 450, y: 250 }, // Center-ish position that's always visible
+  projectAssetsWidgetZIndex: 52,
+
+  // Whiteboard widget initial state
+  whiteboardWidgetEnabled: false,
+  whiteboardWidgetPosition: { x: 20, y: 470 }, // Position below Kanban
+  whiteboardWidgetSize: { width: 600, height: 400 },
+  whiteboardWidgetZIndex: 53,
 
   // Setters
   setLayoutState: (state) => set({ layoutState: state }),
@@ -308,7 +357,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         enabled,
         position: state.kanbanPosition,
         size: state.kanbanSize,
-        columns: state.kanbanColumns
+        columns: state.kanbanColumns,
+        zIndex: state.kanbanZIndex
       });
     }
   },
@@ -323,7 +373,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         enabled: state.kanbanEnabled,
         position,
         size: state.kanbanSize,
-        columns: state.kanbanColumns
+        columns: state.kanbanColumns,
+        zIndex: state.kanbanZIndex
       });
     }
   },
@@ -338,7 +389,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         enabled: state.kanbanEnabled,
         position: state.kanbanPosition,
         size,
-        columns: state.kanbanColumns
+        columns: state.kanbanColumns,
+        zIndex: state.kanbanZIndex
       });
     }
   },
@@ -359,7 +411,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         enabled: state.kanbanEnabled,
         position: state.kanbanPosition,
         size: state.kanbanSize,
-        columns: newColumns
+        columns: newColumns,
+        zIndex: state.kanbanZIndex
       });
     }
   },
@@ -372,7 +425,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
           kanbanEnabled: result.kanbanState.enabled,
           kanbanPosition: result.kanbanState.position,
           kanbanSize: result.kanbanState.size,
-          kanbanColumns: result.kanbanState.columns
+          kanbanColumns: result.kanbanState.columns,
+          kanbanZIndex: result.kanbanState.zIndex ?? 50
         });
       } else {
         // Reset to defaults if no saved state
@@ -380,6 +434,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
           kanbanEnabled: false,
           kanbanPosition: { x: 20, y: 43 },
           kanbanSize: { width: 900, height: 410 },
+          kanbanZIndex: 50,
           kanbanColumns: [
             { id: 'todo', title: 'To Do', cards: [] },
             { id: 'progress', title: 'In Progress', cards: [] },
@@ -394,6 +449,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         kanbanEnabled: false,
         kanbanPosition: { x: 20, y: 43 },
         kanbanSize: { width: 900, height: 410 },
+        kanbanZIndex: 50,
         kanbanColumns: [
           { id: 'todo', title: 'To Do', cards: [] },
           { id: 'progress', title: 'In Progress', cards: [] },
@@ -458,36 +514,34 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   },
 
   bringNoteToFront: (id) => {
-    const currentNotes = get().stickyNotes;
+    const state = get();
+    const currentNotes = state.stickyNotes;
     const targetNote = currentNotes.find(n => n.id === id);
 
     if (!targetNote) return;
 
-    // Sort notes by current zIndex to preserve relative order
-    const sortedNotes = [...currentNotes].sort((a, b) => a.zIndex - b.zIndex);
+    // Find the max z-index across ALL widgets AND sticky notes
+    const allZIndices = [
+      state.kanbanZIndex,
+      state.analyticsWidgetZIndex,
+      state.projectAssetsWidgetZIndex,
+      state.whiteboardWidgetZIndex,
+      ...currentNotes.map(n => n.zIndex)
+    ];
+    const maxZ = Math.max(...allZIndices, 49);
+    const newTopZ = maxZ + 1;
 
-    // Remove target note from the sorted list
-    const otherNotes = sortedNotes.filter(n => n.id !== id);
-
-    // Re-build the array with target note at the end (top)
-    const newSortedNotes = [...otherNotes, targetNote];
-
-    // Re-assign z-indices sequentially starting from a base value
-    // This ensures we never run out of slots or compress layers
-    const BASE_Z = 10;
-
-    const updatedNotes = newSortedNotes.map((note, index) => ({
-      ...note,
-      zIndex: BASE_Z + index
-    }));
+    // Update only the target note's z-index
+    const updatedNotes = currentNotes.map(note =>
+      note.id === id ? { ...note, zIndex: newTopZ } : note
+    );
 
     set({ stickyNotes: updatedNotes });
 
     // Save to database
     const currentProjectId = useAppStore.getState().currentProjectId;
     if (currentProjectId) {
-      const state = get();
-      debouncedSaveStickyNotesState(currentProjectId, { notes: state.stickyNotes });
+      debouncedSaveStickyNotesState(currentProjectId, { notes: updatedNotes });
     }
   },
 
@@ -522,7 +576,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       debouncedSaveAnalyticsWidgetState(currentProjectId, {
         enabled,
         position: state.analyticsWidgetPosition,
-        size: state.analyticsWidgetSize
+        size: state.analyticsWidgetSize,
+        zIndex: state.analyticsWidgetZIndex
       });
     }
   },
@@ -535,7 +590,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       debouncedSaveAnalyticsWidgetState(currentProjectId, {
         enabled: state.analyticsWidgetEnabled,
         position,
-        size: state.analyticsWidgetSize
+        size: state.analyticsWidgetSize,
+        zIndex: state.analyticsWidgetZIndex
       });
     }
   },
@@ -548,7 +604,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       debouncedSaveAnalyticsWidgetState(currentProjectId, {
         enabled: state.analyticsWidgetEnabled,
         position: state.analyticsWidgetPosition,
-        size
+        size,
+        zIndex: state.analyticsWidgetZIndex
       });
     }
   },
@@ -560,14 +617,16 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         set({
           analyticsWidgetEnabled: result.widgetState.enabled,
           analyticsWidgetPosition: result.widgetState.position,
-          analyticsWidgetSize: result.widgetState.size
+          analyticsWidgetSize: result.widgetState.size,
+          analyticsWidgetZIndex: result.widgetState.zIndex ?? 51
         });
       } else {
         // Reset to defaults if no saved state
         set({
           analyticsWidgetEnabled: false,
           analyticsWidgetPosition: { x: 940, y: 43 },
-          analyticsWidgetSize: { width: 600, height: 405 }
+          analyticsWidgetSize: { width: 600, height: 405 },
+          analyticsWidgetZIndex: 51
         });
       }
     } catch (error) {
@@ -576,7 +635,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       set({
         analyticsWidgetEnabled: false,
         analyticsWidgetPosition: { x: 940, y: 43 },
-        analyticsWidgetSize: { width: 600, height: 405 }
+        analyticsWidgetSize: { width: 600, height: 405 },
+        analyticsWidgetZIndex: 51
       });
     }
   },
@@ -589,7 +649,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       const state = get();
       debouncedSaveProjectAssetsWidgetState(currentProjectId, {
         enabled,
-        position: state.projectAssetsWidgetPosition
+        position: state.projectAssetsWidgetPosition,
+        zIndex: state.projectAssetsWidgetZIndex
       });
     }
   },
@@ -601,7 +662,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       const state = get();
       debouncedSaveProjectAssetsWidgetState(currentProjectId, {
         enabled: state.projectAssetsWidgetEnabled,
-        position
+        position,
+        zIndex: state.projectAssetsWidgetZIndex
       });
     }
   },
@@ -612,13 +674,15 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       if (result?.success && result.widgetState) {
         set({
           projectAssetsWidgetEnabled: result.widgetState.enabled,
-          projectAssetsWidgetPosition: result.widgetState.position
+          projectAssetsWidgetPosition: result.widgetState.position,
+          projectAssetsWidgetZIndex: result.widgetState.zIndex ?? 52
         });
       } else {
         // Reset to defaults if no saved state
         set({
           projectAssetsWidgetEnabled: false,
-          projectAssetsWidgetPosition: { x: 450, y: 250 }
+          projectAssetsWidgetPosition: { x: 450, y: 250 },
+          projectAssetsWidgetZIndex: 52
         });
       }
     } catch (error) {
@@ -626,8 +690,148 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       // Reset to defaults on error
       set({
         projectAssetsWidgetEnabled: false,
-        projectAssetsWidgetPosition: { x: 450, y: 250 }
+        projectAssetsWidgetPosition: { x: 450, y: 250 },
+        projectAssetsWidgetZIndex: 52
       });
+    }
+  },
+
+  // Whiteboard widget functions
+  setWhiteboardWidgetEnabled: (enabled) => {
+    set({ whiteboardWidgetEnabled: enabled });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveWhiteboardWidgetState(currentProjectId, {
+        enabled,
+        position: state.whiteboardWidgetPosition,
+        size: state.whiteboardWidgetSize,
+        zIndex: state.whiteboardWidgetZIndex
+      });
+    }
+  },
+
+  setWhiteboardWidgetPosition: (position) => {
+    set({ whiteboardWidgetPosition: position });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveWhiteboardWidgetState(currentProjectId, {
+        enabled: state.whiteboardWidgetEnabled,
+        position,
+        size: state.whiteboardWidgetSize,
+        zIndex: state.whiteboardWidgetZIndex
+      });
+    }
+  },
+
+  setWhiteboardWidgetSize: (size) => {
+    set({ whiteboardWidgetSize: size });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveWhiteboardWidgetState(currentProjectId, {
+        enabled: state.whiteboardWidgetEnabled,
+        position: state.whiteboardWidgetPosition,
+        size,
+        zIndex: state.whiteboardWidgetZIndex
+      });
+    }
+  },
+
+  loadWhiteboardWidgetState: async (projectId: string) => {
+    try {
+      const result = await window.electronAPI?.projects.getWhiteboardWidgetState(projectId);
+      if (result?.success && result.widgetState) {
+        set({
+          whiteboardWidgetEnabled: result.widgetState.enabled,
+          whiteboardWidgetPosition: result.widgetState.position,
+          whiteboardWidgetSize: result.widgetState.size,
+          whiteboardWidgetZIndex: result.widgetState.zIndex ?? 53
+        });
+      } else {
+        // Reset to defaults if no saved state
+        set({
+          whiteboardWidgetEnabled: false,
+          whiteboardWidgetPosition: { x: 20, y: 470 },
+          whiteboardWidgetSize: { width: 600, height: 400 },
+          whiteboardWidgetZIndex: 53
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load Whiteboard widget state:', error);
+      // Reset to defaults on error
+      set({
+        whiteboardWidgetEnabled: false,
+        whiteboardWidgetPosition: { x: 20, y: 470 },
+        whiteboardWidgetSize: { width: 600, height: 400 },
+        whiteboardWidgetZIndex: 53
+      });
+    }
+  },
+
+  // Unified bring to front for all widgets and sticky notes
+  bringWidgetToFront: (widgetType, stickyNoteId) => {
+    const state = get();
+    const currentProjectId = useAppStore.getState().currentProjectId;
+
+    // Collect all current z-indices
+    const zIndices: { type: string; id?: string; zIndex: number }[] = [
+      { type: 'kanban', zIndex: state.kanbanZIndex },
+      { type: 'analytics', zIndex: state.analyticsWidgetZIndex },
+      { type: 'projectAssets', zIndex: state.projectAssetsWidgetZIndex },
+      { type: 'whiteboard', zIndex: state.whiteboardWidgetZIndex },
+      ...state.stickyNotes.map(note => ({ type: 'stickyNote', id: note.id, zIndex: note.zIndex }))
+    ];
+
+    // Find the max z-index
+    const maxZ = Math.max(...zIndices.map(z => z.zIndex), 49);
+    const newTopZ = maxZ + 1;
+
+    // Update the specific widget/sticky note
+    if (widgetType === 'kanban') {
+      set({ kanbanZIndex: newTopZ });
+      if (currentProjectId) {
+        debouncedSaveKanbanState(currentProjectId, {
+          enabled: state.kanbanEnabled,
+          position: state.kanbanPosition,
+          size: state.kanbanSize,
+          columns: state.kanbanColumns,
+          zIndex: newTopZ
+        });
+      }
+    } else if (widgetType === 'analytics') {
+      set({ analyticsWidgetZIndex: newTopZ });
+      if (currentProjectId) {
+        debouncedSaveAnalyticsWidgetState(currentProjectId, {
+          enabled: state.analyticsWidgetEnabled,
+          position: state.analyticsWidgetPosition,
+          size: state.analyticsWidgetSize,
+          zIndex: newTopZ
+        });
+      }
+    } else if (widgetType === 'projectAssets') {
+      set({ projectAssetsWidgetZIndex: newTopZ });
+      if (currentProjectId) {
+        debouncedSaveProjectAssetsWidgetState(currentProjectId, {
+          enabled: state.projectAssetsWidgetEnabled,
+          position: state.projectAssetsWidgetPosition,
+          zIndex: newTopZ
+        });
+      }
+    } else if (widgetType === 'whiteboard') {
+      set({ whiteboardWidgetZIndex: newTopZ });
+      if (currentProjectId) {
+        debouncedSaveWhiteboardWidgetState(currentProjectId, {
+          enabled: state.whiteboardWidgetEnabled,
+          position: state.whiteboardWidgetPosition,
+          size: state.whiteboardWidgetSize,
+          zIndex: newTopZ
+        });
+      }
+    } else if (widgetType === 'stickyNote' && stickyNoteId) {
+      // Use the existing bringNoteToFront logic for sticky notes
+      get().bringNoteToFront(stickyNoteId);
     }
   },
 

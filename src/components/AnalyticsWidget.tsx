@@ -73,7 +73,7 @@ interface AnalyticsData {
 }
 
 function AnalyticsWidget() {
-  const { analyticsWidgetPosition, setAnalyticsWidgetPosition, setAnalyticsWidgetEnabled } = useLayoutStore()
+  const { analyticsWidgetPosition, setAnalyticsWidgetPosition, setAnalyticsWidgetEnabled, analyticsWidgetZIndex, bringWidgetToFront } = useLayoutStore()
   const { currentProjectId } = useAppStore()
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
@@ -247,14 +247,15 @@ function AnalyticsWidget() {
   return (
     <div
       ref={widgetRef}
-      className="fixed z-[95] bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-hidden"
+      className="fixed bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-hidden"
       style={{
         left: `${analyticsWidgetPosition.x}px`,
         top: `${analyticsWidgetPosition.y}px`,
         width: '600px',
-        height: `${FIXED_HEIGHT}px`
+        height: `${FIXED_HEIGHT}px`,
+        zIndex: analyticsWidgetZIndex
       }}
-      onMouseDown={handleMouseDown}
+      onMouseDown={(e) => { bringWidgetToFront('analytics'); handleMouseDown(e); }}
     >
       {/* Background image */}
       <div

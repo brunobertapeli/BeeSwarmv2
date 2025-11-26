@@ -19,6 +19,7 @@ import KanbanWidget from './KanbanWidget'
 import StickyNoteWidget from './StickyNoteWidget'
 import AnalyticsWidget from './AnalyticsWidget'
 import ProjectAssetsWidget from './ProjectAssetsWidget'
+import WhiteboardWidget from './WhiteboardWidget'
 import GitHubSheet from './GitHubSheet'
 import { ModalPortal } from './ModalPortal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
@@ -50,7 +51,7 @@ function ProjectView() {
     setSelectedDevice,
   } = useAppStore()
 
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState, whiteboardWidgetEnabled, loadWhiteboardWidgetState } = useLayoutStore()
   const toast = useToast()
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'environment' | 'deployment'>('general')
   const [projects, setProjects] = useState<Project[]>([])
@@ -145,8 +146,9 @@ function ProjectView() {
       loadStickyNotesState(currentProjectId)
       loadAnalyticsWidgetState(currentProjectId)
       loadProjectAssetsWidgetState(currentProjectId)
+      loadWhiteboardWidgetState(currentProjectId)
     }
-  }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState, loadProjectAssetsWidgetState])
+  }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState, loadProjectAssetsWidgetState, loadWhiteboardWidgetState])
 
   // Handle freeze frame when UserProfile opens/closes
   useEffect(() => {
@@ -833,6 +835,9 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Project Assets Widget */}
       {projectAssetsWidgetEnabled && layoutState === 'TOOLS' && <ProjectAssetsWidget />}
+
+      {/* Whiteboard Widget */}
+      {whiteboardWidgetEnabled && layoutState === 'TOOLS' && <WhiteboardWidget />}
 
       {/* Sticky Notes */}
       {layoutState === 'TOOLS' && stickyNotes.map((note) => (

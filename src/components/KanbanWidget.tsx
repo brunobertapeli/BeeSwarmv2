@@ -32,7 +32,7 @@ const priorities: Priority[] = ['Low', 'Medium', 'High', 'Important', 'Critical'
 type ResizeDirection = 's' | 'n' | null
 
 function KanbanWidget() {
-  const { kanbanPosition, setKanbanPosition, kanbanSize, setKanbanSize, setKanbanEnabled, kanbanColumns, setKanbanColumns } = useLayoutStore()
+  const { kanbanPosition, setKanbanPosition, kanbanSize, setKanbanSize, setKanbanEnabled, kanbanColumns, setKanbanColumns, kanbanZIndex, bringWidgetToFront } = useLayoutStore()
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isResizing, setIsResizing] = useState(false)
@@ -348,14 +348,18 @@ function KanbanWidget() {
   return (
     <div
       ref={widgetRef}
-      className="fixed z-[95] bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-hidden"
+      className="fixed bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-hidden"
       style={{
         left: `${kanbanPosition.x}px`,
         top: `${kanbanPosition.y}px`,
         width: '900px',
-        height: `${kanbanSize.height}px`
+        height: `${kanbanSize.height}px`,
+        zIndex: kanbanZIndex
       }}
-      onMouseDown={handleMouseDown}
+      onMouseDown={(e) => {
+        bringWidgetToFront('kanban');
+        handleMouseDown(e);
+      }}
     >
       {/* Background image */}
       <div

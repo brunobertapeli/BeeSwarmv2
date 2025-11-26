@@ -75,7 +75,7 @@ interface PreviewState {
 }
 
 function ProjectAssetsWidget() {
-  const { projectAssetsWidgetPosition, setProjectAssetsWidgetPosition, setProjectAssetsWidgetEnabled, addImageReference, setPrefilledMessage } = useLayoutStore()
+  const { projectAssetsWidgetPosition, setProjectAssetsWidgetPosition, setProjectAssetsWidgetEnabled, addImageReference, setPrefilledMessage, projectAssetsWidgetZIndex, bringWidgetToFront } = useLayoutStore()
   const { currentProjectId } = useAppStore()
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
@@ -473,14 +473,15 @@ function ProjectAssetsWidget() {
   const widgetElement = (
     <div
       ref={widgetRef}
-      className="fixed z-[95] bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-hidden"
+      className="fixed bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-hidden"
       style={{
         left: `${projectAssetsWidgetPosition.x}px`,
         top: `${projectAssetsWidgetPosition.y}px`,
         width: `${FIXED_WIDTH}px`,
-        height: `${FIXED_HEIGHT}px`
+        height: `${FIXED_HEIGHT}px`,
+        zIndex: projectAssetsWidgetZIndex
       }}
-      onMouseDown={handleMouseDown}
+      onMouseDown={(e) => { bringWidgetToFront('projectAssets'); handleMouseDown(e); }}
     >
       {/* Background image */}
       <div

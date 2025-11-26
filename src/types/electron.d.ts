@@ -372,6 +372,7 @@ export interface ElectronAPI {
           priority: string;
         }>;
       }>;
+      zIndex: number;
     }) => Promise<{
       success: boolean
       error?: string
@@ -392,6 +393,7 @@ export interface ElectronAPI {
             priority: string;
           }>;
         }>;
+        zIndex: number;
       } | null
       error?: string
     }>
@@ -426,6 +428,7 @@ export interface ElectronAPI {
       enabled: boolean;
       position: { x: number; y: number };
       size: { width: number; height: number };
+      zIndex: number;
     }) => Promise<{
       success: boolean;
       error?: string;
@@ -436,12 +439,14 @@ export interface ElectronAPI {
         enabled: boolean;
         position: { x: number; y: number };
         size: { width: number; height: number };
+        zIndex: number;
       } | null;
       error?: string;
     }>;
     saveProjectAssetsWidgetState: (id: string, widgetState: {
       enabled: boolean;
       position: { x: number; y: number };
+      zIndex: number;
     }) => Promise<{
       success: boolean;
       error?: string;
@@ -451,6 +456,26 @@ export interface ElectronAPI {
       widgetState?: {
         enabled: boolean;
         position: { x: number; y: number };
+        zIndex: number;
+      } | null;
+      error?: string;
+    }>;
+    saveWhiteboardWidgetState: (id: string, widgetState: {
+      enabled: boolean;
+      position: { x: number; y: number };
+      size: { width: number; height: number };
+      zIndex: number;
+    }) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    getWhiteboardWidgetState: (id: string) => Promise<{
+      success: boolean;
+      widgetState?: {
+        enabled: boolean;
+        position: { x: number; y: number };
+        size: { width: number; height: number };
+        zIndex: number;
       } | null;
       error?: string;
     }>;
