@@ -295,7 +295,7 @@ export function registerClaudeHandlers(): void {
             try {
               // Call the restore function - we need to extract it from the module
               // Since registerGitHandlers wraps it, we'll create a new restore directly
-              await performRestore(projectId, lastValidBlock.commitHash, project.path);
+              await performRestore(projectId, lastValidBlock.commitHash!, project.path);
             } catch (error) {
               console.error(`❌ Error reverting to checkpoint:`, error);
             }
@@ -730,7 +730,7 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
       const project = databaseService.getProjectById(projectId);
       const imagesPath = project?.imagePath;
 
-      const placeholdersGenerated = await placeholderImageService.generatePlaceholders(projectPath, imagesPath);
+      const placeholdersGenerated = await placeholderImageService.generatePlaceholders(projectPath, imagesPath ?? undefined);
       if (placeholdersGenerated > 0) {
         terminalAggregator.addSystemLine(projectId, '\n');
         terminalAggregator.addSystemLine(projectId, `📸 Generated ${placeholdersGenerated} placeholder image(s)\n`);

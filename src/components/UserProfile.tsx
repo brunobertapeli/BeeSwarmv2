@@ -7,12 +7,12 @@ import bgImage from '../assets/images/bg.jpg'
 import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface UserProfileProps {
-  onClose: () => void
+  onClose?: () => void
   excludeElement?: string
   onOpenHelp?: () => void
 }
 
-function UserProfile({ onClose, excludeElement, onOpenHelp }: UserProfileProps) {
+function UserProfile({ onClose = () => {}, excludeElement, onOpenHelp }: UserProfileProps) {
   const { user, session, logout, setAwaitingSubscriptionUpdate } = useAppStore()
   const dropdownRef = useRef<HTMLDivElement>(null)
   const toast = useToast()

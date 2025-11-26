@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { useAppStore } from './appStore';
 
 export type LayoutState = 'DEFAULT' | 'TOOLS' | 'BROWSER_FULL';
+export type Priority = 'Low' | 'Medium' | 'High' | 'Important' | 'Critical' | 'Off track';
 
 interface LayoutStoreState {
   // Current layout state
@@ -74,7 +75,7 @@ interface LayoutStoreState {
       id: string;
       title: string;
       content: string;
-      priority: string;
+      priority: Priority;
     }>;
   }>;
   setKanbanColumns: (columns: Array<{
@@ -84,7 +85,7 @@ interface LayoutStoreState {
       id: string;
       title: string;
       content: string;
-      priority: string;
+      priority: Priority;
     }>;
   }> | ((prev: Array<{
     id: string;
@@ -93,7 +94,7 @@ interface LayoutStoreState {
       id: string;
       title: string;
       content: string;
-      priority: string;
+      priority: Priority;
     }>;
   }>) => Array<{
     id: string;
@@ -102,7 +103,7 @@ interface LayoutStoreState {
       id: string;
       title: string;
       content: string;
-      priority: string;
+      priority: Priority;
     }>;
   }>)) => void;
   loadKanbanState: (projectId: string) => Promise<void>;
@@ -386,7 +387,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   // Icons widget initial state
   iconsWidgetEnabled: false,
   iconsWidgetPosition: { x: 5, y: 48 }, // 5px from left, below header (40px + 3px padding + 5px)
-  iconsWidgetSize: { width: 400, height: 450 },
+  iconsWidgetSize: { width: 420, height: 298 },
   iconsWidgetZIndex: 54,
 
   // Setters
@@ -914,7 +915,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         set({
           iconsWidgetEnabled: false,
           iconsWidgetPosition: { x: 5, y: 48 },
-          iconsWidgetSize: { width: 280, height: 200 },
+          iconsWidgetSize: { width: 420, height: 298 },
           iconsWidgetZIndex: 54
         });
       }
@@ -924,7 +925,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       set({
         iconsWidgetEnabled: false,
         iconsWidgetPosition: { x: 5, y: 48 },
-        iconsWidgetSize: { width: 280, height: 200 },
+        iconsWidgetSize: { width: 420, height: 298 },
         iconsWidgetZIndex: 54
       });
     }

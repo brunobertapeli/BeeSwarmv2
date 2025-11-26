@@ -198,11 +198,12 @@ class ResearchAgentService extends EventEmitter {
 
         // Create async generator for multimodal input
         queryPrompt = (async function* () {
-          yield {
+          const userMessage = {
             type: 'user' as const,
             message: { role: 'user' as const, content },
             parent_tool_use_id: null,
-          };
+          } as SDKUserMessage;
+          yield userMessage;
         })();
       } else {
         // Simple text prompt
@@ -395,7 +396,7 @@ class ResearchAgentService extends EventEmitter {
             const summaryMatch = block.text.match(/<SUMMARY>([\s\S]*?)<\/SUMMARY>/);
             if (summaryMatch) {
               summary = summaryMatch[1].trim();
-              console.log('✅ Extracted SUMMARY:', summary.substring(0, 100) + '...');
+              console.log('✅ Extracted SUMMARY:', summary?.substring(0, 100) + '...');
             }
 
             // Try to extract <ACTIONS> tag (JSON array)
@@ -413,7 +414,7 @@ class ResearchAgentService extends EventEmitter {
             const findingsMatch = block.text.match(/<FINDINGS>([\s\S]*?)<\/FINDINGS>/);
             if (findingsMatch) {
               findings = findingsMatch[1].trim();
-              console.log('✅ Extracted FINDINGS:', findings.substring(0, 100) + '...');
+              console.log('✅ Extracted FINDINGS:', findings?.substring(0, 100) + '...');
             }
 
             // Debug: Log full text block if it contains key tags

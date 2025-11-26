@@ -1224,7 +1224,7 @@ class DatabaseService {
    * Add an action to a chat block
    */
   addAction(blockId: string, action: {
-    type: 'git_commit' | 'build' | 'dev_server'
+    type: 'git_commit' | 'build' | 'dev_server' | 'checkpoint_restore'
     status: 'in_progress' | 'success' | 'error'
     message?: string
     data?: any
@@ -1422,6 +1422,7 @@ class DatabaseService {
         actions: row.actions,
         completedAt: row.completedAt,
         isComplete: Boolean(row.isComplete),
+        interactionType: row.interactionType,
         createdAt: row.createdAt
       }
     } catch (error) {

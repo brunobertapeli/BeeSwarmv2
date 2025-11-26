@@ -325,7 +325,7 @@ function replaceTextInElement(
   // Pattern 2: Match by className if available
   if (className) {
     // Extract just the first class (most reliable)
-    const firstClass = className.trim().split(/\s+/).filter(c => !c.startsWith('edit-mode'))[0];
+    const firstClass = className.trim().split(/\s+/).filter((c: string) => !c.startsWith('edit-mode'))[0];
     if (firstClass) {
       const pattern = new RegExp(
         `(<${tag}[^>]*className=["'][^"']*${escapeRegExp(firstClass)}[^"']*["'][^>]*>)\\s*${escapeRegExp(originalText)}\\s*(</${tag}>)`,

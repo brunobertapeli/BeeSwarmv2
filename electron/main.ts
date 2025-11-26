@@ -299,7 +299,7 @@ User: ${currentUserId || 'not logged in'}
       message: 'The application is not responding. Would you like to wait or reload?',
       buttons: ['Wait', 'Reload'],
       defaultId: 0
-    }).then((result) => {
+    }).then((result: { response: number }) => {
       if (result.response === 1 && mainWindow) {
         mainWindow.reload()
       }

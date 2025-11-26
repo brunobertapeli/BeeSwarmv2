@@ -1,3 +1,5 @@
+export type Priority = 'Low' | 'Medium' | 'High' | 'Important' | 'Critical' | 'Off track'
+
 export interface TemplateLibrary {
   name: string
   description: string
@@ -273,6 +275,7 @@ export interface ElectronAPI {
     onCallback: (callback: (url: string) => void) => () => void
     onAuthSuccess: (callback: (result: any) => void) => () => void
     onAuthError: (callback: (result: any) => void) => () => void
+    createStripePortal: (session: any) => Promise<{ success: boolean; url?: string; error?: string }>
   }
 
   secureStorage: {
@@ -391,7 +394,7 @@ export interface ElectronAPI {
             id: string;
             title: string;
             content: string;
-            priority: string;
+            priority: Priority;
           }>;
         }>;
         zIndex: number;
@@ -471,6 +474,34 @@ export interface ElectronAPI {
       error?: string;
     }>;
     getWhiteboardWidgetState: (id: string) => Promise<{
+      success: boolean;
+      widgetState?: {
+        enabled: boolean;
+        position: { x: number; y: number };
+        size: { width: number; height: number };
+        zIndex: number;
+      } | null;
+      error?: string;
+    }>;
+    saveWhiteboardData: (id: string, data: { elements: any[]; appState: any; files: any }) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    getWhiteboardData: (id: string) => Promise<{
+      success: boolean;
+      data?: { elements: any[]; appState: any; files: any } | null;
+      error?: string;
+    }>;
+    saveIconsWidgetState: (id: string, widgetState: {
+      enabled: boolean;
+      position: { x: number; y: number };
+      size: { width: number; height: number };
+      zIndex: number;
+    }) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    getIconsWidgetState: (id: string) => Promise<{
       success: boolean;
       widgetState?: {
         enabled: boolean;

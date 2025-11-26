@@ -495,8 +495,11 @@ class ChatHistoryManager extends EventEmitter {
     this.interruptedBlocks.add(projectId);
 
     // Add interrupted message to the block
-    const interruptedMessage = '⚠️ Stopped by user';
-    activeBlock.claudeMessages.push(interruptedMessage);
+    activeBlock.claudeMessages.push({
+      type: 'text',
+      content: '⚠️ Stopped by user',
+      timestamp: Date.now()
+    });
 
     // Update block with interrupted message
     databaseService.updateChatBlock(activeBlock.blockId, {

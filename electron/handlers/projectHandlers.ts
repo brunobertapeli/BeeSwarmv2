@@ -1,7 +1,7 @@
-import { ipcMain, WebContents } from 'electron'
+import { ipcMain } from 'electron'
 import { projectService } from '../services/ProjectService'
 import { backendService } from '../services/BackendService'
-import { databaseService } from '../services/DatabaseService'
+import { databaseService, KanbanState, StickyNotesState, AnalyticsWidgetState, WhiteboardWidgetState } from '../services/DatabaseService'
 import { envService } from '../services/EnvService'
 import { dependencyService } from '../services/DependencyService'
 import { getCurrentUserId, getCurrentUserEmail } from '../main'
@@ -484,7 +484,7 @@ export function registerProjectHandlers() {
   })
 
   // Save Kanban widget state
-  ipcMain.handle('project:save-kanban-state', async (_event, projectId: string, kanbanState: { enabled: boolean; position: { x: number; y: number }; size: { width: number; height: number } }) => {
+  ipcMain.handle('project:save-kanban-state', async (_event, projectId: string, kanbanState: KanbanState) => {
     try {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId)
@@ -541,7 +541,7 @@ export function registerProjectHandlers() {
   })
 
   // Save sticky notes state
-  ipcMain.handle('project:save-sticky-notes-state', async (_event, projectId: string, stickyNotesState: { notes: Array<{ id: string; position: { x: number; y: number }; content: string; color: string; stickyText: boolean; zIndex: number }> }) => {
+  ipcMain.handle('project:save-sticky-notes-state', async (_event, projectId: string, stickyNotesState: StickyNotesState) => {
     try {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId)
@@ -598,7 +598,7 @@ export function registerProjectHandlers() {
   })
 
   // Save Analytics widget state
-  ipcMain.handle('project:save-analytics-widget-state', async (_event, projectId: string, widgetState: { enabled: boolean; position: { x: number; y: number }; size: { width: number; height: number } }) => {
+  ipcMain.handle('project:save-analytics-widget-state', async (_event, projectId: string, widgetState: AnalyticsWidgetState) => {
     try {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId)
@@ -712,7 +712,7 @@ export function registerProjectHandlers() {
   })
 
   // Save Whiteboard widget state
-  ipcMain.handle('project:save-whiteboard-widget-state', async (_event, projectId: string, widgetState: { enabled: boolean; position: { x: number; y: number }; size: { width: number; height: number } }) => {
+  ipcMain.handle('project:save-whiteboard-widget-state', async (_event, projectId: string, widgetState: WhiteboardWidgetState) => {
     try {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId)

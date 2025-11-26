@@ -411,7 +411,7 @@ export function registerWebsiteImportHandlers(): void {
       });
 
       // Add remaining images to an "other" section or distribute them
-      const assignedImageIds = new Set(sectionsWithImages.flatMap(s => s.images.map(img => img.id)));
+      const assignedImageIds = new Set(sectionsWithImages.flatMap(s => s.images.map((img: ImageData) => img.id)));
       const unassignedImages = downloadedImages.filter(img => !assignedImageIds.has(img.id));
 
       if (unassignedImages.length > 0 && sectionsWithImages.length > 0) {

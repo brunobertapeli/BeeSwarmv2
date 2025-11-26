@@ -359,7 +359,7 @@ export function registerGitHandlers(): void {
           message: `Commit ${commitHash} not found in this repository`,
         });
 
-        terminalAggregator.addSystemLine(projectId, `❌ Commit ${commitHash} does not exist in this repository\n`, 'stderr');
+        terminalAggregator.addSystemLine(projectId, `❌ Commit ${commitHash} does not exist in this repository\n`);
         terminalAggregator.addSystemLine(projectId, '\n');
 
         // Complete the block with error in database
@@ -387,7 +387,7 @@ export function registerGitHandlers(): void {
           message: checkoutResult.error || 'Failed to restore checkpoint',
         });
 
-        terminalAggregator.addSystemLine(projectId, `❌ ${checkoutResult.error}\n`, 'stderr');
+        terminalAggregator.addSystemLine(projectId, `❌ ${checkoutResult.error}\n`);
         terminalAggregator.addSystemLine(projectId, '\n');
 
         // Complete the block with error in database

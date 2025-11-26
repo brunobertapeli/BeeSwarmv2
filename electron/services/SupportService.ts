@@ -117,7 +117,7 @@ class SupportService {
       }
 
       const statusCollection = this.db!.collection('support_status')
-      const status = await statusCollection.findOne<SupportStatus>({ _id: 'status' })
+      const status = await statusCollection.findOne<SupportStatus>({ _id: 'status' } as any)
 
       return status?.available || false
     } catch (error) {
@@ -170,7 +170,7 @@ class SupportService {
             status: 'active',
             createdAt: new Date()
           },
-          $push: { messages: message },
+          $push: { messages: message } as any,
           $set: { updatedAt: new Date() }
         },
         { upsert: true }

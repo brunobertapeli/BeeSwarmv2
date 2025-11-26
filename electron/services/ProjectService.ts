@@ -62,7 +62,13 @@ class ProjectService {
         deployServices: template.deployServices ? JSON.stringify(template.deployServices) : null,
         envFiles: template.envFiles ? JSON.stringify(template.envFiles) : null,
         imagePath: template.imagePath || null,
-        websiteImportAutoPromptSent: null
+        websiteImportAutoPromptSent: null,
+        kanbanState: null,
+        stickyNotesState: null,
+        analyticsWidgetState: null,
+        projectAssetsWidgetState: null,
+        whiteboardWidgetState: null,
+        iconsWidgetState: null
       })
 
       console.log('🔍 Project created with:', {

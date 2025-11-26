@@ -31,7 +31,7 @@ interface ProjectSelectorProps {
 }
 
 // Extended project type with UI-specific fields
-interface ProjectWithMeta extends Project {
+interface ProjectWithMeta extends Omit<Project, 'techStack'> {
   isFavorite?: boolean
   techStack?: string[]
   isDeployed?: boolean

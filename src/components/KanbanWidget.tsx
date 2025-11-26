@@ -1,21 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { X, Plus, Trash2, AlignLeft } from 'lucide-react'
-import { useLayoutStore } from '../store/layoutStore'
+import { useLayoutStore, Priority } from '../store/layoutStore'
 import bgImage from '../assets/images/bg.jpg'
-
-type Priority = 'Low' | 'Medium' | 'High' | 'Important' | 'Critical' | 'Off track'
 
 interface KanbanCard {
   id: string
   title: string
   content: string
   priority: Priority
-}
-
-interface KanbanColumn {
-  id: string
-  title: string
-  cards: KanbanCard[]
 }
 
 const priorityColors: Record<Priority, string> = {
@@ -300,7 +292,6 @@ function KanbanWidget() {
         let newY = kanbanPosition.y
         const padding = 5
         const headerHeight = 40 + padding // Top header bar height + padding
-        const bottomReservedArea = 200 + 2 // Action bar + Research Agent + 2px padding from separator
 
         // Handle vertical resize directions only
         if (resizeDirection === 's') {

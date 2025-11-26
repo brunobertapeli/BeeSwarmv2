@@ -106,9 +106,9 @@ class PreviewService extends EventEmitter {
         event.preventDefault();
 
         if (input.key.toLowerCase() === 'e') {
-          this.mainWindow.webContents.send('edit-mode-toggle-requested');
+          this.mainWindow?.webContents.send('edit-mode-toggle-requested');
         } else if (input.key.toLowerCase() === 'p') {
-          this.mainWindow.webContents.send('screenshot-requested');
+          this.mainWindow?.webContents.send('screenshot-requested');
         }
       }
     });
@@ -510,6 +510,7 @@ class PreviewService extends EventEmitter {
         screenPosition: 'mobile',
         screenSize: { width: metrics.width, height: metrics.height },
         viewSize: { width: metrics.width, height: metrics.height },
+        viewPosition: { x: 0, y: 0 },
         deviceScaleFactor: metrics.deviceScaleFactor,
         scale: 1,
       });
