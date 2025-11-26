@@ -160,8 +160,18 @@ interface LayoutStoreState {
   setWhiteboardData: (data: { elements: any[]; appState: any; files: any } | null) => void;
   loadWhiteboardData: (projectId: string) => Promise<void>;
 
+  // Icons widget state
+  iconsWidgetEnabled: boolean;
+  setIconsWidgetEnabled: (enabled: boolean) => void;
+  iconsWidgetPosition: { x: number; y: number };
+  setIconsWidgetPosition: (position: { x: number; y: number }) => void;
+  iconsWidgetSize: { width: number; height: number };
+  setIconsWidgetSize: (size: { width: number; height: number }) => void;
+  iconsWidgetZIndex: number;
+  loadIconsWidgetState: (projectId: string) => Promise<void>;
+
   // Unified bring to front for all widgets and sticky notes
-  bringWidgetToFront: (widgetType: 'kanban' | 'analytics' | 'projectAssets' | 'whiteboard' | 'stickyNote', stickyNoteId?: string) => void;
+  bringWidgetToFront: (widgetType: 'kanban' | 'analytics' | 'projectAssets' | 'whiteboard' | 'icons' | 'stickyNote', stickyNoteId?: string) => void;
 
   // Helper to check if in specific state
   isState: (state: LayoutState) => boolean;
@@ -308,6 +318,27 @@ const debouncedSaveWhiteboardData = (projectId: string, data: {
   }, 500); // 500ms debounce
 };
 
+// Debounce helper for saving Icons widget state
+let saveIconsTimeout: NodeJS.Timeout | null = null;
+const debouncedSaveIconsWidgetState = (projectId: string, widgetState: {
+  enabled: boolean;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  zIndex: number;
+}) => {
+  if (saveIconsTimeout) {
+    clearTimeout(saveIconsTimeout);
+  }
+
+  saveIconsTimeout = setTimeout(async () => {
+    try {
+      await window.electronAPI?.projects.saveIconsWidgetState(projectId, widgetState);
+    } catch (error) {
+      console.error('Failed to save Icons widget state:', error);
+    }
+  }, 500); // 500ms debounce
+};
+
 export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   // State
   layoutState: 'DEFAULT', // Start in DEFAULT state
@@ -322,7 +353,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   textContents: [],
   prefilledMessage: null,
   kanbanEnabled: false,
-  kanbanPosition: { x: 20, y: 43 }, // Default position (3px padding from header)
+  kanbanPosition: { x: 5, y: 48 }, // Default position (5px from left, below header)
   kanbanSize: { width: 900, height: 410 }, // Default size
   kanbanZIndex: 50,
   kanbanColumns: [
@@ -336,21 +367,27 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
 
   // Analytics widget initial state
   analyticsWidgetEnabled: false,
-  analyticsWidgetPosition: { x: 940, y: 43 }, // Position next to Kanban
+  analyticsWidgetPosition: { x: 5, y: 48 }, // Default position (5px from left, below header)
   analyticsWidgetSize: { width: 600, height: 405 },
   analyticsWidgetZIndex: 51,
 
   // Project Assets widget initial state
   projectAssetsWidgetEnabled: false,
-  projectAssetsWidgetPosition: { x: 450, y: 250 }, // Center-ish position that's always visible
+  projectAssetsWidgetPosition: { x: 5, y: 48 }, // Default position (5px from left, below header)
   projectAssetsWidgetZIndex: 52,
 
   // Whiteboard widget initial state
   whiteboardWidgetEnabled: false,
-  whiteboardWidgetPosition: { x: 20, y: 470 }, // Position below Kanban
+  whiteboardWidgetPosition: { x: 5, y: 48 }, // Default position (5px from left, below header)
   whiteboardWidgetSize: { width: 600, height: 400 },
   whiteboardWidgetZIndex: 53,
   whiteboardData: null,
+
+  // Icons widget initial state
+  iconsWidgetEnabled: false,
+  iconsWidgetPosition: { x: 5, y: 48 }, // 5px from left, below header (40px + 3px padding + 5px)
+  iconsWidgetSize: { width: 280, height: 200 },
+  iconsWidgetZIndex: 54,
 
   // Setters
   setLayoutState: (state) => set({ layoutState: state }),
@@ -458,7 +495,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         // Reset to defaults if no saved state
         set({
           kanbanEnabled: false,
-          kanbanPosition: { x: 20, y: 43 },
+          kanbanPosition: { x: 5, y: 48 },
           kanbanSize: { width: 900, height: 410 },
           kanbanZIndex: 50,
           kanbanColumns: [
@@ -473,7 +510,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       // Reset to defaults on error
       set({
         kanbanEnabled: false,
-        kanbanPosition: { x: 20, y: 43 },
+        kanbanPosition: { x: 5, y: 48 },
         kanbanSize: { width: 900, height: 410 },
         kanbanZIndex: 50,
         kanbanColumns: [
@@ -650,7 +687,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         // Reset to defaults if no saved state
         set({
           analyticsWidgetEnabled: false,
-          analyticsWidgetPosition: { x: 940, y: 43 },
+          analyticsWidgetPosition: { x: 5, y: 48 },
           analyticsWidgetSize: { width: 600, height: 405 },
           analyticsWidgetZIndex: 51
         });
@@ -660,7 +697,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       // Reset to defaults on error
       set({
         analyticsWidgetEnabled: false,
-        analyticsWidgetPosition: { x: 940, y: 43 },
+        analyticsWidgetPosition: { x: 5, y: 48 },
         analyticsWidgetSize: { width: 600, height: 405 },
         analyticsWidgetZIndex: 51
       });
@@ -707,7 +744,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         // Reset to defaults if no saved state
         set({
           projectAssetsWidgetEnabled: false,
-          projectAssetsWidgetPosition: { x: 450, y: 250 },
+          projectAssetsWidgetPosition: { x: 5, y: 48 },
           projectAssetsWidgetZIndex: 52
         });
       }
@@ -716,7 +753,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       // Reset to defaults on error
       set({
         projectAssetsWidgetEnabled: false,
-        projectAssetsWidgetPosition: { x: 450, y: 250 },
+        projectAssetsWidgetPosition: { x: 5, y: 48 },
         projectAssetsWidgetZIndex: 52
       });
     }
@@ -779,7 +816,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         // Reset to defaults if no saved state
         set({
           whiteboardWidgetEnabled: false,
-          whiteboardWidgetPosition: { x: 20, y: 470 },
+          whiteboardWidgetPosition: { x: 5, y: 48 },
           whiteboardWidgetSize: { width: 600, height: 400 },
           whiteboardWidgetZIndex: 53
         });
@@ -789,7 +826,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       // Reset to defaults on error
       set({
         whiteboardWidgetEnabled: false,
-        whiteboardWidgetPosition: { x: 20, y: 470 },
+        whiteboardWidgetPosition: { x: 5, y: 48 },
         whiteboardWidgetSize: { width: 600, height: 400 },
         whiteboardWidgetZIndex: 53
       });
@@ -819,6 +856,80 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
     }
   },
 
+  // Icons widget functions
+  setIconsWidgetEnabled: (enabled) => {
+    set({ iconsWidgetEnabled: enabled });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveIconsWidgetState(currentProjectId, {
+        enabled,
+        position: state.iconsWidgetPosition,
+        size: state.iconsWidgetSize,
+        zIndex: state.iconsWidgetZIndex
+      });
+    }
+  },
+
+  setIconsWidgetPosition: (position) => {
+    set({ iconsWidgetPosition: position });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveIconsWidgetState(currentProjectId, {
+        enabled: state.iconsWidgetEnabled,
+        position,
+        size: state.iconsWidgetSize,
+        zIndex: state.iconsWidgetZIndex
+      });
+    }
+  },
+
+  setIconsWidgetSize: (size) => {
+    set({ iconsWidgetSize: size });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveIconsWidgetState(currentProjectId, {
+        enabled: state.iconsWidgetEnabled,
+        position: state.iconsWidgetPosition,
+        size,
+        zIndex: state.iconsWidgetZIndex
+      });
+    }
+  },
+
+  loadIconsWidgetState: async (projectId: string) => {
+    try {
+      const result = await window.electronAPI?.projects.getIconsWidgetState(projectId);
+      if (result?.success && result.widgetState) {
+        set({
+          iconsWidgetEnabled: result.widgetState.enabled,
+          iconsWidgetPosition: result.widgetState.position,
+          iconsWidgetSize: result.widgetState.size,
+          iconsWidgetZIndex: result.widgetState.zIndex ?? 54
+        });
+      } else {
+        // Reset to defaults if no saved state
+        set({
+          iconsWidgetEnabled: false,
+          iconsWidgetPosition: { x: 5, y: 48 },
+          iconsWidgetSize: { width: 280, height: 200 },
+          iconsWidgetZIndex: 54
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load Icons widget state:', error);
+      // Reset to defaults on error
+      set({
+        iconsWidgetEnabled: false,
+        iconsWidgetPosition: { x: 5, y: 48 },
+        iconsWidgetSize: { width: 280, height: 200 },
+        iconsWidgetZIndex: 54
+      });
+    }
+  },
+
   // Unified bring to front for all widgets and sticky notes
   bringWidgetToFront: (widgetType, stickyNoteId) => {
     const state = get();
@@ -830,6 +941,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       { type: 'analytics', zIndex: state.analyticsWidgetZIndex },
       { type: 'projectAssets', zIndex: state.projectAssetsWidgetZIndex },
       { type: 'whiteboard', zIndex: state.whiteboardWidgetZIndex },
+      { type: 'icons', zIndex: state.iconsWidgetZIndex },
       ...state.stickyNotes.map(note => ({ type: 'stickyNote', id: note.id, zIndex: note.zIndex }))
     ];
 
@@ -875,6 +987,16 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
           enabled: state.whiteboardWidgetEnabled,
           position: state.whiteboardWidgetPosition,
           size: state.whiteboardWidgetSize,
+          zIndex: newTopZ
+        });
+      }
+    } else if (widgetType === 'icons') {
+      set({ iconsWidgetZIndex: newTopZ });
+      if (currentProjectId) {
+        debouncedSaveIconsWidgetState(currentProjectId, {
+          enabled: state.iconsWidgetEnabled,
+          position: state.iconsWidgetPosition,
+          size: state.iconsWidgetSize,
           zIndex: newTopZ
         });
       }

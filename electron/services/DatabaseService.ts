@@ -10,6 +10,7 @@ export interface Project {
   path: string
   templateId: string
   templateName: string
+  techStack: string | null // JSON array of tech stack items from template at creation time
   status: 'creating' | 'ready' | 'error'
   isFavorite: boolean
   configCompleted: boolean
@@ -26,6 +27,7 @@ export interface Project {
   analyticsWidgetState: string | null // JSON string with { enabled, position, size }
   projectAssetsWidgetState: string | null // JSON string with { enabled, position }
   whiteboardWidgetState: string | null // JSON string with { enabled, position, size }
+  iconsWidgetState: string | null // JSON string with { enabled, position, size }
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -78,6 +80,13 @@ export interface ProjectAssetsWidgetState {
 }
 
 export interface WhiteboardWidgetState {
+  enabled: boolean
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  zIndex: number
+}
+
+export interface IconsWidgetState {
   enabled: boolean
   position: { x: number; y: number }
   size: { width: number; height: number }
@@ -394,6 +403,18 @@ class DatabaseService {
         this.db.exec('ALTER TABLE projects ADD COLUMN whiteboardWidgetState TEXT')
       }
 
+      // Migration 22: Add techStack column if it doesn't exist
+      const hasTechStack = tableInfo.some(col => col.name === 'techStack')
+      if (!hasTechStack) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN techStack TEXT')
+      }
+
+      // Migration 23: Add iconsWidgetState column if it doesn't exist
+      const hasIconsWidgetState = tableInfo.some(col => col.name === 'iconsWidgetState')
+      if (!hasIconsWidgetState) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN iconsWidgetState TEXT')
+      }
+
       // Future migrations can be added here
     } catch (error) {
       console.error('❌ Migration failed:', error)
@@ -423,8 +444,8 @@ class DatabaseService {
     }
 
     const sql = `
-      INSERT INTO projects (id, userId, name, path, templateId, templateName, status, isFavorite, configCompleted, envVars, dependenciesInstalled, claudeSessionId, deployServices, envFiles, imagePath, createdAt, lastOpenedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO projects (id, userId, name, path, templateId, templateName, techStack, status, isFavorite, configCompleted, envVars, dependenciesInstalled, claudeSessionId, deployServices, envFiles, imagePath, createdAt, lastOpenedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
 
     try {
@@ -435,6 +456,7 @@ class DatabaseService {
         newProject.path,
         newProject.templateId,
         newProject.templateName,
+        newProject.techStack,
         newProject.status,
         newProject.isFavorite ? 1 : 0,
         newProject.configCompleted ? 1 : 0,
@@ -929,6 +951,47 @@ class DatabaseService {
       return JSON.parse(project.whiteboardWidgetState) as WhiteboardWidgetState
     } catch (error) {
       console.error('❌ Failed to parse Whiteboard widget state:', error)
+      return null
+    }
+  }
+
+  /**
+   * Save Icons widget state for a project
+   */
+  saveIconsWidgetState(projectId: string, widgetState: IconsWidgetState): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save Icons widget state after database closed - ignoring')
+      return
+    }
+
+    const stateJson = JSON.stringify(widgetState)
+    const sql = 'UPDATE projects SET iconsWidgetState = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(stateJson, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save Icons widget state:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get Icons widget state for a project
+   */
+  getIconsWidgetState(projectId: string): IconsWidgetState | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!project?.iconsWidgetState) {
+      return null
+    }
+
+    try {
+      return JSON.parse(project.iconsWidgetState) as IconsWidgetState
+    } catch (error) {
+      console.error('❌ Failed to parse Icons widget state:', error)
       return null
     }
   }

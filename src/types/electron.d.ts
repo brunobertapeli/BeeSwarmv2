@@ -34,6 +34,7 @@ export interface Project {
   path: string
   templateId: string
   templateName: string
+  techStack?: string | null // JSON array of tech stack items
   status: 'creating' | 'ready' | 'error'
   isFavorite?: boolean
   configCompleted: boolean

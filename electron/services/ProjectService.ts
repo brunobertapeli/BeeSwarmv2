@@ -57,6 +57,7 @@ class ProjectService {
         path: tempPath, // Will be updated to use project ID
         templateId: templateId,
         templateName: template.name,
+        techStack: template.techStack ? JSON.stringify(template.techStack) : null,
         status: 'creating',
         deployServices: template.deployServices ? JSON.stringify(template.deployServices) : null,
         envFiles: template.envFiles ? JSON.stringify(template.envFiles) : null,

@@ -20,6 +20,7 @@ import StickyNoteWidget from './StickyNoteWidget'
 import AnalyticsWidget from './AnalyticsWidget'
 import ProjectAssetsWidget from './ProjectAssetsWidget'
 import WhiteboardWidget from './WhiteboardWidget'
+import IconsWidget from './IconsWidget'
 import GitHubSheet from './GitHubSheet'
 import { ModalPortal } from './ModalPortal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
@@ -51,7 +52,7 @@ function ProjectView() {
     setSelectedDevice,
   } = useAppStore()
 
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState, whiteboardWidgetEnabled, loadWhiteboardWidgetState } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState, whiteboardWidgetEnabled, loadWhiteboardWidgetState, iconsWidgetEnabled, setIconsWidgetEnabled, loadIconsWidgetState } = useLayoutStore()
   const toast = useToast()
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'environment' | 'deployment'>('general')
   const [projects, setProjects] = useState<Project[]>([])
@@ -147,8 +148,9 @@ function ProjectView() {
       loadAnalyticsWidgetState(currentProjectId)
       loadProjectAssetsWidgetState(currentProjectId)
       loadWhiteboardWidgetState(currentProjectId)
+      loadIconsWidgetState(currentProjectId)
     }
-  }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState, loadProjectAssetsWidgetState, loadWhiteboardWidgetState])
+  }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState, loadProjectAssetsWidgetState, loadWhiteboardWidgetState, loadIconsWidgetState])
 
   // Handle freeze frame when UserProfile opens/closes
   useEffect(() => {
@@ -438,11 +440,17 @@ Please read the manifest to understand what my website is about, then create an 
         e.preventDefault()
         setShowGitHubSheet(prev => !prev)
       }
+
+      // I - Toggle Icons Widget
+      if (e.key.toLowerCase() === 'i' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        setIconsWidgetEnabled(!iconsWidgetEnabled)
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [currentProject?.id])
+  }, [currentProject?.id, iconsWidgetEnabled, setIconsWidgetEnabled])
 
   // NEW: Listen for layout state changes from Electron
   useEffect(() => {
@@ -838,6 +846,9 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Whiteboard Widget */}
       {whiteboardWidgetEnabled && layoutState === 'TOOLS' && <WhiteboardWidget />}
+
+      {/* Icons Widget */}
+      {iconsWidgetEnabled && layoutState === 'TOOLS' && <IconsWidget />}
 
       {/* Sticky Notes */}
       {layoutState === 'TOOLS' && stickyNotes.map((note) => (

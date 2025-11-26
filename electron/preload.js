@@ -93,6 +93,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getWhiteboardWidgetState: (id) => ipcRenderer.invoke('project:get-whiteboard-widget-state', id),
     saveWhiteboardData: (id, data) => ipcRenderer.invoke('project:save-whiteboard-data', id, data),
     getWhiteboardData: (id) => ipcRenderer.invoke('project:get-whiteboard-data', id),
+    saveIconsWidgetState: (id, widgetState) => ipcRenderer.invoke('project:save-icons-widget-state', id, widgetState),
+    getIconsWidgetState: (id) => ipcRenderer.invoke('project:get-icons-widget-state', id),
     getAssetsStructure: (id) => ipcRenderer.invoke('project:get-assets-structure', id)
   },
 

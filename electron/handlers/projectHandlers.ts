@@ -768,6 +768,63 @@ export function registerProjectHandlers() {
     }
   })
 
+  // Save Icons widget state
+  ipcMain.handle('project:save-icons-widget-state', async (_event, projectId: string, widgetState: { enabled: boolean; position: { x: number; y: number }; size: { width: number; height: number }; zIndex: number }) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      databaseService.saveIconsWidgetState(projectId, widgetState)
+
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('❌ Error saving Icons widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save Icons widget state'
+      }
+    }
+  })
+
+  // Get Icons widget state
+  ipcMain.handle('project:get-icons-widget-state', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      const widgetState = databaseService.getIconsWidgetState(projectId)
+
+      return {
+        success: true,
+        widgetState
+      }
+    } catch (error) {
+      console.error('❌ Error getting Icons widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Icons widget state'
+      }
+    }
+  })
+
   // Save Whiteboard drawing data (Excalidraw elements/files)
   ipcMain.handle('project:save-whiteboard-data', async (_event, projectId: string, data: any) => {
     try {
