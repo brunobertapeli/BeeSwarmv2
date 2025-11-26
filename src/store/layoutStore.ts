@@ -386,7 +386,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   // Icons widget initial state
   iconsWidgetEnabled: false,
   iconsWidgetPosition: { x: 5, y: 48 }, // 5px from left, below header (40px + 3px padding + 5px)
-  iconsWidgetSize: { width: 280, height: 200 },
+  iconsWidgetSize: { width: 400, height: 450 },
   iconsWidgetZIndex: 54,
 
   // Setters
