@@ -691,27 +691,6 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
           >
-            {/* Background Image */}
-            <div
-              className="absolute inset-0 opacity-10 pointer-events-none z-0"
-              style={{
-                backgroundImage: `url(${bgImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }}
-            />
-
-            {/* Noise texture overlay */}
-            <div
-              className="absolute inset-0 opacity-50 pointer-events-none rounded-br-[10px] z-[1]"
-              style={{
-                backgroundImage: `url(${noiseBgImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                mixBlendMode: 'soft-light',
-              }}
-            />
-
             {/* Collapsed State - Single Clickable Row */}
             {!isExpanded && (() => {
               const IconComponent = collapsedState.icon
@@ -774,7 +753,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
               <div className="pb-3 relative z-10">
                 {/* Collapsible header */}
                 <div
-                  className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 px-3 transition-colors"
+                  className="flex items-center justify-between mb-3 py-2.5 cursor-pointer hover:bg-white/5 px-3 transition-colors relative overflow-hidden"
                   onClick={handleCollapse}
                 >
                   <span className="text-[13px] font-medium text-gray-300">Workflow Activity</span>
@@ -838,38 +817,59 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                     // Render initialization block
                     if (block.type === 'initialization') {
                       return (
-                        <div key={block.id} className="bg-primary/5 rounded-lg p-3 border border-primary/20 relative mb-6">
-                          {/* Header */}
-                          <div className="flex items-start gap-2 mb-3">
-                            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center mt-0.5">
-                              {block.isComplete ? (
-                                <CheckCircle2 size={12} className="text-green-400" />
-                              ) : (
-                                <Rocket size={12} className="text-primary" />
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <span className="text-[13px] font-medium text-primary">
-                                {block.isComplete ? 'Project Ready!' : `Setting up ${block.templateName || 'project'}`}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Initialization Stages */}
-                          <div className="space-y-2 ml-7">
-                            {block.initializationStages?.map((stage, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                {stage.isComplete ? (
-                                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
-                                ) : (
-                                  <Loader2 size={10} className="text-primary animate-spin flex-shrink-0" />
-                                )}
-                                <span className={`text-[12px] leading-relaxed ${stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
-                                  }`}>
-                                  {stage.label}
-                                </span>
+                        <div key={block.id} className="mb-6">
+                          <div className="bg-white/[0.02] rounded-lg border border-white/10 p-4 relative">
+                            {/* STEP 1: Initiating new project */}
+                            <div className="timeline-step">
+                              <div className="step-track">
+                                <div className="step-icon step-icon-user">
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white opacity-90">
+                                    <path d="M12 5v14M5 12h14" />
+                                  </svg>
+                                </div>
+                                <div className="step-line"></div>
                               </div>
-                            ))}
+                              <div className="step-content">
+                                <div className="flex items-center gap-2 pt-1 pb-2">
+                                  <span className="text-[14px] font-semibold text-gray-100">Initiating new project</span>
+                                  {!block.isComplete && (
+                                    <Loader2 size={12} className="text-primary animate-spin" />
+                                  )}
+                                </div>
+                                {/* Initialization Stages */}
+                                <div className="space-y-2">
+                                  {block.initializationStages?.map((stage, idx) => (
+                                    <div key={idx} className="flex items-center gap-2">
+                                      {stage.isComplete ? (
+                                        <Check size={12} className="text-green-400 flex-shrink-0" />
+                                      ) : (
+                                        <Loader2 size={12} className="text-primary animate-spin flex-shrink-0" />
+                                      )}
+                                      <span className={`text-[13px] ${stage.isComplete ? 'text-gray-400' : 'text-gray-300'}`}>
+                                        {stage.label}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* STEP 2: Project Ready (only show when complete) */}
+                            {block.isComplete && (
+                              <div className="timeline-step">
+                                <div className="step-track">
+                                  <div className="step-icon" style={{ background: 'rgba(34, 197, 94, 0.2)' }}>
+                                    <Rocket size={14} className="text-green-400" />
+                                  </div>
+                                </div>
+                                <div className="step-content">
+                                  <div className="flex items-center gap-2 pt-1">
+                                    <span className="text-[14px] font-semibold text-gray-100">Your project is ready</span>
+                                    <Check size={12} className="text-green-400" />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       )
@@ -987,96 +987,72 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                           {/* RESTORE BLOCK - Timeline design matching other blocks */}
                           {isRestoreBlock ? (
                             <div className="relative">
-                              {/* Continuous dotted line */}
-                              <div className="absolute left-[12px] top-[12px] bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
-
                               {/* Git Restore Step */}
-                              <div className="relative pb-4">
-                                {/* Step header */}
-                                <div className="flex items-center gap-3 mb-3">
-                                  {/* Git Icon */}
-                                  <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                    <img src={GitIcon} alt="Git" className="w-6 h-6 opacity-90" />
+                              <div className="timeline-step">
+                                <div className="step-track">
+                                  <div className="step-icon step-icon-restore">
+                                    <img src={GitIcon} alt="Git" className="w-4 h-4 opacity-90" />
                                   </div>
-
-                                  {/* Title + Status */}
-                                  <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-[15px] font-medium text-gray-200">
-                                        {restoreAction?.status === 'in_progress'
-                                          ? 'Restoring checkpoint...'
-                                          : restoreAction?.status === 'success'
-                                            ? `Restored to checkpoint #${restoreAction?.data?.commitHash || ''}`
-                                            : 'Restore failed'
-                                        }
-                                      </span>
-                                      {restoreAction?.status === 'success' && (
-                                        <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                          <Check size={10} className="text-green-400" />
-                                        </div>
-                                      )}
-                                      {restoreAction?.status === 'success' && (
-                                        <span className="text-[12px] text-gray-500">
-                                          0.1s
-                                        </span>
-                                      )}
-                                      {restoreAction?.status === 'in_progress' && (
-                                        <Loader2 size={12} className="text-primary animate-spin" />
-                                      )}
-                                    </div>
+                                  {hasDeployAction && <div className="step-line"></div>}
+                                </div>
+                                <div className="step-content">
+                                  <div className="flex items-center gap-2 pt-1">
+                                    <span className="text-[14px] font-semibold text-gray-100">
+                                      {restoreAction?.status === 'in_progress'
+                                        ? 'Restoring checkpoint...'
+                                        : restoreAction?.status === 'success'
+                                          ? `Restored to checkpoint #${restoreAction?.data?.commitHash || ''}`
+                                          : 'Restore failed'
+                                      }
+                                    </span>
+                                    {restoreAction?.status === 'success' && (
+                                      <span className="text-[12px] text-gray-500">0.1s</span>
+                                    )}
+                                    {restoreAction?.status === 'in_progress' && (
+                                      <Loader2 size={12} className="text-primary animate-spin" />
+                                    )}
                                   </div>
                                 </div>
                               </div>
 
                               {/* Dev Server Step */}
                               {hasDeployAction && deployAction && (
-                                <div className="relative">
-                                  {/* Step header */}
-                                  <div className="flex items-center gap-3 mb-3">
-                                    {/* Server Icon */}
-                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                      <Server size={24} className="text-white opacity-90" />
+                                <div className="timeline-step">
+                                  <div className="step-track">
+                                    <div className="step-icon step-icon-server">
+                                      <Server size={14} className="text-white opacity-90" />
                                     </div>
-
-                                    {/* Title + Status */}
-                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-[15px] font-medium text-gray-200">
-                                          {deployAction.status === 'in_progress'
-                                            ? 'Starting dev server...'
-                                            : deployAction.status === 'success'
-                                              ? 'Dev Server started successfully'
-                                              : 'Failed to start dev server'
-                                          }
+                                  </div>
+                                  <div className="step-content">
+                                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                                      <span className="text-[14px] font-semibold text-gray-100">
+                                        {deployAction.status === 'in_progress'
+                                          ? 'Starting dev server...'
+                                          : deployAction.status === 'success'
+                                            ? 'Dev Server started successfully'
+                                            : 'Failed to start dev server'
+                                        }
+                                      </span>
+                                      {deployAction.status === 'success' && deployAction.data?.url && (
+                                        <>
+                                          <span className="text-gray-500 text-[12px]">•</span>
+                                          <button
+                                            onClick={() => window.electronAPI?.shell?.openExternal(deployAction.data.url)}
+                                            className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[12px]"
+                                          >
+                                            <span>{deployAction.data.url}</span>
+                                            <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
+                                          </button>
+                                        </>
+                                      )}
+                                      {deployAction.status === 'success' && (
+                                        <span className="text-[12px] text-gray-500">
+                                          {deployAction.data?.restartTime ? `${deployAction.data.restartTime}s` : ''}
                                         </span>
-                                        {deployAction.status === 'success' && deployAction.data?.url && (
-                                          <>
-                                            <span className="text-gray-400 text-[12px]">•</span>
-                                            <button
-                                              onClick={() => window.electronAPI?.shell?.openExternal(deployAction.data.url)}
-                                              className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[12px]"
-                                            >
-                                              <span>{deployAction.data.url}</span>
-                                              <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
-                                            </button>
-                                          </>
-                                        )}
-                                        {deployAction.status === 'success' && (
-                                          <>
-                                            <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                              <Check size={10} className="text-green-400" />
-                                            </div>
-                                            {deployAction.data?.restartTime && (
-                                              <span className="text-[12px] text-gray-500">
-                                                {deployAction.data.restartTime}s
-                                              </span>
-                                            )}
-                                          </>
-                                        )}
-                                        {deployAction.status === 'in_progress' && (
-                                          <Loader2 size={12} className="text-primary animate-spin" />
-                                        )}
-                                      </div>
+                                      )}
+                                      {deployAction.status === 'in_progress' && (
+                                        <Loader2 size={12} className="text-primary animate-spin" />
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -1084,89 +1060,88 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                             </div>
                           ) : (
                             /* Timeline Workflow */
-                            <div className="relative pr-8">
-                              {/* Continuous dotted line from top to bottom - behind icons */}
-                              <div className="absolute left-[12px] top-[12px] bottom-0 w-[2px] border-l-2 border-dashed border-white/10 z-0" />
-
+                            <div className="relative">
                               {/* STEP 0: USER (User Prompt) - Hide for answer blocks */}
                               {!isAnswers && (
-                                <div className="relative pb-4">
-                                  {/* Step header */}
-                                  <div className="flex items-center gap-3 mb-3">
-                                    {/* User Avatar */}
-                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                      <User size={24} className="text-white opacity-90" />
+                                <div className="timeline-step">
+                                  <div className="step-track">
+                                    <div className="step-icon step-icon-user">
+                                      <User size={14} className="text-white opacity-90" />
                                     </div>
-
-                                    {/* Title */}
-                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                      {(() => {
-                                        const prompt = block.userPrompt || 'User request'
-                                        const lineCount = estimatePromptLines(prompt)
-                                        const fontSize = getPromptFontSize(lineCount)
-                                        const needsExpansion = lineCount > 10
-                                        const isExpanded = expandedUserPrompts.has(block.id)
-
-                                        return (
-                                          <div>
-                                            <div className={`${fontSize} font-medium text-gray-200 ${needsExpansion && !isExpanded ? 'line-clamp-3' : ''}`}>
-                                              {prompt}
-                                            </div>
-                                            {needsExpansion && (
-                                              <button
-                                                onClick={() => {
-                                                  const newSet = new Set(expandedUserPrompts)
-                                                  if (newSet.has(block.id)) {
-                                                    newSet.delete(block.id)
-                                                  } else {
-                                                    newSet.add(block.id)
-                                                  }
-                                                  setExpandedUserPrompts(newSet)
-                                                }}
-                                                className="mt-1 text-[12px] text-primary hover:text-primary-light transition-colors"
-                                              >
-                                                {isExpanded ? 'Show less' : 'Show more'}
-                                              </button>
-                                            )}
-                                          </div>
-                                        )
-                                      })()}
+                                    <div className="step-line"></div>
+                                  </div>
+                                  <div className="step-content">
+                                    {/* Header: Title on same line as icon */}
+                                    <div className="step-header pt-1 pb-2">
+                                      <span className="text-[14px] font-semibold text-gray-100">User</span>
                                     </div>
+                                    {/* Message below */}
+                                    {(() => {
+                                      const prompt = block.userPrompt || 'User request'
+                                      const lineCount = estimatePromptLines(prompt)
+                                      const needsExpansion = lineCount > 10
+                                      const isPromptExpanded = expandedUserPrompts.has(block.id)
+
+                                      return (
+                                        <div>
+                                          <p className={`text-[14px] text-gray-300 leading-relaxed ${needsExpansion && !isPromptExpanded ? 'line-clamp-3' : ''}`}>
+                                            {prompt}
+                                          </p>
+                                          {needsExpansion && (
+                                            <button
+                                              onClick={() => {
+                                                const newSet = new Set(expandedUserPrompts)
+                                                if (newSet.has(block.id)) {
+                                                  newSet.delete(block.id)
+                                                } else {
+                                                  newSet.add(block.id)
+                                                }
+                                                setExpandedUserPrompts(newSet)
+                                              }}
+                                              className="mt-1 text-[12px] text-primary hover:text-primary-light transition-colors"
+                                            >
+                                              {isPromptExpanded ? 'Show less' : 'Show more'}
+                                            </button>
+                                          )}
+                                        </div>
+                                      )
+                                    })()}
                                   </div>
                                 </div>
                               )}
 
                               {/* STEP 1: ANTHROPIC (Code Editing) */}
-                              <div className="relative pb-4">
-                                {/* Step header */}
-                                <div className="flex items-center gap-3 mb-3">
-                                  {/* Icon - Adjust left/right positioning here */}
-                                  <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                    <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6 opacity-90" />
-                                  </div>
+                              {(() => {
+                                // Determine if there are more steps after Claude
+                                const hasGitStep = block.actions?.some(a => a.type === 'git_commit' && a.status)
+                                const hasServerStep = block.actions?.some(a => a.type === 'dev_server' && a.status)
+                                const hasPlanApprovalStep = needsApproval || (isPlanReady && implementationBlock)
+                                const hasInterruptedStep = wasInterrupted
+                                const hasMoreSteps = hasGitStep || hasServerStep || hasPlanApprovalStep || hasInterruptedStep
 
-                                  {/* Title + Status */}
-                                  <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-[15px] font-medium text-gray-200">
-                                        Claude:
-                                      </span>
-                                      {block.isComplete && (
-                                        <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                          <Check size={10} className="text-green-400" />
-                                        </div>
-                                      )}
-                                      {block.isComplete && block.completionStats && (
-                                        <span className="text-[12px] text-gray-500">
-                                          {block.completionStats.timeSeconds}s
-                                        </span>
-                                      )}
+                                return (
+                                  <div className="timeline-step">
+                                    <div className="step-track">
+                                      <div className="step-icon step-icon-claude">
+                                        <img src={AnthropicIcon} alt="Anthropic" className="w-4 h-4" />
+                                      </div>
+                                      {hasMoreSteps && <div className="step-line"></div>}
                                     </div>
-                                  </div>
-                                </div>
+                                    <div className="step-content">
+                                      {/* Title + Status */}
+                                      <div className="flex items-center gap-2 pt-1 mb-3">
+                                        <span className="text-[14px] font-semibold text-gray-100">
+                                          Claude
+                                        </span>
+                                        {block.isComplete && block.completionStats && (
+                                          <span className="text-[12px] text-gray-500">
+                                            {block.completionStats.timeSeconds}s
+                                          </span>
+                                        )}
+                                      </div>
 
-                                {/* Anthropic step content (always visible) */}
-                                <div className="ml-10 space-y-3">
+                                      {/* Anthropic step content (always visible) */}
+                                      <div className="space-y-3">
 
                                   {/* Messages */}
                                   <div className="space-y-1.5">
@@ -1183,124 +1158,106 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                       const isLatestTool = message.type === 'tool' && message === toolMessages[toolMessages.length - 1]
 
                                       return (
-                                        <div key={idx}>
-                                          <div className="flex items-start gap-2">
-                                            {message.type === 'assistant' && (
-                                              <>
-                                                <Bot size={11} className="text-primary flex-shrink-0 opacity-60" style={{ marginTop: '3px' }} />
-                                                <div className="flex-1 relative">
-                                                  <div
-                                                    ref={(el) => {
-                                                      if (el) {
-                                                        messageRefs.current.set(messageId, el)
+                                        <div key={idx} className="mb-3">
+                                          {message.type === 'thinking' && (
+                                            <div>
+                                              {message.thinkingDuration !== undefined ? (
+                                                // Complete thinking - expandable
+                                                <div>
+                                                  <button
+                                                    onClick={() => {
+                                                      const newSet = new Set(expandedThinking)
+                                                      if (newSet.has(messageId)) {
+                                                        newSet.delete(messageId)
                                                       } else {
-                                                        messageRefs.current.delete(messageId)
+                                                        newSet.add(messageId)
                                                       }
+                                                      setExpandedThinking(newSet)
                                                     }}
-                                                    className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-wrap"
-                                                    style={{
-                                                      display: '-webkit-box',
-                                                      WebkitBoxOrient: 'vertical',
-                                                      WebkitLineClamp: !isMessageExpanded ? 3 : 'unset',
-                                                      overflow: 'hidden'
-                                                    }}
+                                                    className="inline-flex items-center gap-1 text-[11px] text-gray-500 bg-white/5 px-2 py-0.5 rounded mb-1.5 hover:bg-white/10 transition-colors"
                                                   >
-                                                    <InteractiveXMLHighlight
-                                                      text={message.content}
-                                                      onXMLClick={onXMLTagClick}
-                                                      onXMLDetected={onXMLTagDetected}
-                                                      keywords={keywords}
-                                                      blockId={block.id}
-                                                    />
-                                                  </div>
-                                                  {(hasOverflow || isMessageExpanded) && (
-                                                    <button
-                                                      onClick={() => {
-                                                        const newSet = new Set(expandedMessages)
-                                                        if (newSet.has(messageId)) {
-                                                          newSet.delete(messageId)
-                                                        } else {
-                                                          newSet.add(messageId)
-                                                        }
-                                                        setExpandedMessages(newSet)
-                                                      }}
-                                                      className="ml-1 text-[12px] text-primary hover:text-primary-light transition-colors"
-                                                    >
-                                                      {isMessageExpanded ? '(Show less)' : '(Show more)'}
-                                                    </button>
+                                                    <span>Thought for {message.thinkingDuration}s</span>
+                                                    <ChevronDown size={10} className={`transition-transform ${expandedThinking.has(messageId) ? 'rotate-180' : ''}`} />
+                                                  </button>
+                                                  {expandedThinking.has(messageId) && (
+                                                    <p className="text-[13px] text-gray-400 leading-relaxed whitespace-pre-wrap">
+                                                      {message.content}
+                                                    </p>
                                                   )}
                                                 </div>
-                                              </>
-                                            )}
-                                            {message.type === 'tool' && message.toolName && (
-                                              <>
-                                                <div className="w-1.5 h-1.5 rounded-full bg-gray-500/50 flex-shrink-0 mt-1.5" />
-                                                <span className="text-[12px] text-gray-400 leading-relaxed flex items-center gap-2">
-                                                  <span>
-                                                    Claude using tool{' '}
-                                                    <span className="text-primary font-medium">{message.toolName}</span>
-                                                    {message.content.includes('@') && (
-                                                      <> @ {message.content.split('@')[1].trim()}</>
-                                                    )}
+                                              ) : (
+                                                // Active thinking - animated
+                                                <div className="flex items-center gap-2">
+                                                  <span className="inline-block text-[11px] text-gray-500 bg-white/5 px-2 py-0.5 rounded">
+                                                    Thinking{thinkingDots} {thinkingTimers.get(block.id)?.toFixed(1) || '0.0'}s
                                                   </span>
-                                                  {isLatestTool && message.toolDuration === undefined && (
-                                                    // Only show timer for the latest active tool
-                                                    <span className="text-[12px] text-gray-500 flex items-center gap-1">
-                                                      <Clock size={10} />
-                                                      <>{latestToolTimer.get(block.id)?.toFixed(1) || '0.0'}s</>
-                                                    </span>
-                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                          {message.type === 'assistant' && (
+                                            <div className="flex items-start gap-2">
+                                              <div className="w-1 h-1 rounded-full bg-gray-500 flex-shrink-0 mt-2" />
+                                              <div className="flex-1 relative">
+                                                <div
+                                                  ref={(el) => {
+                                                    if (el) {
+                                                      messageRefs.current.set(messageId, el)
+                                                    } else {
+                                                      messageRefs.current.delete(messageId)
+                                                    }
+                                                  }}
+                                                  className="text-[13px] text-gray-400 leading-relaxed whitespace-pre-wrap"
+                                                style={{
+                                                  display: '-webkit-box',
+                                                  WebkitBoxOrient: 'vertical',
+                                                  WebkitLineClamp: !isMessageExpanded ? 3 : 'unset',
+                                                  overflow: 'hidden'
+                                                }}
+                                              >
+                                                <InteractiveXMLHighlight
+                                                  text={message.content}
+                                                  onXMLClick={onXMLTagClick}
+                                                  onXMLDetected={onXMLTagDetected}
+                                                  keywords={keywords}
+                                                  blockId={block.id}
+                                                />
+                                              </div>
+                                              {(hasOverflow || isMessageExpanded) && (
+                                                <span
+                                                  onClick={() => {
+                                                    const newSet = new Set(expandedMessages)
+                                                    if (newSet.has(messageId)) {
+                                                      newSet.delete(messageId)
+                                                    } else {
+                                                      newSet.add(messageId)
+                                                    }
+                                                    setExpandedMessages(newSet)
+                                                  }}
+                                                  className="text-[12px] text-primary hover:underline cursor-pointer"
+                                                >
+                                                  {isMessageExpanded ? '(Show less)' : '(Show more)'}
                                                 </span>
-                                              </>
-                                            )}
-                                            {message.type === 'thinking' && (
-                                              <>
-                                                {message.thinkingDuration !== undefined ? (
-                                                  // Complete thinking - expandable
-                                                  <div className="flex-1">
-                                                    <button
-                                                      onClick={() => {
-                                                        const newSet = new Set(expandedThinking)
-                                                        if (newSet.has(messageId)) {
-                                                          newSet.delete(messageId)
-                                                        } else {
-                                                          newSet.add(messageId)
-                                                        }
-                                                        setExpandedThinking(newSet)
-                                                      }}
-                                                      className="flex items-center gap-2 text-[12px] text-purple-400 hover:text-purple-300 transition-colors"
-                                                    >
-                                                      <Brain size={9} className="flex-shrink-0" style={{ marginLeft: '1px' }} />
-                                                      <span className="font-medium">
-                                                        Thought for {message.thinkingDuration}s
-                                                      </span>
-                                                      <ChevronDown
-                                                        size={10}
-                                                        className={`transition-transform ${expandedThinking.has(messageId) ? 'rotate-180' : ''}`}
-                                                      />
-                                                    </button>
-                                                    {expandedThinking.has(messageId) && (
-                                                      <div className="mt-2 pl-6 text-[12px] text-gray-400 leading-relaxed whitespace-pre-wrap border-l-2 border-purple-500/30">
-                                                        {message.content}
-                                                      </div>
-                                                    )}
-                                                  </div>
-                                                ) : (
-                                                  // Active thinking - animated
-                                                  <div className="flex items-center gap-2">
-                                                    <Brain size={9} className="flex-shrink-0 text-purple-400" style={{ marginLeft: '1px' }} />
-                                                    <span className="text-[12px] text-purple-400 font-medium">
-                                                      Thinking{thinkingDots}
-                                                    </span>
-                                                    <span className="text-[12px] text-gray-500 flex items-center gap-1">
-                                                      <Clock size={10} />
-                                                      {thinkingTimers.get(block.id)?.toFixed(1) || '0.0'}s
-                                                    </span>
-                                                  </div>
+                                              )}
+                                              </div>
+                                            </div>
+                                          )}
+                                          {message.type === 'tool' && message.toolName && (
+                                            <div className="flex items-center gap-2 text-[12px] text-gray-500">
+                                              <span>
+                                                Claude using tool{' '}
+                                                <span className="text-primary">{message.toolName}</span>
+                                                {message.content.includes('@') && (
+                                                  <> @ {message.content.split('@')[1].trim()}</>
                                                 )}
-                                              </>
-                                            )}
-                                          </div>
+                                              </span>
+                                              {isLatestTool && message.toolDuration === undefined && (
+                                                <span className="text-gray-500">
+                                                  {latestToolTimer.get(block.id)?.toFixed(1) || '0.0'}s
+                                                </span>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
                                       )
                                     })}
@@ -1313,37 +1270,19 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     const toolUsage = toolUsageMessage?.content || ''
 
                                     return (
-                                      <div className="mt-3">
-                                        <div className="flex items-center gap-2 flex-wrap text-[12px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
-                                          {toolUsage && (
-                                            <>
-                                              <span className="text-gray-400 flex items-center gap-1">
-                                                <span className="text-gray-500">Used tools:</span>
-                                                <span className="font-mono text-gray-300 text-[11px]">{toolUsage}</span>
-                                              </span>
-                                              <span className="text-gray-600">|</span>
-                                            </>
-                                          )}
-                                          <span className="text-gray-400 flex items-center gap-1">
-                                            <span className="text-gray-500">Tokens:</span>
-                                            <ArrowUpCircle size={10} className="text-blue-400" />
-                                            <span className="text-[11px]">{block.completionStats.inputTokens}</span>
-                                            <span className="text-gray-600">→</span>
-                                            <ArrowDownCircle size={10} className="text-green-400" />
-                                            <span className="text-[11px]">{block.completionStats.outputTokens}</span>
-                                          </span>
-                                          <span className="text-gray-600">|</span>
-                                          <span className="text-gray-400 flex items-center gap-1 text-[11px]">
-                                            <DollarSign size={10} />
-                                            {block.completionStats.cost.toFixed(4)}
-                                            <div className="group/info relative flex items-center">
-                                              <Info size={10} className="text-gray-500 cursor-help" />
-                                              <div className="absolute right-0 bottom-full mb-2 bg-dark-bg border border-dark-border rounded px-2 py-1.5 text-[10px] text-gray-300 whitespace-nowrap opacity-0 pointer-events-none group-hover/info:opacity-100 transition-opacity z-[150] shadow-xl">
-                                                Billed to API users only.<br />
-                                                Included in Max plans.
-                                              </div>
-                                            </div>
-                                          </span>
+                                      <div className="flex flex-wrap gap-4 pt-3 mt-3 border-t border-white/10 text-[12px]">
+                                        {toolUsage && (
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-gray-500">Used tools:</span>
+                                            <span className="text-gray-400">{toolUsage}</span>
+                                          </div>
+                                        )}
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-gray-500">Tokens:</span>
+                                          <span className="text-gray-400 tabular-nums">{block.completionStats.inputTokens} → {block.completionStats.outputTokens}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 pl-4 border-l border-white/10">
+                                          <span className="text-gray-500">${block.completionStats.cost.toFixed(4)}</span>
                                         </div>
                                       </div>
                                     )
@@ -1379,267 +1318,257 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                       )}
                                     </div>
                                   )}
-                                </div>
-                              </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })()}
 
                               {/* PLAN MODE: Plan approval (show when plan is ready) */}
-                              {needsApproval && (
-                                <div className="relative pb-4">
-                                  {/* Step header */}
-                                  <div className="flex items-center gap-3 mb-3">
-                                    {/* User Avatar */}
-                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                      <User size={24} className="text-white opacity-90" />
-                                    </div>
+                              {needsApproval && (() => {
+                                const hasGitAfter = block.actions?.some(a => a.type === 'git_commit' && a.status)
+                                const hasServerAfter = block.actions?.some(a => a.type === 'dev_server' && a.status)
+                                const hasMoreAfter = hasGitAfter || hasServerAfter
 
-                                    {/* Title */}
-                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[15px] font-medium text-gray-200">
+                                return (
+                                  <div className="timeline-step">
+                                    <div className="step-track">
+                                      <div className="step-icon step-icon-plan">
+                                        <User size={14} className="text-white opacity-90" />
+                                      </div>
+                                      {hasMoreAfter && <div className="step-line"></div>}
+                                    </div>
+                                    <div className="step-content">
+                                      <div className="flex items-center gap-2 pt-1 mb-3">
+                                        <span className="text-[14px] font-semibold text-gray-100">
                                           Plan ready for approval
                                         </span>
                                       </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Approval content */}
-                                  <div className="ml-10">
-                                    <p className="text-[12px] text-gray-300 mb-3">
-                                      Review Claude's plan above. Choose an action below:
-                                    </p>
-                                    <div className="flex gap-2">
-                                      <button
-                                        onClick={() => {
-                                          if (onApprovePlan) {
-                                            onApprovePlan()
-                                          }
-                                        }}
-                                        className="px-4 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 hover:border-primary/70 rounded text-[12px] text-primary font-medium transition-all"
-                                      >
-                                        Yes, confirm
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          if (onRejectPlan) {
-                                            onRejectPlan()
-                                          }
-                                        }}
-                                        className="px-4 py-2 bg-gray-500/20 hover:bg-gray-500/30 border border-gray-500/50 hover:border-gray-500/70 rounded text-[12px] text-gray-300 font-medium transition-all"
-                                      >
-                                        No, keep planning
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* PLAN MODE: User approval indicator */}
-                              {isPlanReady && implementationBlock && (
-                                <div className="relative pb-4">
-                                  <div className="flex items-center gap-3 mb-3">
-                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10">
-                                      <User size={24} className="text-white opacity-90" />
-                                    </div>
-                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[15px] font-medium text-gray-200">
-                                          User approved plan
-                                        </span>
-                                        <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                          <Check size={10} className="text-green-400" />
-                                        </div>
+                                      <p className="text-[12px] text-gray-400 mb-3">
+                                        Review Claude's plan above. Choose an action below:
+                                      </p>
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => onApprovePlan?.()}
+                                          className="px-4 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/50 hover:border-primary/70 rounded text-[12px] text-primary font-medium transition-all"
+                                        >
+                                          Yes, confirm
+                                        </button>
+                                        <button
+                                          onClick={() => onRejectPlan?.()}
+                                          className="px-4 py-2 bg-gray-500/20 hover:bg-gray-500/30 border border-gray-500/50 hover:border-gray-500/70 rounded text-[12px] text-gray-300 font-medium transition-all"
+                                        >
+                                          No, keep planning
+                                        </button>
                                       </div>
                                     </div>
                                   </div>
-                                </div>
-                              )}
+                                )
+                              })()}
 
-                              {/* PLAN MODE: Show implementation (Claude executing the plan) */}
-                              {isPlanReady && implementationBlock && (
-                                <div className="relative pb-4">
-                                  {/* Claude header */}
-                                  <div className="flex items-center gap-3 mb-3">
-                                    <div className="flex-shrink-0 bg-white/[0.02] relative z-10">
-                                      <img src={AnthropicIcon} alt="Anthropic" className="w-6 h-6" />
-                                    </div>
-                                    <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap" style={{ marginTop: '3px' }}>
-                                      <span className="text-[15px] font-medium text-gray-200">
-                                        Claude:
-                                      </span>
-                                      {implementationBlock.isComplete && implementationBlock.completionStats && (
-                                        <span className="text-[12px] text-gray-500">
-                                          {implementationBlock.completionStats.timeSeconds}s
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
+                              {/* PLAN MODE: User approval indicator + Implementation */}
+                              {isPlanReady && implementationBlock && (() => {
+                                const implHasGit = implementationBlock.actions?.some(a => a.type === 'git_commit' && a.status)
+                                const implHasServer = implementationBlock.actions?.some(a => a.type === 'dev_server' && a.status)
 
-                                  {/* Implementation content */}
-                                  <div className="ml-10">
-                                    {/* Implementation messages */}
-                                    {implementationBlock.messages && implementationBlock.messages
-                                      .filter(m =>
-                                        (m.type === 'assistant' || m.type === 'thinking' || m.type === 'tool') &&
-                                        !(m.type === 'tool' && !m.toolName) // Filter out tool summary messages
-                                      )
-                                      .map((msg, msgIdx) => {
-                                        if (msg.type === 'thinking') {
+                                return (
+                                  <>
+                                    {/* User approved step */}
+                                    <div className="timeline-step">
+                                      <div className="step-track">
+                                        <div className="step-icon step-icon-user">
+                                          <User size={14} className="text-white opacity-90" />
+                                        </div>
+                                        <div className="step-line"></div>
+                                      </div>
+                                      <div className="step-content">
+                                        <div className="flex items-center gap-2 pt-1">
+                                          <span className="text-[14px] font-semibold text-gray-100">
+                                            User approved plan
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    {/* Claude implementation step */}
+                                    <div className="timeline-step">
+                                      <div className="step-track">
+                                        <div className="step-icon step-icon-claude">
+                                          <img src={AnthropicIcon} alt="Anthropic" className="w-4 h-4" />
+                                        </div>
+                                        {(implHasGit || implHasServer) && <div className="step-line"></div>}
+                                      </div>
+                                      <div className="step-content">
+                                        <div className="flex items-center gap-2 pt-1 mb-3">
+                                          <span className="text-[14px] font-semibold text-gray-100">
+                                            Claude
+                                          </span>
+                                          {implementationBlock.isComplete && implementationBlock.completionStats && (
+                                            <span className="text-[12px] text-gray-500">
+                                              {implementationBlock.completionStats.timeSeconds}s
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Implementation messages */}
+                                        {implementationBlock.messages && implementationBlock.messages
+                                          .filter(m =>
+                                            (m.type === 'assistant' || m.type === 'thinking' || m.type === 'tool') &&
+                                            !(m.type === 'tool' && !m.toolName)
+                                          )
+                                          .map((msg, msgIdx) => {
+                                            if (msg.type === 'thinking') {
+                                              return (
+                                                <div key={`impl-thinking-${msgIdx}`} className="mb-2 text-[12px] text-gray-500 italic">
+                                                  Thought for {msg.thinkingDuration || '...'}s
+                                                </div>
+                                              )
+                                            }
+                                            if (msg.type === 'tool') return null
+                                            return (
+                                              <div key={`impl-msg-${msgIdx}`} className="mb-3">
+                                                <div className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
+                                                  {msg.content}
+                                                </div>
+                                              </div>
+                                            )
+                                          })}
+
+                                        {/* Implementation stats */}
+                                        {implementationBlock.completionStats && (() => {
+                                          const toolUsageMessage = implementationBlock.messages?.find(m => m.type === 'tool' && !m.toolName)
+                                          const toolUsage = toolUsageMessage?.content || ''
                                           return (
-                                            <div key={`impl-thinking-${msgIdx}`} className="mb-2 text-[12px] text-gray-500 italic">
-                                              Thought for {msg.thinkingDuration || '...'}s
+                                            <div className="flex flex-wrap gap-4 pt-3 mt-3 border-t border-white/10 text-[12px]">
+                                              {toolUsage && (
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="text-gray-500">Used tools:</span>
+                                                  <span className="text-gray-400">{toolUsage}</span>
+                                                </div>
+                                              )}
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="text-gray-500">Tokens:</span>
+                                                <span className="text-gray-400 tabular-nums">{implementationBlock.completionStats.inputTokens} → {implementationBlock.completionStats.outputTokens}</span>
+                                              </div>
+                                              <div className="flex items-center gap-1.5 pl-4 border-l border-white/10">
+                                                <span className="text-gray-500">${implementationBlock.completionStats.cost.toFixed(4)}</span>
+                                              </div>
                                             </div>
                                           )
-                                        }
-
-                                        if (msg.type === 'tool') {
-                                          return null // Tools shown separately in stats
-                                        }
-
-                                        return (
-                                          <div key={`impl-msg-${msgIdx}`} className="mb-3">
-                                            <div className="text-[12px] text-gray-300 leading-relaxed whitespace-pre-wrap break-words">
-                                              {msg.content}
-                                            </div>
-                                          </div>
-                                        )
-                                      })}
-
-                                    {/* Implementation stats */}
-                                    {implementationBlock.completionStats && (() => {
-                                      const toolUsageMessage = implementationBlock.messages?.find(m => m.type === 'tool' && !m.toolName)
-                                      const toolUsage = toolUsageMessage?.content || ''
-
-                                      return (
-                                        <div className="mt-3">
-                                          <div className="flex items-center gap-2 flex-wrap text-[12px] bg-white/[0.02] border border-white/5 rounded-lg px-3 py-2">
-                                            {toolUsage && (
-                                              <>
-                                                <span className="text-gray-400 flex items-center gap-1">
-                                                  <span className="text-gray-500">Used tools:</span>
-                                                  <span className="font-mono text-gray-300 text-[11px]">{toolUsage}</span>
-                                                </span>
-                                                <span className="text-gray-600">|</span>
-                                              </>
-                                            )}
-                                            <span className="text-gray-400 flex items-center gap-1">
-                                              <span className="text-gray-500">Tokens:</span>
-                                              <ArrowUpCircle size={10} className="text-blue-400" />
-                                              <span className="text-[11px]">{implementationBlock.completionStats.inputTokens}</span>
-                                              <span className="text-gray-600">→</span>
-                                              <ArrowDownCircle size={10} className="text-green-400" />
-                                              <span className="text-[11px]">{implementationBlock.completionStats.outputTokens}</span>
-                                            </span>
-                                            <span className="text-gray-600">|</span>
-                                            <span className="text-gray-400 flex items-center gap-1 text-[11px]">
-                                              <DollarSign size={10} />
-                                              {implementationBlock.completionStats.cost.toFixed(4)}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      )
-                                    })()}
-                                  </div>
-                                </div>
-                              )}
+                                        })()}
+                                      </div>
+                                    </div>
+                                  </>
+                                )
+                              })()}
 
                               {/* STEP 2: GIT (GitHub Commit) - Use implementation block in plan mode */}
                               {(() => {
                                 const gitBlockToUse =
-                                  (isPlanReady && implementationBlock) ? implementationBlock :
-                                    block
+                                  (isPlanReady && implementationBlock) ? implementationBlock : block
                                 const git = gitBlockToUse?.actions?.find(a => a.type === 'git_commit')
-                                // Only show if git action exists AND has started
                                 const shouldShowGit = git && git.status
-                                return shouldShowGit && (
-                                  <div className="relative pb-4">
-                                    {/* Step header */}
-                                    <div className="flex items-center gap-3 mb-3">
-                                      {/* Icon - Adjust left/right positioning here */}
-                                      <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                        <img src={GitIcon} alt="Git" className="w-6 h-6 opacity-90" />
-                                      </div>
+                                const hasServerAfterGit = gitBlockToUse?.actions?.some(a => a.type === 'dev_server' && a.status)
 
-                                      {/* Title + Status */}
-                                      <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="text-[15px] font-medium text-gray-200">
+                                return shouldShowGit && (
+                                  <div className="timeline-step">
+                                    <div className="step-track">
+                                      <div className="step-icon step-icon-git">
+                                        <img src={GitIcon} alt="Git" className="w-4 h-4 opacity-90" />
+                                      </div>
+                                      {(hasServerAfterGit || wasInterrupted) && <div className="step-line"></div>}
+                                    </div>
+                                    <div className="step-content">
+                                      {/* Header: Title + Status + Time */}
+                                      <div className="flex items-center justify-between pt-1 pb-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[14px] font-semibold text-gray-100">Git</span>
+                                          <span className={`text-[14px] ${git.status === 'in_progress' ? 'text-gray-400' : git.status === 'error' ? 'text-red-400' : 'text-gray-100'}`}>
                                             {git.status === 'in_progress'
-                                              ? 'Committing and pushing to GitHub...'
+                                              ? 'Committing...'
                                               : git.status === 'success'
                                                 ? 'Committed successfully'
                                                 : 'Commit failed'
                                             }
                                           </span>
-                                          {git.status === 'success' && git.data?.commitHash && (
-                                            <span
-                                              className="group/hash font-mono text-[12px] bg-white/[0.03] border border-white/10 px-2 py-0.5 rounded text-gray-400 flex items-center gap-1 cursor-pointer hover:border-white/20 transition-colors"
-                                              onClick={() => {
-                                                navigator.clipboard.writeText(git.data?.commitHash || '')
-                                              }}
-                                              title="Click to copy hash"
-                                            >
-                                              {git.data.commitHash}
-                                              <Copy size={10} className="opacity-0 group-hover/hash:opacity-100 transition-opacity text-gray-500" />
-                                            </span>
-                                          )}
-                                          {git.status === 'success' && git.data?.filesChanged !== undefined && (
-                                            <>
-                                              <span className="text-gray-400 text-[12px]">•</span>
-                                              <span className="text-[12px] text-gray-400">
-                                                {git.data.filesChanged} file{git.data.filesChanged !== 1 ? 's' : ''} changed
-                                              </span>
-                                            </>
-                                          )}
                                           {git.status === 'success' && (
-                                            <>
-                                              <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                                <Check size={10} className="text-green-400" />
-                                              </div>
-                                              <span className="text-[12px] text-gray-500">
-                                                0.1s
-                                              </span>
-                                              {/* Restore button */}
-                                              {block.commitHash && block.commitHash !== 'unknown' && block.commitHash.length >= 7 && (
-                                                <>
-                                                  <span className="text-gray-600 mx-2">|</span>
-                                                  {confirmingRestoreBlockId === block.id ? (
-                                                    <div className="flex items-center gap-1 px-2 py-0.5 bg-primary/[0.03] border border-primary/20 rounded">
-                                                      <span className="text-[12px] text-primary font-medium">Restore to this checkpoint?</span>
-                                                      <button
-                                                        onClick={() => {
-                                                          handleRestoreCheckpoint(block)
-                                                          setConfirmingRestoreBlockId(null)
-                                                        }}
-                                                        className="p-0.5 hover:bg-green-500/20 rounded transition-colors"
-                                                        title="Confirm restore"
-                                                      >
-                                                        <Check size={14} className="text-green-400" />
-                                                      </button>
-                                                      <button
-                                                        onClick={() => setConfirmingRestoreBlockId(null)}
-                                                        className="p-0.5 hover:bg-red-500/20 rounded transition-colors"
-                                                        title="Cancel"
-                                                      >
-                                                        <X size={14} className="text-red-400" />
-                                                      </button>
-                                                    </div>
-                                                  ) : (
-                                                    <button
-                                                      onClick={() => setConfirmingRestoreBlockId(block.id)}
-                                                      className="px-2 py-0.5 bg-primary/[0.03] hover:bg-primary/10 border border-primary/20 hover:border-primary/40 rounded text-[12px] text-primary font-medium transition-all"
-                                                    >
-                                                      Restore to this checkpoint
-                                                    </button>
-                                                  )}
-                                                </>
-                                              )}
-                                            </>
+                                            <Check size={12} className="text-green-400" />
                                           )}
                                           {git.status === 'in_progress' && (
                                             <Loader2 size={12} className="text-primary animate-spin" />
                                           )}
                                         </div>
+                                        {git.status === 'success' && (
+                                          <span className="text-[12px] text-gray-500">0.1s</span>
+                                        )}
                                       </div>
+                                      {/* Details: Hash • Files changed */}
+                                      {git.status === 'success' && (
+                                        <div className="flex items-center gap-2 mb-3">
+                                          {git.data?.commitHash && (
+                                            <span
+                                              className="group/hash font-mono text-[12px] bg-purple-500/10 px-2 py-0.5 rounded text-purple-400 flex items-center gap-1 cursor-pointer hover:bg-purple-500/20 transition-colors"
+                                              onClick={() => navigator.clipboard.writeText(git.data?.commitHash || '')}
+                                              title="Click to copy hash"
+                                            >
+                                              {git.data.commitHash}
+                                              <Copy size={10} className="opacity-0 group-hover/hash:opacity-100 transition-opacity" />
+                                            </span>
+                                          )}
+                                          {git.data?.filesChanged !== undefined && (
+                                            <>
+                                              <span className="text-gray-600">•</span>
+                                              <span className="text-[12px] text-gray-500">
+                                                {git.data.filesChanged} file{git.data.filesChanged !== 1 ? 's' : ''} changed
+                                              </span>
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
+                                      {/* Restore button */}
+                                      {git.status === 'success' && block.commitHash && block.commitHash !== 'unknown' && block.commitHash.length >= 7 && (
+                                        <div className="mt-2">
+                                          {confirmingRestoreBlockId === block.id ? (
+                                            <div className="flex items-center gap-2">
+                                              <div className="inline-flex items-center gap-1.5 bg-primary/10 px-2.5 py-1 rounded">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-primary">
+                                                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                  <path d="M3 3v5h5" />
+                                                </svg>
+                                                <span className="text-[13px] text-primary font-medium">Restore to this checkpoint?</span>
+                                              </div>
+                                              <button
+                                                onClick={() => {
+                                                  handleRestoreCheckpoint(block)
+                                                  setConfirmingRestoreBlockId(null)
+                                                }}
+                                                className="p-1.5 bg-green-500/20 hover:bg-green-500/30 rounded transition-colors"
+                                                title="Confirm restore"
+                                              >
+                                                <Check size={14} className="text-green-400" />
+                                              </button>
+                                              <button
+                                                onClick={() => setConfirmingRestoreBlockId(null)}
+                                                className="p-1.5 bg-red-500/10 hover:bg-red-500/20 rounded transition-colors"
+                                                title="Cancel"
+                                              >
+                                                <X size={14} className="text-red-400" />
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <button
+                                              onClick={() => setConfirmingRestoreBlockId(block.id)}
+                                              className="group inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary/15 px-2.5 py-1 rounded transition-colors"
+                                            >
+                                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-primary group-hover:text-primary-light">
+                                                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                <path d="M3 3v5h5" />
+                                              </svg>
+                                              <span className="text-[13px] text-primary group-hover:text-primary-light font-medium">Restore to this checkpoint</span>
+                                            </button>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 )
@@ -1648,60 +1577,56 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                               {/* STEP 3: DEPLOY (Dev Server) - Use implementation block in plan mode */}
                               {(() => {
                                 const deployBlockToUse =
-                                  (isPlanReady && implementationBlock) ? implementationBlock :
-                                    block
+                                  (isPlanReady && implementationBlock) ? implementationBlock : block
                                 const deploy = deployBlockToUse?.actions?.find(a => a.type === 'dev_server')
-                                // Only show if deploy action exists AND has started
                                 const shouldShowDeploy = deploy && deploy.status
-                                return shouldShowDeploy && (
-                                  <div className="relative">
-                                    {/* Step header */}
-                                    <div className="flex items-center gap-3 mb-3">
-                                      {/* Server Icon */}
-                                      <div className="flex-shrink-0 bg-white/[0.02] relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
-                                        <Server size={24} className="text-white opacity-90" />
-                                      </div>
 
-                                      {/* Title + Status */}
-                                      <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="text-[15px] font-medium text-gray-200">
+                                return shouldShowDeploy && (
+                                  <div className="timeline-step">
+                                    <div className="step-track">
+                                      <div className="step-icon step-icon-server">
+                                        <Server size={14} className="text-white opacity-90" />
+                                      </div>
+                                      {wasInterrupted && <div className="step-line"></div>}
+                                    </div>
+                                    <div className="step-content">
+                                      {/* Header: Title + Status + Time */}
+                                      <div className="flex items-center justify-between pt-1 pb-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[14px] font-semibold text-gray-100">Dev Server</span>
+                                          <span className={`text-[14px] ${deploy.status === 'in_progress' ? 'text-gray-400' : deploy.status === 'error' ? 'text-red-400' : 'text-gray-100'}`}>
                                             {deploy.status === 'in_progress'
-                                              ? 'Starting dev server...'
+                                              ? 'starting...'
                                               : deploy.status === 'success'
-                                                ? 'Dev Server started successfully'
-                                                : 'Failed to start dev server'
+                                                ? 'started successfully'
+                                                : 'failed to start'
                                             }
                                           </span>
-                                          {deploy.status === 'success' && deploy.data?.url && (
-                                            <>
-                                              <span className="text-gray-400 text-[12px]">•</span>
-                                              <button
-                                                onClick={() => window.electronAPI?.shell?.openExternal(deploy.data.url)}
-                                                className="flex items-center gap-1 text-primary hover:text-primary-light transition-colors group text-[12px]"
-                                              >
-                                                <span>{deploy.data.url}</span>
-                                                <ExternalLink size={10} className="opacity-50 group-hover:opacity-100" />
-                                              </button>
-                                            </>
-                                          )}
                                           {deploy.status === 'success' && (
-                                            <>
-                                              <div className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-                                                <Check size={10} className="text-green-400" />
-                                              </div>
-                                              {deploy.data?.restartTime && (
-                                                <span className="text-[12px] text-gray-500">
-                                                  {deploy.data.restartTime}s
-                                                </span>
-                                              )}
-                                            </>
+                                            <Check size={12} className="text-green-400" />
                                           )}
                                           {deploy.status === 'in_progress' && (
                                             <Loader2 size={12} className="text-primary animate-spin" />
                                           )}
                                         </div>
+                                        {deploy.status === 'success' && deploy.data?.restartTime && (
+                                          <span className="text-[12px] text-gray-500">{deploy.data.restartTime}s</span>
+                                        )}
                                       </div>
+                                      {/* URL with pulsing dot */}
+                                      {deploy.status === 'success' && deploy.data?.url && (
+                                        <div className="mt-2">
+                                          <button
+                                            onClick={() => window.electronAPI?.shell?.openExternal(deploy.data.url)}
+                                            className="group inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary/15 px-2.5 py-1 rounded transition-colors"
+                                          >
+                                            <span className="url-dot"></span>
+                                            <span className="text-[13px] font-mono text-primary group-hover:text-primary-light font-medium">
+                                              {deploy.data.url}
+                                            </span>
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 )
@@ -1709,24 +1634,17 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                               {/* STEP: INTERRUPTED (Stopped by user) */}
                               {wasInterrupted && (
-                                <div className="relative">
-                                  {/* Step header */}
-                                  <div className="flex items-center gap-3 mb-3">
-                                    {/* X Icon */}
-                                    <div className="flex-shrink-0 bg-red-500/10 rounded-full p-1 relative z-10" style={{ marginLeft: '0px', marginRight: '0px' }}>
+                                <div className="timeline-step">
+                                  <div className="step-track">
+                                    <div className="step-icon step-icon-stopped">
                                       <X size={14} className="text-red-400" />
                                     </div>
-
-                                    {/* Title + Status */}
-                                    <div className="flex-1 min-w-0" style={{ marginTop: '3px' }}>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[15px] font-medium text-gray-200">
-                                          Stopped by user
-                                        </span>
-                                        <div className="flex-shrink-0 w-4 h-4 rounded-full bg-red-500/20 flex items-center justify-center">
-                                          <Check size={10} className="text-red-400" />
-                                        </div>
-                                      </div>
+                                  </div>
+                                  <div className="step-content">
+                                    <div className="flex items-center gap-2 pt-1">
+                                      <span className="text-[14px] font-semibold text-gray-100">
+                                        Stopped by user
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -1785,6 +1703,80 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             50% {
               transform: translateY(0);
             }
+          }
+          /* Timeline Step Design */
+          .timeline-step {
+            display: flex;
+            gap: 0;
+          }
+          .step-track {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 40px;
+            flex-shrink: 0;
+          }
+          .step-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            z-index: 1;
+          }
+          .step-icon-user {
+            background: rgba(255, 255, 255, 0.1);
+          }
+          .step-icon-claude {
+            background: rgba(217, 119, 6, 0.3);
+          }
+          .step-icon-git {
+            background: rgba(34, 197, 94, 0.2);
+          }
+          .step-icon-server {
+            background: rgba(59, 130, 246, 0.2);
+          }
+          .step-icon-restore {
+            background: rgba(34, 197, 94, 0.2);
+          }
+          .step-icon-stopped {
+            background: rgba(239, 68, 68, 0.15);
+          }
+          .step-icon-plan {
+            background: rgba(139, 92, 246, 0.2);
+          }
+          .step-line {
+            width: 2px;
+            flex-grow: 1;
+            margin: 8px 0;
+            background-image: repeating-linear-gradient(
+              to bottom,
+              rgba(255, 255, 255, 0.15) 0px,
+              rgba(255, 255, 255, 0.15) 4px,
+              transparent 4px,
+              transparent 8px
+            );
+            min-height: 16px;
+          }
+          .step-content {
+            flex: 1;
+            padding-bottom: 16px;
+            padding-left: 4px;
+            min-width: 0;
+          }
+          .url-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+            animation: pulse 2s ease-in-out infinite;
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
           }
         `}</style>
           </div>

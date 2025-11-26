@@ -321,7 +321,7 @@ User: ${currentUserId || 'not logged in'}
                 "default-src 'self'",
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*", // unsafe-eval needed for Vite HMR
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // Allow Google Fonts
-                "font-src 'self' https://fonts.gstatic.com data:", // Allow Google Fonts
+                "font-src 'self' https://fonts.gstatic.com https://unpkg.com https://*.unpkg.com data:", // Allow Google Fonts + Excalidraw fonts
                 "img-src 'self' https://* http://* data: blob:", // Allow images from any HTTPS source
                 "connect-src 'self' http://localhost:* ws://localhost:* https://*", // Allow API calls
                 "worker-src 'self' blob:", // Allow web workers
@@ -331,7 +331,7 @@ User: ${currentUserId || 'not logged in'}
                 "default-src 'self' codedeck:",
                 "script-src 'self' codedeck:",
                 "style-src 'self' codedeck: 'unsafe-inline' https://fonts.googleapis.com",
-                "font-src 'self' codedeck: https://fonts.gstatic.com",
+                "font-src 'self' codedeck: https://fonts.gstatic.com https://unpkg.com https://*.unpkg.com",
                 "img-src 'self' codedeck: https://* data:",
                 "connect-src 'self' codedeck: https://*",
                 "worker-src 'self' codedeck: blob:",

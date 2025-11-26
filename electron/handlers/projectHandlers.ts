@@ -768,6 +768,74 @@ export function registerProjectHandlers() {
     }
   })
 
+  // Save Whiteboard drawing data (Excalidraw elements/files)
+  ipcMain.handle('project:save-whiteboard-data', async (_event, projectId: string, data: any) => {
+    try {
+      // SECURITY: Validate user owns this project
+      const project = validateProjectOwnership(projectId)
+
+      // Save whiteboard data as JSON file in project folder
+      const whiteboardPath = path.join(project.path, 'whiteboard.json')
+      fs.writeFileSync(whiteboardPath, JSON.stringify(data, null, 2))
+
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('❌ Error saving Whiteboard data:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save Whiteboard data'
+      }
+    }
+  })
+
+  // Get Whiteboard drawing data (Excalidraw elements/files)
+  ipcMain.handle('project:get-whiteboard-data', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      const project = validateProjectOwnership(projectId)
+
+      const whiteboardPath = path.join(project.path, 'whiteboard.json')
+
+      if (!fs.existsSync(whiteboardPath)) {
+        return {
+          success: true,
+          data: null
+        }
+      }
+
+      const data = JSON.parse(fs.readFileSync(whiteboardPath, 'utf-8'))
+
+      return {
+        success: true,
+        data
+      }
+    } catch (error) {
+      console.error('❌ Error getting Whiteboard data:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Whiteboard data'
+      }
+    }
+  })
+
   // Get project assets folder structure
   ipcMain.handle('project:get-assets-structure', async (_event, projectId: string) => {
     try {

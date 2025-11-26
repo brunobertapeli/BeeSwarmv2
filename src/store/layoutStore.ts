@@ -155,6 +155,11 @@ interface LayoutStoreState {
   whiteboardWidgetZIndex: number;
   loadWhiteboardWidgetState: (projectId: string) => Promise<void>;
 
+  // Whiteboard drawing data (Excalidraw)
+  whiteboardData: { elements: any[]; appState: any; files: any } | null;
+  setWhiteboardData: (data: { elements: any[]; appState: any; files: any } | null) => void;
+  loadWhiteboardData: (projectId: string) => Promise<void>;
+
   // Unified bring to front for all widgets and sticky notes
   bringWidgetToFront: (widgetType: 'kanban' | 'analytics' | 'projectAssets' | 'whiteboard' | 'stickyNote', stickyNoteId?: string) => void;
 
@@ -283,6 +288,26 @@ const debouncedSaveWhiteboardWidgetState = (projectId: string, widgetState: {
   }, 500); // 500ms debounce
 };
 
+// Debounce helper for saving Whiteboard drawing data (Excalidraw)
+let saveWhiteboardDataTimeout: NodeJS.Timeout | null = null;
+const debouncedSaveWhiteboardData = (projectId: string, data: {
+  elements: any[];
+  appState: any;
+  files: any;
+}) => {
+  if (saveWhiteboardDataTimeout) {
+    clearTimeout(saveWhiteboardDataTimeout);
+  }
+
+  saveWhiteboardDataTimeout = setTimeout(async () => {
+    try {
+      await window.electronAPI?.projects.saveWhiteboardData(projectId, data);
+    } catch (error) {
+      console.error('Failed to save Whiteboard data:', error);
+    }
+  }, 500); // 500ms debounce
+};
+
 export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   // State
   layoutState: 'DEFAULT', // Start in DEFAULT state
@@ -325,6 +350,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   whiteboardWidgetPosition: { x: 20, y: 470 }, // Position below Kanban
   whiteboardWidgetSize: { width: 600, height: 400 },
   whiteboardWidgetZIndex: 53,
+  whiteboardData: null,
 
   // Setters
   setLayoutState: (state) => set({ layoutState: state }),
@@ -767,6 +793,29 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         whiteboardWidgetSize: { width: 600, height: 400 },
         whiteboardWidgetZIndex: 53
       });
+    }
+  },
+
+  // Whiteboard data functions (Excalidraw)
+  setWhiteboardData: (data) => {
+    set({ whiteboardData: data });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId && data) {
+      debouncedSaveWhiteboardData(currentProjectId, data);
+    }
+  },
+
+  loadWhiteboardData: async (projectId: string) => {
+    try {
+      const result = await window.electronAPI?.projects.getWhiteboardData(projectId);
+      if (result?.success && result.data) {
+        set({ whiteboardData: result.data });
+      } else {
+        set({ whiteboardData: null });
+      }
+    } catch (error) {
+      console.error('Failed to load Whiteboard data:', error);
+      set({ whiteboardData: null });
     }
   },
 

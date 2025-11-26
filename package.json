@@ -21,6 +21,7 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.33",
+    "@excalidraw/excalidraw": "^0.18.0",
     "@google-analytics/data": "^5.2.1",
     "@heroicons/react": "^2.2.0",
     "@supabase/supabase-js": "^2.78.0",

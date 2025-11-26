@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, PenTool } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
+import { useAppStore } from '../store/appStore'
 import bgImage from '../assets/images/bg.jpg'
+import { Excalidraw, MainMenu, WelcomeScreen } from '@excalidraw/excalidraw'
+import '@excalidraw/excalidraw/index.css'
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null
 
@@ -13,22 +16,90 @@ function WhiteboardWidget() {
     setWhiteboardWidgetSize,
     setWhiteboardWidgetEnabled,
     whiteboardWidgetZIndex,
-    bringWidgetToFront
+    bringWidgetToFront,
+    whiteboardData,
+    setWhiteboardData,
+    loadWhiteboardData
   } = useLayoutStore()
+
+  const { currentProjectId } = useAppStore()
 
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isResizing, setIsResizing] = useState(false)
   const [resizeDirection, setResizeDirection] = useState<ResizeDirection>(null)
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0, posX: 0, posY: 0 })
+  const [isLoaded, setIsLoaded] = useState(false)
 
   const widgetRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastElementsCountRef = useRef<number>(0)
 
   const MIN_WIDTH = 400
   const MAX_WIDTH = 1600
   const MIN_HEIGHT = 300
   const MAX_HEIGHT = 1000
+
+  // Load whiteboard data when project changes
+  useEffect(() => {
+    if (currentProjectId) {
+      setIsLoaded(false)
+      loadWhiteboardData(currentProjectId).then(() => {
+        setIsLoaded(true)
+      })
+    }
+  }, [currentProjectId, loadWhiteboardData])
+
+  // Handle Excalidraw changes - debounced to prevent infinite loops
+  const handleChange = (elements: readonly any[], appState: any, files: any) => {
+    // Skip if not loaded yet
+    if (!isLoaded) return
+
+    // Only save when elements actually change (not on every appState change)
+    const nonDeletedElements = elements.filter((el: any) => !el.isDeleted)
+    if (nonDeletedElements.length === 0 && lastElementsCountRef.current === 0) return
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Debounce saves to prevent rapid updates
+    saveTimeoutRef.current = setTimeout(() => {
+      lastElementsCountRef.current = nonDeletedElements.length
+
+      // Filter appState to only keep necessary properties
+      const filteredAppState = {
+        viewBackgroundColor: appState.viewBackgroundColor,
+        currentItemStrokeColor: appState.currentItemStrokeColor,
+        currentItemBackgroundColor: appState.currentItemBackgroundColor,
+        currentItemFillStyle: appState.currentItemFillStyle,
+        currentItemStrokeWidth: appState.currentItemStrokeWidth,
+        currentItemRoughness: appState.currentItemRoughness,
+        currentItemOpacity: appState.currentItemOpacity,
+        currentItemFontFamily: appState.currentItemFontFamily,
+        currentItemFontSize: appState.currentItemFontSize,
+        currentItemTextAlign: appState.currentItemTextAlign,
+        currentItemStartArrowhead: appState.currentItemStartArrowhead,
+        currentItemEndArrowhead: appState.currentItemEndArrowhead,
+        scrollX: appState.scrollX,
+        scrollY: appState.scrollY,
+        zoom: appState.zoom,
+        gridSize: appState.gridSize
+      }
+      setWhiteboardData({ elements: [...nonDeletedElements], appState: filteredAppState, files })
+    }, 300)
+  }
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleResizeStart = (e: React.MouseEvent, direction: ResizeDirection) => {
     e.preventDefault()
@@ -176,7 +247,6 @@ function WhiteboardWidget() {
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <PenTool className="w-4 h-4 text-purple-400" />
             <h3 className="text-sm font-semibold text-gray-200">Whiteboard</h3>
           </div>
 
@@ -190,10 +260,49 @@ function WhiteboardWidget() {
         </div>
       </div>
 
-      {/* Content area - empty placeholder */}
-      <div className="relative flex flex-col items-center justify-center h-[calc(100%-37px)] text-gray-500">
-        <PenTool className="w-12 h-12 mb-3 opacity-30" />
-        <p className="text-sm">Whiteboard coming soon...</p>
+      {/* Excalidraw content area */}
+      <div
+        className="relative excalidraw-wrapper"
+        style={{ height: 'calc(100% - 37px)' }}
+      >
+        {isLoaded && (
+          <Excalidraw
+            theme="dark"
+            initialData={whiteboardData || undefined}
+            onChange={handleChange}
+            UIOptions={{
+              canvasActions: {
+                loadScene: false,
+                export: false,
+                saveToActiveFile: false,
+                toggleTheme: false
+              }
+            }}
+            handleKeyboardGlobally={false}
+          >
+            <MainMenu>
+              <MainMenu.DefaultItems.ClearCanvas />
+              <MainMenu.DefaultItems.ChangeCanvasBackground />
+            </MainMenu>
+            <WelcomeScreen>
+              <WelcomeScreen.Hints.ToolbarHint />
+            </WelcomeScreen>
+          </Excalidraw>
+        )}
+
+        {/* Powered by Excalidraw - bottom right */}
+        <div
+          className="absolute bottom-2 right-3 text-xs text-white/30 hover:text-white/60 transition-colors z-10"
+          style={{ pointerEvents: 'auto' }}
+        >
+          Powered by{' '}
+          <button
+            onClick={() => window.electronAPI?.shell.openExternal('https://github.com/excalidraw/excalidraw')}
+            className="underline cursor-pointer hover:text-purple-400 transition-colors"
+          >
+            Excalidraw
+          </button>
+        </div>
       </div>
 
       {/* Resize handles - Edges */}
@@ -231,6 +340,29 @@ function WhiteboardWidget() {
         className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize z-30"
         onMouseDown={(e) => handleResizeStart(e, 'se')}
       />
+
+      {/* Custom styles for Excalidraw dark theme to match app */}
+      <style>{`
+        .excalidraw-wrapper .excalidraw {
+          --color-primary: #a855f7;
+          --color-primary-darker: #9333ea;
+          --color-primary-darkest: #7e22ce;
+          --color-primary-light: #c084fc;
+        }
+        .excalidraw-wrapper .excalidraw.theme--dark {
+          --color-primary: #a855f7;
+          --color-primary-darker: #9333ea;
+          --color-primary-darkest: #7e22ce;
+          --color-primary-light: #c084fc;
+        }
+        /* Hide the help button and dialog completely */
+        .excalidraw-wrapper .excalidraw .HelpDialog,
+        .excalidraw-wrapper .excalidraw .help-icon,
+        .excalidraw-wrapper .excalidraw [class*="HelpButton"],
+        .excalidraw-wrapper .excalidraw button[aria-label="Help"] {
+          display: none !important;
+        }
+      `}</style>
     </div>
   )
 }

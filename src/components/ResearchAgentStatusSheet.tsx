@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronUp, Bug, Shield, Globe, FileCode, Lightbulb, Search, CheckCircle2, Clock, Loader, Archive, ArrowLeft, Copy, Check } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
-import bgImage from '../assets/images/bg.jpg'
-import noiseBgImage from '../assets/images/noise_bg.png'
 import ReactMarkdown from 'react-markdown'
 
 interface ResearchAgentStatusSheetProps {
@@ -349,27 +347,6 @@ function ResearchAgentStatusSheet({ projectId, researchAgentRef, isExpanded = fa
               boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.3)'
             }}
           >
-            {/* Background Image */}
-            <div
-              className="absolute inset-0 opacity-10 pointer-events-none z-0"
-              style={{
-                backgroundImage: `url(${bgImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }}
-            />
-
-            {/* Noise texture overlay */}
-            <div
-              className="absolute inset-0 opacity-50 pointer-events-none z-[1]"
-              style={{
-                backgroundImage: `url(${noiseBgImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                mixBlendMode: 'soft-light',
-              }}
-            />
-
             {/* Collapsed State - Single Clickable Row */}
             {!isExpanded && (
               <div
