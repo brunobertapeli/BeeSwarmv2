@@ -429,9 +429,10 @@ Please read the manifest to understand what my website is about, then create an 
         return
       }
 
-      // Tab - Cycle layout state
+      // Tab - Cycle layout state (ALWAYS prevent default to disable focus navigation)
       if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
         e.preventDefault()
+        e.stopPropagation()
         window.electronAPI?.layout.cycleState(currentProject.id)
       }
 
@@ -448,9 +449,30 @@ Please read the manifest to understand what my website is about, then create an 
       }
     }
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    // Use capture phase to intercept Tab before it reaches any element
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [currentProject?.id, iconsWidgetEnabled, setIconsWidgetEnabled])
+
+  // Listen for hotkey events forwarded from BrowserView (when browser is focused)
+  useEffect(() => {
+    if (!currentProject?.id) return
+
+    // Tab key from BrowserView - cycle layout
+    const unsubCycle = window.electronAPI?.layout.onCycleRequested?.(() => {
+      window.electronAPI?.layout.cycleState(currentProject.id)
+    })
+
+    // G key from BrowserView - toggle GitHub sheet
+    const unsubGitHub = window.electronAPI?.onGitHubSheetToggleRequested?.(() => {
+      setShowGitHubSheet(prev => !prev)
+    })
+
+    return () => {
+      unsubCycle?.()
+      unsubGitHub?.()
+    }
+  }, [currentProject?.id])
 
   // NEW: Listen for layout state changes from Electron
   useEffect(() => {

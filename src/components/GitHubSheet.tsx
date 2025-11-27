@@ -269,7 +269,7 @@ function GitHubSheet({ isOpen, onClose, projectId }: GitHubSheetProps) {
             stiffness: 300,
             mass: 0.8
           }}
-          className="fixed bottom-0 left-0 right-0 h-[200px] z-[103] border-t border-white/10"
+          className="fixed bottom-0 left-0 right-0 h-[200px] z-[260] border-t border-white/10"
         >
           <div className="w-full h-full bg-dark-bg/80 backdrop-blur-xl relative">
             {/* Noise texture overlay - clipped to container */}

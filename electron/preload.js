@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('screenshot-requested', listener)
     return () => ipcRenderer.removeListener('screenshot-requested', listener)
   },
+  onGitHubSheetToggleRequested: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('github-sheet-toggle-requested', listener)
+    return () => ipcRenderer.removeListener('github-sheet-toggle-requested', listener)
+  },
 
   // Authentication methods
   auth: {

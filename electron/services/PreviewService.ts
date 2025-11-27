@@ -77,9 +77,16 @@ class PreviewService extends EventEmitter {
 
     // Intercept keyboard shortcuts in BrowserView
     view.webContents.on('before-input-event', async (event, input) => {
-      // Tab key - used for layout switching
-      if (input.key === 'Tab' && input.type === 'keyDown') {
+      // Tab key - used for layout switching (cycle between Browser and Workspace)
+      if (input.key === 'Tab' && input.type === 'keyDown' && !input.meta && !input.control && !input.alt && !input.shift) {
         event.preventDefault();
+        this.mainWindow?.webContents.send('layout-cycle-requested');
+      }
+
+      // G key - Toggle GitHub Sheet
+      if (input.key.toLowerCase() === 'g' && input.type === 'keyDown' && !input.meta && !input.control && !input.alt) {
+        event.preventDefault();
+        this.mainWindow?.webContents.send('github-sheet-toggle-requested');
       }
 
       // For E and P keys, check if we're editing text first

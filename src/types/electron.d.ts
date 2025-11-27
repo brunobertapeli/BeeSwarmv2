@@ -231,6 +231,7 @@ export interface ElectronAPI {
   onDependencyProgress: (callback: (data: string) => void) => void
   onEditModeToggleRequested: (callback: () => void) => () => void
   onScreenshotRequested: (callback: () => void) => () => void
+  onGitHubSheetToggleRequested: (callback: () => void) => () => void
 
   auth: {
     signInWithGoogle: () => Promise<{ success: boolean; url?: string; error?: string }>
