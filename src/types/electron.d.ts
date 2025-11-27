@@ -216,10 +216,11 @@ export interface ChatBlock {
   createdAt: number
 }
 
-// Window interface extension for screenshot callback
+// Window interface extension for screenshot callback and Excalidraw
 declare global {
   interface Window {
     onScreenshotSend?: (screenshotSrc: string, description: string) => void
+    EXCALIDRAW_ASSET_PATH?: string
   }
 }
 

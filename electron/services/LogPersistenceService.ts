@@ -40,7 +40,7 @@ class LogPersistenceService extends EventEmitter {
       }
 
       const validatedPath = pathValidator.validateProjectPath(project.path, project.userId);
-      const logsDir = path.join(validatedPath, 'codedeck', 'logs');
+      const logsDir = path.join(validatedPath, '.codedeck', 'logs');
 
       // Create logs directory if it doesn't exist
       if (!fs.existsSync(logsDir)) {
@@ -73,7 +73,7 @@ class LogPersistenceService extends EventEmitter {
       if (!project) return;
 
       const validatedPath = pathValidator.validateProjectPath(project.path, project.userId);
-      const backendLogPath = path.join(validatedPath, 'codedeck', 'logs', 'backend.md');
+      const backendLogPath = path.join(validatedPath, '.codedeck', 'logs', 'backend.md');
 
       // Raw log entry - no decoration
       const logEntry = output.message;
@@ -95,7 +95,7 @@ class LogPersistenceService extends EventEmitter {
       if (!project) return;
 
       const validatedPath = pathValidator.validateProjectPath(project.path, project.userId);
-      const devtoolsLogPath = path.join(validatedPath, 'codedeck', 'logs', 'devtools.md');
+      const devtoolsLogPath = path.join(validatedPath, '.codedeck', 'logs', 'devtools.md');
 
       // Raw log entry - no decoration
       const logEntry = consoleMsg.message + '\n';
@@ -117,7 +117,7 @@ class LogPersistenceService extends EventEmitter {
       if (!project) return;
 
       const validatedPath = pathValidator.validateProjectPath(project.path, project.userId);
-      const logsDir = path.join(validatedPath, 'codedeck', 'logs');
+      const logsDir = path.join(validatedPath, '.codedeck', 'logs');
 
       const devtoolsLog = path.join(logsDir, 'devtools.md');
       const backendLog = path.join(logsDir, 'backend.md');

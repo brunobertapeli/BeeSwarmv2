@@ -831,8 +831,14 @@ export function registerProjectHandlers() {
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId)
 
-      // Save whiteboard data as JSON file in project folder
-      const whiteboardPath = path.join(project.path, 'whiteboard.json')
+      // Ensure /.codedeck folder exists
+      const codedeckPath = path.join(project.path, '.codedeck')
+      if (!fs.existsSync(codedeckPath)) {
+        fs.mkdirSync(codedeckPath, { recursive: true })
+      }
+
+      // Save whiteboard data as JSON file in /.codedeck folder
+      const whiteboardPath = path.join(codedeckPath, 'whiteboard.json')
       fs.writeFileSync(whiteboardPath, JSON.stringify(data, null, 2))
 
       return {
@@ -861,7 +867,7 @@ export function registerProjectHandlers() {
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId)
 
-      const whiteboardPath = path.join(project.path, 'whiteboard.json')
+      const whiteboardPath = path.join(project.path, '.codedeck', 'whiteboard.json')
 
       if (!fs.existsSync(whiteboardPath)) {
         return {

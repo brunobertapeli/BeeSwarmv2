@@ -310,37 +310,28 @@ User: ${currentUserId || 'not logged in'}
   mainWindow.on('responsive', () => {
   })
 
-  // Set Content Security Policy
-  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          isDev
-            ? [
-                "default-src 'self'",
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:*", // unsafe-eval needed for Vite HMR
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com", // Allow Google Fonts
-                "font-src 'self' https://fonts.gstatic.com https://unpkg.com https://*.unpkg.com data:", // Allow Google Fonts + Excalidraw fonts
-                "img-src 'self' https://* http://* data: blob:", // Allow images from any HTTPS source
-                "connect-src 'self' http://localhost:* ws://localhost:* https://*", // Allow API calls
-                "worker-src 'self' blob:", // Allow web workers
-                "frame-src 'self' http://localhost:*" // Allow iframes from localhost
-              ].join('; ')
-            : [
-                "default-src 'self' codedeck:",
-                "script-src 'self' codedeck:",
-                "style-src 'self' codedeck: 'unsafe-inline' https://fonts.googleapis.com",
-                "font-src 'self' codedeck: https://fonts.gstatic.com https://unpkg.com https://*.unpkg.com",
-                "img-src 'self' codedeck: https://* data:",
-                "connect-src 'self' codedeck: https://*",
-                "worker-src 'self' codedeck: blob:",
-                "frame-src 'self' codedeck:"
-              ].join('; ')
-        ]
-      }
+  // Set Content Security Policy (only in production - dev mode doesn't need strict CSP)
+  if (!isDev) {
+    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            [
+              "default-src 'self' codedeck:",
+              "script-src 'self' codedeck:",
+              "style-src 'self' codedeck: 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' codedeck: https://fonts.gstatic.com data:",
+              "img-src 'self' codedeck: https://* data:",
+              "connect-src 'self' codedeck: https://*",
+              "worker-src 'self' codedeck: blob:",
+              "frame-src 'self' codedeck:"
+            ].join('; ')
+          ]
+        }
+      })
     })
-  })
+  }
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173')

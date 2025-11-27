@@ -983,7 +983,7 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
           />
           {/* Browser label */}
           <div className="text-[12px] text-gray-500 font-medium px-2">
-            CodeDeck Browser v.1.0
+            CodeDeck Browser
           </div>
 
           {/* URL indicator */}
