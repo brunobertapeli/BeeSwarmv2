@@ -26,6 +26,7 @@ export default defineConfig({
                 'puppeteer',
                 'axios',
                 'canvas',
+                'sharp',
                 // MongoDB optional dependencies
                 'kerberos',
                 'mongodb-client-encryption',

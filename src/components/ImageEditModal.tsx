@@ -527,12 +527,6 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
       // Get the crop area dimensions on screen (the fixed overlay in the center)
       const cropAreaScreen = getCropAreaDimensions(containerWidth, containerHeight)
 
-      // Get the original image format from the path
-      const ext = imagePath.split('.').pop()?.toLowerCase() || 'png'
-      let mimeType = 'image/png'
-      if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg'
-      else if (ext === 'webp') mimeType = 'image/webp'
-
       // Get canvas state
       const canvasZoom = canvas.getZoom()
       const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0]
@@ -564,8 +558,6 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
       // Crop area bounds on screen (always centered in container)
       const cropScreenLeft = (containerWidth - cropAreaScreen.width) / 2
       const cropScreenTop = (containerHeight - cropAreaScreen.height) / 2
-      const cropScreenRight = cropScreenLeft + cropAreaScreen.width
-      const cropScreenBottom = cropScreenTop + cropAreaScreen.height
 
       // Convert crop area from screen coordinates to original image pixel coordinates
       // This is the KEY calculation for 1:1 quality preservation
@@ -580,7 +572,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
       const clampedSourceWidth = Math.min(sourceWidth, srcWidth - clampedSourceX)
       const clampedSourceHeight = Math.min(sourceHeight, srcHeight - clampedSourceY)
 
-      console.log('Crop calculation:', {
+      console.log('Crop calculation (sending to Sharp):', {
         targetSize: { imageWidth, imageHeight },
         sourceRegion: {
           x: clampedSourceX,
@@ -591,46 +583,28 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
         scales: { totalScaleX, totalScaleY, imgScaleX, imgScaleY, canvasZoom }
       })
 
-      // Create output canvas at target dimensions
-      const outputCanvas = document.createElement('canvas')
-      outputCanvas.width = imageWidth
-      outputCanvas.height = imageHeight
-      const ctx = outputCanvas.getContext('2d')
-
-      if (!ctx) {
-        throw new Error('Could not get canvas context')
-      }
-
-      // Load the source image
-      const sourceImg = new Image()
-      await new Promise<void>((resolve, reject) => {
-        sourceImg.onload = () => resolve()
-        sourceImg.onerror = reject
-        sourceImg.src = cropImage
-      })
-
-      // Draw the cropped region to the target dimensions
-      // If user hasn't zoomed the canvas, sourceWidth/Height should approximately equal imageWidth/Height
-      // meaning minimal to no scaling = preserved quality
-      ctx.drawImage(
-        sourceImg,
-        clampedSourceX, clampedSourceY, clampedSourceWidth, clampedSourceHeight,
-        0, 0, imageWidth, imageHeight
-      )
-
-      // Use quality 1.0 for maximum quality (PNG is lossless anyway, JPEG/WebP benefit from this)
-      const dataURL = outputCanvas.toDataURL(mimeType, 1.0)
-
       // Get current project ID
       if (!currentProjectId) {
         throw new Error('No project is currently open')
       }
 
-      // Send to Electron to save
-      const result = await window.electronAPI?.image.replace(currentProjectId, imagePath, dataURL)
+      // Send to Sharp for high-quality cropping with Lanczos3 resampling
+      const result = await window.electronAPI?.image.cropAndReplace(
+        currentProjectId,
+        imagePath,
+        cropImage,
+        {
+          sourceX: clampedSourceX,
+          sourceY: clampedSourceY,
+          sourceWidth: clampedSourceWidth,
+          sourceHeight: clampedSourceHeight,
+          targetWidth: imageWidth,
+          targetHeight: imageHeight
+        }
+      )
 
       if (result?.success) {
-        console.log('✅ Image replaced successfully')
+        console.log('✅ Image cropped and replaced successfully with Sharp')
 
         // Disable edit mode
         setEditModeEnabled(false)

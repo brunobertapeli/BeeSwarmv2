@@ -211,7 +211,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Image methods
   image: {
-    replace: (projectId, imagePath, imageData) => ipcRenderer.invoke('image:replace', projectId, imagePath, imageData)
+    replace: (projectId, imagePath, imageData) => ipcRenderer.invoke('image:replace', projectId, imagePath, imageData),
+    cropAndReplace: (projectId, imagePath, sourceImage, cropData) => ipcRenderer.invoke('image:cropAndReplace', projectId, imagePath, sourceImage, cropData)
   },
 
   // Terminal methods
