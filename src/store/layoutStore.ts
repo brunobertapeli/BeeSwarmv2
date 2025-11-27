@@ -946,9 +946,35 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       ...state.stickyNotes.map(note => ({ type: 'stickyNote', id: note.id, zIndex: note.zIndex }))
     ];
 
-    // Find the max z-index
+    // Find the max z-index - CAP at 99 to stay below bottom section (z-150)
+    const MAX_WIDGET_Z = 99;
     const maxZ = Math.max(...zIndices.map(z => z.zIndex), 49);
-    const newTopZ = maxZ + 1;
+    let newTopZ = maxZ + 1;
+
+    // If we've exceeded the cap, normalize all z-indices back to base range (50-99)
+    if (newTopZ > MAX_WIDGET_Z) {
+      // Sort by current z-index to preserve relative order
+      const sorted = [...zIndices].sort((a, b) => a.zIndex - b.zIndex);
+      const baseZ = 50;
+
+      // Reassign z-indices starting from 50
+      sorted.forEach((item, index) => {
+        const normalizedZ = baseZ + index;
+        if (item.type === 'kanban') set({ kanbanZIndex: normalizedZ });
+        else if (item.type === 'analytics') set({ analyticsWidgetZIndex: normalizedZ });
+        else if (item.type === 'projectAssets') set({ projectAssetsWidgetZIndex: normalizedZ });
+        else if (item.type === 'whiteboard') set({ whiteboardWidgetZIndex: normalizedZ });
+        else if (item.type === 'icons') set({ iconsWidgetZIndex: normalizedZ });
+        else if (item.type === 'stickyNote' && item.id) {
+          set((s) => ({
+            stickyNotes: s.stickyNotes.map(n => n.id === item.id ? { ...n, zIndex: normalizedZ } : n)
+          }));
+        }
+      });
+
+      // The clicked widget gets top position after normalization
+      newTopZ = baseZ + sorted.length;
+    }
 
     // Update the specific widget/sticky note
     if (widgetType === 'kanban') {

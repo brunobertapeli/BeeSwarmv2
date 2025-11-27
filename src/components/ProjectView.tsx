@@ -789,7 +789,7 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Bottom Section - Split into AI Agents (left 40%) and Action Bar (right 60%) */}
       {projects.length > 0 && currentProject && (
-        <div className="fixed bottom-0 left-0 right-0 h-[200px] flex border-t border-gray-700/50 pt-[2px] z-[102]">
+        <div className="fixed bottom-0 left-0 right-0 h-[200px] flex border-t border-gray-700/50 pt-[2px] z-[150]">
           {/* Left Section: AI Agents Block */}
           <div className="w-[40%] h-full border-r border-gray-700/50 relative">
             {/* Research Agent Status Sheet */}
