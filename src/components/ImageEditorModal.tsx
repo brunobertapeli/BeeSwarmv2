@@ -1645,7 +1645,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
             {/* Center Area */}
             <div className="flex-1 flex flex-col relative">
               {/* Tool Options Bar - Floating at top */}
-              <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-20 transition-all duration-300 ${(selectedTool || cropMode) ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'
+              <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 transition-all duration-300 ${(selectedTool || cropMode) ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'
                 }`}>
                 <div className="bg-dark-bg/80 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-6 min-w-[300px] justify-center">
 
