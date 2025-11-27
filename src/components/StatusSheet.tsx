@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { ChevronDown, ChevronUp, Loader2, User, Bot, Square, Rocket, Globe, ExternalLink, CheckCircle2, Check, ArrowDownCircle, ArrowUpCircle, DollarSign, Info, X, Brain, Clock, Server, ClipboardCheck, Copy } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
-import { InteractiveXMLHighlight } from './InteractiveXMLHighlight'
+import { MessageContent } from './MessageContent'
 
 // Types
 import type { ConversationBlock, StatusSheetProps } from '../types/statusSheet'
@@ -1112,20 +1112,13 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                               {/* STEP 1: ANTHROPIC (Code Editing) */}
                               {(() => {
-                                // Determine if there are more steps after Claude
-                                const hasGitStep = block.actions?.some(a => a.type === 'git_commit' && a.status)
-                                const hasServerStep = block.actions?.some(a => a.type === 'dev_server' && a.status)
-                                const hasPlanApprovalStep = needsApproval || (isPlanReady && implementationBlock)
-                                const hasInterruptedStep = wasInterrupted
-                                const hasMoreSteps = hasGitStep || hasServerStep || hasPlanApprovalStep || hasInterruptedStep
-
                                 return (
                                   <div className="timeline-step">
                                     <div className="step-track">
                                       <div className="step-icon step-icon-claude">
                                         <img src={AnthropicIcon} alt="Anthropic" className="w-4 h-4" />
                                       </div>
-                                      {hasMoreSteps && <div className="step-line"></div>}
+                                      <div className="step-line"></div>
                                     </div>
                                     <div className="step-content">
                                       {/* Title + Status */}
@@ -1215,7 +1208,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                                   overflow: 'hidden'
                                                 }}
                                               >
-                                                <InteractiveXMLHighlight
+                                                <MessageContent
                                                   text={message.content}
                                                   onXMLClick={onXMLTagClick}
                                                   onXMLDetected={onXMLTagDetected}

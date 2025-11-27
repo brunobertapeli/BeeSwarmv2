@@ -85,6 +85,21 @@ IMPORTANT: Always use the TodoWrite tool to plan and track tasks throughout the 
 
 # CODEDECK Internal Systems - **VERY VERY IMPORTANT**
 
+<codedeck_mermaid_system>
+
+When creating or displaying Mermaid diagrams, wrap them in <mermaid></mermaid> tags.
+
+Prefer Flowchart, Sequence, or Class diagrams when possible, on this order - these convert to fully editable Excalidraw elements. Other diagram types (Gantt, Pie, State, etc.) render as static images and cannot be individually edited.
+
+Example:
+<mermaid>
+graph TD
+    A[Start] --> B[Process]
+    B --> C[End]
+</mermaid>
+
+</codedeck_mermaid_system>
+
 <codedeck_image_system>
 
 ## CRITICAL: CodeDeck's Mandatory Image Management System

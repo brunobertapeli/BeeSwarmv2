@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
-import { X } from 'lucide-react'
+import { X, GitBranch, Trash2 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
 import bgImage from '../assets/images/bg.jpg'
-import { Excalidraw, MainMenu, WelcomeScreen } from '@excalidraw/excalidraw'
+import { Excalidraw, WelcomeScreen } from '@excalidraw/excalidraw'
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null
@@ -35,6 +36,7 @@ function WhiteboardWidget() {
   const headerRef = useRef<HTMLDivElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastElementsCountRef = useRef<number>(0)
+  const [excalidrawAPI, setExcalidrawAPI] = useState<ExcalidrawImperativeAPI | null>(null)
 
   const MIN_WIDTH = 1005
   const MAX_WIDTH = 1600
@@ -101,6 +103,7 @@ function WhiteboardWidget() {
     }
   }, [])
 
+  
   const handleResizeStart = (e: React.MouseEvent, direction: ResizeDirection) => {
     e.preventDefault()
     e.stopPropagation()
@@ -242,20 +245,51 @@ function WhiteboardWidget() {
       {/* Header */}
       <div
         ref={headerRef}
-        className="relative px-4 border-b border-dark-border/50 cursor-move select-none"
-        style={{ minHeight: '37px', paddingTop: '6px', paddingBottom: '6px' }}
+        className="relative px-4 border-b border-dark-border/50 flex items-center justify-between cursor-move select-none"
+        style={{ height: '37px', minHeight: '37px' }}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-gray-200">Whiteboard</h3>
-          </div>
+        <div className="flex items-center gap-3">
+          <h3 className="text-sm font-semibold text-gray-200">Whiteboard</h3>
 
+          {/* Clear Canvas Button */}
           <button
-            onClick={() => setWhiteboardWidgetEnabled(false)}
-            className="p-1 hover:bg-dark-bg/50 rounded-lg transition-colors"
+            onClick={(e) => {
+              e.stopPropagation()
+              if (excalidrawAPI) {
+                excalidrawAPI.resetScene()
+              }
+            }}
             onMouseDown={(e) => e.stopPropagation()}
+            className="flex items-center gap-1.5 bg-red-500/10 border border-red-500/20 rounded-lg px-2 py-0.5 hover:bg-red-500/20 transition-colors"
           >
-            <X className="w-4 h-4 text-gray-400" />
+            <Trash2 size={11} className="text-red-400" />
+            <span className="text-[10px] text-red-400">Clear Canvas</span>
+          </button>
+
+          {/* Mermaid to Whiteboard Button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              excalidrawAPI?.updateScene({ appState: { openDialog: { name: "ttd", tab: "mermaid" } } })
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="flex items-center gap-1.5 bg-purple-500/10 border border-purple-500/20 rounded-lg px-2 py-0.5 hover:bg-purple-500/20 transition-colors"
+          >
+            <GitBranch size={11} className="text-purple-400" />
+            <span className="text-[10px] text-purple-400">Mermaid to Whiteboard</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setWhiteboardWidgetEnabled(false)
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-1 hover:bg-dark-bg/50 rounded-lg transition-colors"
+          >
+            <X size={14} className="text-gray-400 hover:text-white" />
           </button>
         </div>
       </div>
@@ -267,6 +301,7 @@ function WhiteboardWidget() {
       >
         {isLoaded && (
           <Excalidraw
+            excalidrawAPI={(api) => setExcalidrawAPI(api)}
             theme="dark"
             initialData={whiteboardData || undefined}
             onChange={handleChange}
@@ -280,10 +315,6 @@ function WhiteboardWidget() {
             }}
             handleKeyboardGlobally={false}
           >
-            <MainMenu>
-              <MainMenu.DefaultItems.ClearCanvas />
-              <MainMenu.DefaultItems.ChangeCanvasBackground />
-            </MainMenu>
             <WelcomeScreen>
               <WelcomeScreen.Hints.ToolbarHint />
             </WelcomeScreen>
@@ -355,12 +386,30 @@ function WhiteboardWidget() {
           --color-primary-darkest: #7e22ce;
           --color-primary-light: #c084fc;
         }
-        /* Hide the help button and dialog completely */
+        /* Hide the help button and hamburger menu */
         .excalidraw-wrapper .excalidraw .HelpDialog,
         .excalidraw-wrapper .excalidraw .help-icon,
         .excalidraw-wrapper .excalidraw [class*="HelpButton"],
-        .excalidraw-wrapper .excalidraw button[aria-label="Help"] {
+        .excalidraw-wrapper .excalidraw button[aria-label="Help"],
+        .excalidraw-wrapper .excalidraw .dropdown-menu-button,
+        .excalidraw-wrapper .excalidraw [class*="MainMenu"],
+        .excalidraw-wrapper .excalidraw button[aria-label="Menu"] {
           display: none !important;
+        }
+        /* TTD/Mermaid dialog size */
+        .excalidraw-wrapper .excalidraw .ttd-dialog,
+        .excalidraw-wrapper .excalidraw [class*="TTDDialog"],
+        .excalidraw-wrapper .excalidraw [class*="ttd-dialog"],
+        .excalidraw-wrapper .excalidraw .Modal__content {
+          max-width: 720px !important;
+          max-height: 480px !important;
+        }
+        .excalidraw-wrapper .excalidraw .ttd-dialog .Island,
+        .excalidraw-wrapper .excalidraw [class*="TTDDialog"] .Island,
+        .excalidraw-wrapper .excalidraw .Dialog,
+        .excalidraw-wrapper .excalidraw [class*="Dialog__content"] {
+          max-width: 720px !important;
+          max-height: 480px !important;
         }
       `}</style>
     </div>
