@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { DeploymentStrategyFactory, ValidationRequirement } from './deployment';
 
 /**
  * Validation result
@@ -11,66 +12,19 @@ export interface ValidationResult {
 }
 
 /**
- * Required file/directory structure for CodeDeck templates
- */
-interface StructureRequirement {
-  path: string;
-  type: 'file' | 'directory';
-  required: boolean;
-  description: string;
-}
-
-/**
  * TemplateValidator Service
  *
- * Validates that cloned templates follow the required CodeDeck structure
+ * Validates that cloned templates follow the required structure
+ * based on their deployment service type (Netlify, Railway, etc.)
  */
 class TemplateValidator {
-  private requirements: StructureRequirement[] = [
-    {
-      path: 'package.json',
-      type: 'file',
-      required: true,
-      description: 'Root package.json with netlify-cli dependency'
-    },
-    {
-      path: 'netlify.toml',
-      type: 'file',
-      required: true,
-      description: 'Netlify configuration file'
-    },
-    {
-      path: 'frontend',
-      type: 'directory',
-      required: true,
-      description: 'Frontend application directory'
-    },
-    {
-      path: 'frontend/package.json',
-      type: 'file',
-      required: true,
-      description: 'Frontend package.json with React and Vite'
-    },
-    {
-      path: 'frontend/vite.config.ts',
-      type: 'file',
-      required: false,
-      description: 'Vite configuration (recommended)'
-    },
-    {
-      path: 'netlify/functions',
-      type: 'directory',
-      required: false,
-      description: 'Serverless functions directory'
-    }
-  ];
-
   /**
    * Validate template structure
    * @param projectPath - Absolute path to project root
+   * @param deployServices - Array of deployment services (defaults to ['netlify'])
    * @returns Validation result with errors and warnings
    */
-  validate(projectPath: string): ValidationResult {
+  validate(projectPath: string, deployServices: string[] = ['netlify']): ValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
 
@@ -79,12 +33,16 @@ class TemplateValidator {
       return {
         valid: false,
         errors: [`Project directory does not exist: ${projectPath}`],
-        warnings: []
+        warnings: [],
       };
     }
 
+    // Get validation requirements from strategy
+    const strategy = DeploymentStrategyFactory.create(deployServices);
+    const requirements = strategy.getValidationRequirements();
+
     // Validate each requirement
-    for (const req of this.requirements) {
+    for (const req of requirements) {
       const fullPath = path.join(projectPath, req.path);
       const exists = fs.existsSync(fullPath);
 
@@ -108,7 +66,31 @@ class TemplateValidator {
       }
     }
 
-    // Additional validation: Check for netlify-cli in root package.json
+    // Additional validation based on deployment type
+    if (deployServices.includes('netlify')) {
+      this.validateNetlifySpecifics(projectPath, errors, warnings);
+    }
+
+    if (deployServices.includes('railway')) {
+      this.validateRailwaySpecifics(projectPath, errors, warnings);
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    };
+  }
+
+  /**
+   * Netlify-specific validation
+   */
+  private validateNetlifySpecifics(
+    projectPath: string,
+    errors: string[],
+    warnings: string[]
+  ): void {
+    // Check for netlify-cli in root package.json
     const rootPackageJsonPath = path.join(projectPath, 'package.json');
     if (fs.existsSync(rootPackageJsonPath)) {
       try {
@@ -120,7 +102,7 @@ class TemplateValidator {
         if (!hasNetlifyCli) {
           warnings.push(
             'Root package.json missing netlify-cli in dependencies. ' +
-            'Dev server may not work without global installation.'
+              'Dev server may not work without global installation.'
           );
         }
       } catch (error) {
@@ -128,7 +110,7 @@ class TemplateValidator {
       }
     }
 
-    // Additional validation: Check frontend port configuration
+    // Check frontend port configuration
     const viteConfigPath = path.join(projectPath, 'frontend/vite.config.ts');
     const viteConfigJsPath = path.join(projectPath, 'frontend/vite.config.js');
 
@@ -152,30 +134,63 @@ class TemplateValidator {
         warnings.push(`Could not read vite.config.ts: ${error}`);
       }
     }
+  }
 
-    return {
-      valid: errors.length === 0,
-      errors,
-      warnings
-    };
+  /**
+   * Railway-specific validation
+   */
+  private validateRailwaySpecifics(
+    projectPath: string,
+    errors: string[],
+    warnings: string[]
+  ): void {
+    // Check frontend package.json has dev script
+    const frontendPackagePath = path.join(projectPath, 'frontend/package.json');
+    if (fs.existsSync(frontendPackagePath)) {
+      try {
+        const packageJson = JSON.parse(fs.readFileSync(frontendPackagePath, 'utf-8'));
+        if (!packageJson.scripts?.dev) {
+          errors.push('frontend/package.json missing "dev" script');
+        }
+      } catch (error) {
+        errors.push(`Failed to parse frontend/package.json: ${error}`);
+      }
+    }
+
+    // Check backend package.json has dev script
+    const backendPackagePath = path.join(projectPath, 'backend/package.json');
+    if (fs.existsSync(backendPackagePath)) {
+      try {
+        const packageJson = JSON.parse(fs.readFileSync(backendPackagePath, 'utf-8'));
+        if (!packageJson.scripts?.dev) {
+          errors.push('backend/package.json missing "dev" script');
+        }
+      } catch (error) {
+        errors.push(`Failed to parse backend/package.json: ${error}`);
+      }
+    }
   }
 
   /**
    * Validate and log results
    * @param projectPath - Absolute path to project root
    * @param projectName - Project name for logging
+   * @param deployServices - Array of deployment services
    * @returns True if valid, false otherwise
    */
-  validateAndLog(projectPath: string, projectName: string): boolean {
-
-    const result = this.validate(projectPath);
+  validateAndLog(
+    projectPath: string,
+    projectName: string,
+    deployServices: string[] = ['netlify']
+  ): boolean {
+    const result = this.validate(projectPath, deployServices);
 
     if (result.errors.length > 0) {
-      result.errors.forEach(error => console.error(`   • ${error}`));
+      result.errors.forEach((error) => console.error(`   • ${error}`));
     }
 
     if (result.warnings.length > 0) {
-      result.warnings.forEach(warning => console.warn(`   • ${warning}`));
+      result.warnings.forEach((warning) => console.warn(`   • ${warning}`));
     }
 
     if (result.valid) {

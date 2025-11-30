@@ -141,6 +141,78 @@ class EnvService {
   ): void {
     this.writeEnvFile(projectPath, variables, filePath)
   }
+
+  /**
+   * Write env variables to multiple .env files based on target routing
+   * For Railway templates: routes vars to frontend/.env or backend/.env
+   * For Netlify templates: writes all vars to root .env
+   *
+   * @param projectPath - Absolute path to project directory
+   * @param envVars - All environment variables
+   * @param envFilesConfig - Template's envFiles configuration (empty for Netlify)
+   * @param getKeyTarget - Function to determine target ('frontend' | 'backend') for each key
+   */
+  writeMultiEnvFiles(
+    projectPath: string,
+    envVars: Record<string, string>,
+    envFilesConfig: Array<{ path: string; label: string; description: string }>,
+    getKeyTarget: (key: string) => 'frontend' | 'backend'
+  ): void {
+    // If no envFiles config (Netlify), write all to root .env
+    if (!envFilesConfig || envFilesConfig.length === 0) {
+      this.writeEnvFile(projectPath, envVars)
+      return
+    }
+
+    // Find frontend and backend env file paths from config
+    const frontendEnvFile = envFilesConfig.find(f =>
+      f.path.includes('frontend') || f.label.toLowerCase().includes('frontend')
+    )
+    const backendEnvFile = envFilesConfig.find(f =>
+      f.path.includes('backend') || f.label.toLowerCase().includes('backend')
+    )
+
+    // Separate vars by target
+    const frontendVars: Record<string, string> = {}
+    const backendVars: Record<string, string> = {}
+
+    for (const [key, value] of Object.entries(envVars)) {
+      const target = getKeyTarget(key)
+      if (target === 'frontend') {
+        frontendVars[key] = value
+      } else {
+        backendVars[key] = value
+      }
+    }
+
+    // Write to respective files
+    if (frontendEnvFile && Object.keys(frontendVars).length > 0) {
+      // Ensure frontend directory exists
+      const frontendDir = path.dirname(path.join(projectPath, frontendEnvFile.path))
+      if (!fs.existsSync(frontendDir)) {
+        fs.mkdirSync(frontendDir, { recursive: true })
+      }
+      this.writeEnvFile(projectPath, frontendVars, frontendEnvFile.path)
+    }
+
+    if (backendEnvFile && Object.keys(backendVars).length > 0) {
+      // Ensure backend directory exists
+      const backendDir = path.dirname(path.join(projectPath, backendEnvFile.path))
+      if (!fs.existsSync(backendDir)) {
+        fs.mkdirSync(backendDir, { recursive: true })
+      }
+      this.writeEnvFile(projectPath, backendVars, backendEnvFile.path)
+    }
+
+    // Fallback: if we have vars but no matching config, write to root .env
+    if (!frontendEnvFile && Object.keys(frontendVars).length > 0) {
+      this.writeEnvFile(projectPath, frontendVars, '.env')
+    }
+    if (!backendEnvFile && Object.keys(backendVars).length > 0) {
+      const existingRoot = this.readEnvFile(projectPath)
+      this.writeEnvFile(projectPath, { ...existingRoot, ...backendVars })
+    }
+  }
 }
 
 export const envService = new EnvService()

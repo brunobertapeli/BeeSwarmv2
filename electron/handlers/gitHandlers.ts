@@ -558,7 +558,7 @@ async function performGitCheckout(
  */
 async function restartDevServer(projectId: string, projectPath: string): Promise<void> {
   const processState = processManager.getProcessStatus(projectId);
-  if (processState === 'running') {
+  if (processState === 'running' || processState === 'error') {
     const devServerStartTime = Date.now();
 
 
@@ -606,7 +606,13 @@ async function restartDevServer(projectId: string, projectPath: string): Promise
 
       await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2s
 
-      const port = await processManager.startDevServer(projectId, projectPath);
+      // Get deployServices from project for correct strategy (Railway vs Netlify)
+      const project = databaseService.getProjectById(projectId);
+      const deployServices = project?.deployServices
+        ? JSON.parse(project.deployServices)
+        : ['netlify'];
+
+      const port = await processManager.startDevServer(projectId, projectPath, deployServices);
 
       const devServerElapsed = ((Date.now() - devServerStartTime) / 1000).toFixed(1);
 

@@ -7,6 +7,7 @@ import { dependencyService } from '../services/DependencyService'
 import { getCurrentUserId, getCurrentUserEmail } from '../main'
 import { requireAuth, validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware'
 import { claudeService } from '../services/ClaudeService'
+import { getEnvKeyTarget } from '../../shared/envKeyTargets'
 import fs from 'fs'
 import path from 'path'
 import sizeOf from 'image-size'
@@ -316,8 +317,11 @@ export function registerProjectHandlers() {
       // Save to database
       databaseService.saveEnvConfig(projectId, envVars)
 
-      // Write .env file to project directory
-      envService.writeEnvFile(project.path, envVars)
+      // Get envFiles configuration from project (Railway templates have this)
+      const envFilesConfig = project.envFiles ? JSON.parse(project.envFiles) : []
+
+      // Write env files - routes to multiple files for Railway, single file for Netlify
+      envService.writeMultiEnvFiles(project.path, envVars, envFilesConfig, getEnvKeyTarget)
 
       return {
         success: true
@@ -411,18 +415,13 @@ export function registerProjectHandlers() {
   // Read project env files
   ipcMain.handle('project:read-env-files', async (_event, projectId: string) => {
     try {
-      console.log('🔍 Reading env files for project:', projectId)
-
       // SECURITY: Validate user owns this project
       const project = validateProjectOwnership(projectId)
-      console.log('🔍 Project validated:', { id: project.id, path: project.path, envFiles: project.envFiles })
 
       // Get envFiles configuration from project
       const envFilesConfig = project.envFiles ? JSON.parse(project.envFiles) : []
-      console.log('🔍 EnvFiles config:', envFilesConfig)
 
       if (envFilesConfig.length === 0) {
-        console.log('⚠️ No envFiles configured for this project')
         return {
           success: true,
           envFiles: []
@@ -431,7 +430,6 @@ export function registerProjectHandlers() {
 
       // Read all env files
       const envFiles = envService.readProjectEnvFiles(project.path, envFilesConfig)
-      console.log('🔍 Env files read from disk:', envFiles)
 
       return {
         success: true,
@@ -991,9 +989,8 @@ export function registerProjectHandlers() {
                   if (size.width && size.height) {
                     dimensions = `${size.width}x${size.height}`
                   }
-                } catch (error) {
+                } catch {
                   // Silently ignore errors reading dimensions
-                  console.log(`⚠️ Could not read dimensions for ${item.name}`)
                 }
               }
 

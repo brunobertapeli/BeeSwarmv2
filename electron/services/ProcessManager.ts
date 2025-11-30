@@ -1,10 +1,15 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 import stripAnsi from 'strip-ansi';
-import { portService } from './PortService';
 import { processPersistence } from './ProcessPersistence';
 import path from 'path';
 import os from 'os';
+import {
+  DeploymentStrategy,
+  DeploymentStrategyFactory,
+  PortAllocation,
+  ProcessConfig,
+} from './deployment';
 
 /**
  * Process state enum
@@ -43,12 +48,12 @@ export interface HealthCheckStatus {
 }
 
 /**
- * Process info interface
+ * Individual process info
  */
 interface ProcessInfo {
   process: ChildProcess;
+  config: ProcessConfig;
   state: ProcessState;
-  port: number;
   output: ProcessOutput[];
   crashCount: number;
   lastCrashTime?: Date;
@@ -56,46 +61,65 @@ interface ProcessInfo {
 }
 
 /**
+ * Process group - contains all processes for a project
+ */
+interface ProcessGroup {
+  projectId: string;
+  strategy: DeploymentStrategy;
+  processes: Map<string, ProcessInfo>; // keyed by process id ('netlify', 'frontend', 'backend')
+  ports: PortAllocation[];
+  aggregatedState: ProcessState;
+  aggregatedOutput: ProcessOutput[];
+}
+
+/**
  * ProcessManager Service
  *
- * Manages the lifecycle of netlify dev processes for projects.
- * Handles spawning, monitoring, restarting, and output streaming.
+ * Manages the lifecycle of dev server processes for projects.
+ * Supports single-process (Netlify) and multi-process (Railway) deployments.
  */
 class ProcessManager extends EventEmitter {
-  private processes: Map<string, ProcessInfo> = new Map();
+  private processGroups: Map<string, ProcessGroup> = new Map();
   private pendingStarts: Map<string, Promise<number>> = new Map();
   private healthCheckIntervals: Map<string, NodeJS.Timeout> = new Map();
-  private currentProjectId: string | null = null; // Track currently active project
-  private readonly MAX_OUTPUT_LINES = 500; // Keep last 500 lines
+  private currentProjectId: string | null = null;
+  private readonly MAX_OUTPUT_LINES = 500;
   private readonly MAX_CRASHES = 3;
-  private readonly CRASH_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
-  private readonly HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
-  private readonly HEALTH_CHECK_TIMEOUT = 5000; // 5 second timeout
-  private readonly MAX_HEALTH_FAILURES = 3; // 3 consecutive failures = unhealthy
+  private readonly CRASH_WINDOW_MS = 5 * 60 * 1000;
+  private readonly HEALTH_CHECK_INTERVAL = 30000;
+  private readonly HEALTH_CHECK_TIMEOUT = 5000;
+  private readonly MAX_HEALTH_FAILURES = 3;
 
   /**
-   * Start netlify dev server for a project
-   * Includes automatic retry on port conflicts
+   * Start dev server(s) for a project
    * @param projectId - Unique project identifier
    * @param projectPath - Absolute path to project root
-   * @returns Port number where server is running
+   * @param deployServices - Array of deployment services (e.g., ['netlify'] or ['railway'])
+   * @returns Primary port number for preview
    */
-  async startDevServer(projectId: string, projectPath: string): Promise<number> {
-    // CRITICAL FIX: Prevent race conditions from multiple simultaneous start calls
-    // If already starting, wait for that operation to complete
+  async startDevServer(
+    projectId: string,
+    projectPath: string,
+    deployServices: string[] = ['netlify']
+  ): Promise<number> {
+    // Prevent race conditions
     const pendingStart = this.pendingStarts.get(projectId);
     if (pendingStart) {
       return pendingStart;
     }
 
-    // Check if already running OR starting
-    const existing = this.processes.get(projectId);
-    if (existing && (existing.state === ProcessState.RUNNING || existing.state === ProcessState.STARTING)) {
-      return existing.port;
+    // Check if already running
+    const existing = this.processGroups.get(projectId);
+    if (
+      existing &&
+      (existing.aggregatedState === ProcessState.RUNNING ||
+        existing.aggregatedState === ProcessState.STARTING)
+    ) {
+      return existing.strategy.getPreviewPort(existing.ports);
     }
 
-    // Create a promise for this start operation
-    const startPromise = this.performStart(projectId, projectPath);
+    // Create start promise
+    const startPromise = this.performStart(projectId, projectPath, deployServices);
     this.pendingStarts.set(projectId, startPromise);
 
     try {
@@ -107,254 +131,263 @@ class ProcessManager extends EventEmitter {
   }
 
   /**
-   * Internal method that performs the actual start operation
-   * Separated to allow proper promise tracking
+   * Internal method that performs the actual start
    */
-  private async performStart(projectId: string, projectPath: string): Promise<number> {
-    // Stop existing process if any (crashed or error state)
-    const existing = this.processes.get(projectId);
+  private async performStart(
+    projectId: string,
+    projectPath: string,
+    deployServices: string[]
+  ): Promise<number> {
+    // Stop existing if any
+    const existing = this.processGroups.get(projectId);
     if (existing) {
-      await this.stopDevServer(projectId);
+      await this.stopDevServer(projectId, true);
     }
 
-    // Retry logic for port conflicts
-    const maxAttempts = 3;
-    let lastError: any;
+    // Get strategy
+    const strategy = DeploymentStrategyFactory.create(deployServices);
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const port = await this.attemptStartServer(projectId, projectPath);
+    // Allocate ports
+    const ports = await strategy.allocatePorts(projectId);
 
-        // Wait briefly to detect immediate failures (like EADDRINUSE)
-        await this.waitForStartOrError(projectId, 3000);
+    // Update project configs with allocated ports (ensures .env files have correct ports)
+    strategy.updateProjectConfigs(projectPath, ports);
 
-        const processInfo = this.processes.get(projectId);
-        if (!processInfo) {
-          throw new Error('Process info lost during startup');
-        }
+    // Get process configs
+    const processConfigs = strategy.getProcessConfigs(projectPath, ports);
 
-        // Check if we hit a port conflict
-        if (processInfo.state === ProcessState.ERROR) {
-          const hasPortError = processInfo.output.some(line =>
-            /EADDRINUSE/.test(line.message)
-          );
+    // Create process group
+    const group: ProcessGroup = {
+      projectId,
+      strategy,
+      processes: new Map(),
+      ports,
+      aggregatedState: ProcessState.STARTING,
+      aggregatedOutput: [],
+    };
 
-          if (hasPortError && attempt < maxAttempts) {
-            portService.releasePort(projectId);
-            this.processes.delete(projectId);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            continue; // Retry with new port
-          }
+    this.processGroups.set(projectId, group);
+    this.emit('process-status-changed', projectId, ProcessState.STARTING);
 
-          throw new Error('Failed to start server');
-        }
-
-        return port;
-      } catch (error) {
-        lastError = error;
-
-        if (attempt < maxAttempts) {
-          portService.releasePort(projectId);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
+    // Spawn all processes
+    for (const config of processConfigs) {
+      await this.spawnProcess(projectId, group, config);
     }
 
-    // All attempts failed
-    const errorMessage = `Failed to start server after ${maxAttempts} attempts. ${lastError?.message || 'Unknown error'}`;
-    this.emit('process-error', projectId, errorMessage);
-    throw new Error(errorMessage);
+    // Wait for all processes to be ready
+    await this.waitForAllProcessesReady(projectId, 30000);
+
+    return strategy.getPreviewPort(ports);
   }
 
   /**
-   * Internal method to attempt starting the server once
-   * @returns Port number where server was started
+   * Spawn a single process within a group
    */
-  private async attemptStartServer(projectId: string, projectPath: string): Promise<number> {
-    // Find available port
-    const port = await portService.findAvailablePort(projectId);
+  private async spawnProcess(
+    projectId: string,
+    group: ProcessGroup,
+    config: ProcessConfig
+  ): Promise<void> {
+    // Setup environment
+    const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm');
+    const nvmNodePath = path.join(nvmDir, 'versions', 'node', 'v20.19.5', 'bin');
 
-    // Create process info
+    const childProcess = spawn(config.command, config.args, {
+      cwd: config.cwd,
+      shell: true,
+      env: {
+        ...process.env,
+        ...config.env,
+        PATH: `${nvmNodePath}:${process.env.PATH}`,
+      },
+    });
+
     const processInfo: ProcessInfo = {
-      process: null as any, // Will be set below
+      process: childProcess,
+      config,
       state: ProcessState.STARTING,
-      port,
       output: [],
       crashCount: 0,
     };
 
-    this.processes.set(projectId, processInfo);
-    this.emit('process-status-changed', projectId, ProcessState.STARTING);
+    group.processes.set(config.id, processInfo);
 
-    // Setup environment with nvm Node path
-    const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm');
-    const nvmNodePath = path.join(nvmDir, 'versions', 'node', 'v20.19.5', 'bin');
-
-    // Spawn netlify dev
-    const childProcess = spawn('npx', ['netlify', 'dev', '--port', port.toString()], {
-      cwd: projectPath,
-      shell: true,
-      env: {
-        ...process.env,
-        PATH: `${nvmNodePath}:${process.env.PATH}`,
-        FORCE_COLOR: '1', // Preserve ANSI colors
-        NODE_ENV: 'development',
-        BROWSER: 'none', // Prevent react-scripts from opening browser
-      },
-    });
-
-    processInfo.process = childProcess;
-
-    // Save PID to persistence file for orphan cleanup
+    // Save PID
     if (childProcess.pid) {
-      processPersistence.savePID(projectId, childProcess.pid, port);
+      processPersistence.savePID(`${projectId}-${config.id}`, childProcess.pid, config.port);
     }
 
     // Handle stdout
     childProcess.stdout?.on('data', (data: Buffer) => {
       const message = data.toString();
-      this.handleOutput(projectId, 'stdout', message);
+      this.handleOutput(projectId, config.id, 'stdout', message);
     });
 
     // Handle stderr
     childProcess.stderr?.on('data', (data: Buffer) => {
       const message = data.toString();
-      this.handleOutput(projectId, 'stderr', message);
+      this.handleOutput(projectId, config.id, 'stderr', message);
     });
 
-    // Handle process exit
+    // Handle exit
     childProcess.on('exit', (code, signal) => {
-      this.handleProcessExit(projectId, code, signal);
+      this.handleProcessExit(projectId, config.id, code, signal);
     });
 
-    // Handle process error
+    // Handle error
     childProcess.on('error', (error) => {
-      this.handleProcessError(projectId, error);
+      this.handleProcessError(projectId, config.id, error);
     });
-
-    return port;
   }
 
   /**
-   * Wait for server to start or encounter an error
-   * Returns early if error detected
+   * Wait for all processes to be ready
    */
-  private async waitForStartOrError(projectId: string, timeoutMs: number): Promise<void> {
-    return new Promise((resolve) => {
-      const startTime = Date.now();
+  private async waitForAllProcessesReady(projectId: string, timeoutMs: number): Promise<void> {
+    const group = this.processGroups.get(projectId);
+    if (!group) return;
 
-      const checkInterval = setInterval(() => {
-        const processInfo = this.processes.get(projectId);
+    const healthConfig = group.strategy.getHealthCheckConfig(group.ports);
+    const startTime = Date.now();
 
-        // Process gone or in error state
-        if (!processInfo || processInfo.state === ProcessState.ERROR) {
-          clearInterval(checkInterval);
-          resolve();
-          return;
+    // Wait for all endpoints to respond
+    for (const endpoint of healthConfig.endpoints) {
+      if (!endpoint.required) continue;
+
+      let ready = false;
+      while (!ready && Date.now() - startTime < timeoutMs) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+          const response = await fetch(endpoint.url, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (response) {
+            ready = true;
+            // Update individual process state
+            const processInfo = Array.from(group.processes.values()).find(
+              (p) => p.config.port === this.extractPortFromUrl(endpoint.url)
+            );
+            if (processInfo) {
+              processInfo.state = ProcessState.RUNNING;
+            }
+          }
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
+      }
 
-        // Server is running
-        if (processInfo.state === ProcessState.RUNNING) {
-          clearInterval(checkInterval);
-          resolve();
-          return;
-        }
+      if (!ready && endpoint.required) {
+        // Mark as error if required endpoint failed
+        group.aggregatedState = ProcessState.ERROR;
+        this.emit('process-status-changed', projectId, ProcessState.ERROR);
+        this.emit('process-error', projectId, `${endpoint.label} server failed to respond`);
+        return;
+      }
+    }
 
-        // Timeout reached
-        if (Date.now() - startTime >= timeoutMs) {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      }, 100);
-    });
+    // All processes ready
+    group.aggregatedState = ProcessState.RUNNING;
+    this.emit('process-status-changed', projectId, ProcessState.RUNNING);
+    this.emit('process-ready', projectId, group.strategy.getPreviewPort(group.ports));
+
+    // Start health checks
+    this.startHealthCheck(projectId);
+  }
+
+  private extractPortFromUrl(url: string): number {
+    const match = url.match(/:(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
   }
 
   /**
-   * Stop netlify dev server for a project
-   * @param projectId - Unique project identifier
-   * @param force - If true, bypasses the active project check (used for deletion)
+   * Stop all dev servers for a project
    */
   async stopDevServer(projectId: string, force: boolean = false): Promise<void> {
-    // Guard: Never stop the currently active project's server (unless forced)
     if (!force && this.currentProjectId === projectId) {
       console.warn('⚠️  Prevented stopping server for active project:', projectId);
       return;
     }
 
-    const processInfo = this.processes.get(projectId);
-    if (!processInfo || processInfo.state === ProcessState.STOPPED) {
+    const group = this.processGroups.get(projectId);
+    if (!group || group.aggregatedState === ProcessState.STOPPED) {
       return;
     }
 
-    processInfo.state = ProcessState.STOPPING;
+    group.aggregatedState = ProcessState.STOPPING;
     this.emit('process-status-changed', projectId, ProcessState.STOPPING);
 
-    return new Promise((resolve) => {
-      const childProcess = processInfo.process;
+    // Stop health checks
+    this.stopHealthCheck(projectId);
 
-      // Set a timeout for graceful shutdown
-      const killTimeout = setTimeout(() => {
-        if (childProcess && !childProcess.killed) {
-          childProcess.kill('SIGKILL'); // Force kill
-        }
-      }, 5000);
+    // Kill all processes
+    const killPromises = Array.from(group.processes.entries()).map(
+      ([processId, processInfo]) =>
+        new Promise<void>((resolve) => {
+          const childProcess = processInfo.process;
 
-      childProcess.once('exit', () => {
-        clearTimeout(killTimeout);
-        processInfo.state = ProcessState.STOPPED;
-        this.emit('process-status-changed', projectId, ProcessState.STOPPED);
+          const killTimeout = setTimeout(() => {
+            if (childProcess && !childProcess.killed) {
+              childProcess.kill('SIGKILL');
+            }
+          }, 5000);
 
-        // Stop health check when process stops
-        this.stopHealthCheck(projectId);
+          childProcess.once('exit', () => {
+            clearTimeout(killTimeout);
+            processPersistence.removePID(`${projectId}-${processId}`);
+            resolve();
+          });
 
-        portService.releasePort(projectId);
-        processPersistence.removePID(projectId);
-        this.processes.delete(projectId);
-        resolve();
-      });
+          if (childProcess && !childProcess.killed) {
+            childProcess.kill('SIGTERM');
+          } else {
+            clearTimeout(killTimeout);
+            resolve();
+          }
+        })
+    );
 
-      // Try graceful shutdown first
-      if (childProcess && !childProcess.killed) {
-        childProcess.kill('SIGTERM');
-      } else {
-        resolve();
-      }
-    });
+    await Promise.all(killPromises);
+
+    // Release ports
+    group.strategy.releasePorts(projectId);
+
+    // Cleanup
+    group.aggregatedState = ProcessState.STOPPED;
+    this.emit('process-status-changed', projectId, ProcessState.STOPPED);
+    this.processGroups.delete(projectId);
   }
 
   /**
    * Restart dev server
-   * @param projectId - Unique project identifier
-   * @param projectPath - Absolute path to project root
    */
-  async restartDevServer(projectId: string, projectPath: string): Promise<number> {
-    await this.stopDevServer(projectId);
-    // Wait a bit before restarting
+  async restartDevServer(
+    projectId: string,
+    projectPath: string,
+    deployServices: string[] = ['netlify']
+  ): Promise<number> {
+    await this.stopDevServer(projectId, true);
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    return this.startDevServer(projectId, projectPath);
+    return this.startDevServer(projectId, projectPath, deployServices);
   }
 
   /**
    * Get current process status
-   * @param projectId - Unique project identifier
    */
   getProcessStatus(projectId: string): ProcessState {
-    const processInfo = this.processes.get(projectId);
-    return processInfo ? processInfo.state : ProcessState.STOPPED;
+    const group = this.processGroups.get(projectId);
+    return group ? group.aggregatedState : ProcessState.STOPPED;
   }
 
   /**
-   * Get process output (last N lines)
-   * @param projectId - Unique project identifier
-   * @param limit - Number of lines to return (default: all)
+   * Get process output
    */
   getProcessOutput(projectId: string, limit?: number): ProcessOutput[] {
-    const processInfo = this.processes.get(projectId);
-    if (!processInfo) {
-      return [];
-    }
+    const group = this.processGroups.get(projectId);
+    if (!group) return [];
 
-    const output = processInfo.output;
+    const output = group.aggregatedOutput;
     if (limit && limit < output.length) {
       return output.slice(-limit);
     }
@@ -362,156 +395,79 @@ class ProcessManager extends EventEmitter {
   }
 
   /**
-   * Get assigned port for a project
-   * @param projectId - Unique project identifier
+   * Get primary port for a project
    */
   getPort(projectId: string): number | undefined {
-    const processInfo = this.processes.get(projectId);
-    return processInfo?.port;
+    const group = this.processGroups.get(projectId);
+    if (!group) return undefined;
+    return group.strategy.getPreviewPort(group.ports);
   }
 
   /**
-   * Stop all processes (on app quit)
+   * Stop all processes
    */
   async stopAll(): Promise<void> {
-    const stopPromises = Array.from(this.processes.keys()).map((projectId) =>
-      this.stopDevServer(projectId)
+    const stopPromises = Array.from(this.processGroups.keys()).map((projectId) =>
+      this.stopDevServer(projectId, true)
     );
-
     await Promise.all(stopPromises);
-    portService.releaseAllPorts();
   }
 
   /**
-   * Handle process output
+   * Handle process output with label prefix
    */
-  private handleOutput(projectId: string, type: 'stdout' | 'stderr', message: string): void {
-    const processInfo = this.processes.get(projectId);
+  private handleOutput(
+    projectId: string,
+    processId: string,
+    type: 'stdout' | 'stderr',
+    message: string
+  ): void {
+    const group = this.processGroups.get(projectId);
+    if (!group) return;
+
+    const processInfo = group.processes.get(processId);
     if (!processInfo) return;
 
-    // Create output entry
+    // Add label prefix if present
+    const label = processInfo.config.label;
+    const prefixedMessage = label ? `${label} ${message}` : message;
+    const prefixedRaw = label ? `${label} ${message}` : message;
+
     const outputLine: ProcessOutput = {
       timestamp: new Date(),
       type,
-      message: stripAnsi(message), // Plain text for parsing
-      raw: message, // With colors for display
+      message: stripAnsi(prefixedMessage),
+      raw: prefixedRaw,
     };
 
-    // Add to output buffer
+    // Add to process-specific output
     processInfo.output.push(outputLine);
-
-    // Limit buffer size
     if (processInfo.output.length > this.MAX_OUTPUT_LINES) {
       processInfo.output = processInfo.output.slice(-this.MAX_OUTPUT_LINES);
+    }
+
+    // Add to aggregated output
+    group.aggregatedOutput.push(outputLine);
+    if (group.aggregatedOutput.length > this.MAX_OUTPUT_LINES) {
+      group.aggregatedOutput = group.aggregatedOutput.slice(-this.MAX_OUTPUT_LINES);
     }
 
     // Emit to renderer
     this.emit('process-output', projectId, outputLine);
 
-    // Check if server is ready
-    if (processInfo.state === ProcessState.STARTING) {
-      this.checkIfServerReady(projectId, outputLine.message);
-    }
-
-    // Check for errors
+    // Detect errors
     this.detectErrors(projectId, outputLine.message);
   }
 
   /**
-   * Check if server is ready by parsing output
-   * When Netlify Dev reports ready, start HTTP health checks
-   */
-  private checkIfServerReady(projectId: string, message: string): void {
-    const processInfo = this.processes.get(projectId);
-    if (!processInfo) return;
-
-    // Netlify dev ready patterns - looking for the main Netlify Dev server (port 8888)
-    const readyPatterns = [
-      /Local dev server ready:/i,           // Netlify Dev main message
-      /Server now ready on/i,
-      /◈ Server now ready/i,
-    ];
-
-    const isReady = readyPatterns.some((pattern) => pattern.test(message));
-
-    if (isReady) {
-      // Don't mark as running yet - start HTTP health check instead
-      this.verifyServerWithHttpCheck(projectId, processInfo.port);
-    }
-  }
-
-  /**
-   * Verify server is actually ready by making HTTP requests
-   * This is more reliable than text parsing
-   */
-  private async verifyServerWithHttpCheck(projectId: string, port: number): Promise<void> {
-    const processInfo = this.processes.get(projectId);
-    if (!processInfo) return;
-
-    const maxAttempts = 30; // 30 seconds total
-    const delayMs = 1000; // 1 second between attempts
-    let attempt = 0;
-
-    while (attempt < maxAttempts) {
-      try {
-        // Check if process still exists
-        if (!this.processes.get(projectId)) {
-          return;
-        }
-
-        // Try to fetch from the server
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-        const response = await fetch(`http://localhost:${port}`, {
-          signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        // Any response (even 404) means server is up
-        if (response) {
-          const currentProcessInfo = this.processes.get(projectId);
-          if (currentProcessInfo) {
-            currentProcessInfo.state = ProcessState.RUNNING;
-            this.emit('process-status-changed', projectId, ProcessState.RUNNING);
-            this.emit('process-ready', projectId, port);
-
-            // Start periodic health check now that server is confirmed running
-            this.startHealthCheck(projectId, port);
-          }
-          return;
-        }
-      } catch (error) {
-        // Expected during startup - server not ready yet
-        attempt++;
-
-        if (attempt < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-        }
-      }
-    }
-
-    // Health check failed after all attempts
-    const currentProcessInfo = this.processes.get(projectId);
-    if (currentProcessInfo) {
-      currentProcessInfo.state = ProcessState.ERROR;
-      this.emit('process-status-changed', projectId, ProcessState.ERROR);
-      this.emit('process-error', projectId, 'Server failed to respond to HTTP requests');
-    }
-  }
-
-  /**
-   * Detect critical errors in output
-   * Only emit critical errors that require user attention
+   * Detect critical errors
    */
   private detectErrors(projectId: string, message: string): void {
-    // Only emit critical infrastructure errors, not template/build errors
     const criticalErrorPatterns = [
-      /EADDRINUSE/i,        // Port already in use
-      /ECONNREFUSED/i,      // Connection refused
-      /EACCES/i,            // Permission denied
-      /Command failed/i,    // Command execution failed
+      /EADDRINUSE/i,
+      /ECONNREFUSED/i,
+      /EACCES/i,
+      /Command failed/i,
     ];
 
     const hasCriticalError = criticalErrorPatterns.some((pattern) => pattern.test(message));
@@ -519,33 +475,32 @@ class ProcessManager extends EventEmitter {
     if (hasCriticalError) {
       this.emit('process-error', projectId, message);
     }
-
-    // Template errors (build failures, missing modules) are only logged to output
-    // They don't trigger process-error events
   }
 
   /**
    * Handle process exit
    */
-  private handleProcessExit(projectId: string, code: number | null, signal: string | null): void {
-    const processInfo = this.processes.get(projectId);
+  private handleProcessExit(
+    projectId: string,
+    processId: string,
+    code: number | null,
+    signal: string | null
+  ): void {
+    const group = this.processGroups.get(projectId);
+    if (!group) return;
+
+    const processInfo = group.processes.get(processId);
     if (!processInfo) return;
 
-    // Normal exit (user stopped)
-    if (processInfo.state === ProcessState.STOPPING) {
+    // Check if stopping normally
+    if (group.aggregatedState === ProcessState.STOPPING) {
       processInfo.state = ProcessState.STOPPED;
-      this.emit('process-status-changed', projectId, ProcessState.STOPPED);
-      portService.releasePort(projectId);
-      processPersistence.removePID(projectId);
-      this.processes.delete(projectId);
       return;
     }
 
-    // Crash (unexpected exit)
+    // Crash handling
     processInfo.state = ProcessState.CRASHED;
-    this.emit('process-status-changed', projectId, ProcessState.CRASHED);
 
-    // Track crashes
     const now = new Date();
     if (
       processInfo.lastCrashTime &&
@@ -557,72 +512,103 @@ class ProcessManager extends EventEmitter {
     }
     processInfo.lastCrashTime = now;
 
-    // Emit crash event
+    // Update aggregated state
+    this.updateAggregatedState(projectId);
+
     this.emit('process-crashed', projectId, {
+      processId,
       code,
       signal,
       crashCount: processInfo.crashCount,
     });
 
-    // Too many crashes
     if (processInfo.crashCount >= this.MAX_CRASHES) {
-      this.emit('process-error', projectId, 'Process crashed too many times. Please check logs.');
-      portService.releasePort(projectId);
-      processPersistence.removePID(projectId);
-      this.processes.delete(projectId);
+      this.emit(
+        'process-error',
+        projectId,
+        `${processInfo.config.label || processId} crashed too many times`
+      );
     }
   }
 
   /**
    * Handle process error
    */
-  private handleProcessError(projectId: string, error: Error): void {
-    const processInfo = this.processes.get(projectId);
+  private handleProcessError(projectId: string, processId: string, error: Error): void {
+    const group = this.processGroups.get(projectId);
+    if (!group) return;
+
+    const processInfo = group.processes.get(processId);
     if (!processInfo) return;
 
     processInfo.state = ProcessState.ERROR;
-    this.emit('process-status-changed', projectId, ProcessState.ERROR);
-    this.emit('process-error', projectId, error.message);
+    this.updateAggregatedState(projectId);
+
+    this.emit(
+      'process-error',
+      projectId,
+      `${processInfo.config.label || processId}: ${error.message}`
+    );
   }
 
   /**
-   * Start periodic health check for a running project
-   * @param projectId - Project identifier
-   * @param port - Port number to check
+   * Update aggregated state based on individual process states
    */
-  private startHealthCheck(projectId: string, port: number): void {
-    // Stop any existing health check for this project
+  private updateAggregatedState(projectId: string): void {
+    const group = this.processGroups.get(projectId);
+    if (!group) return;
+
+    const states = Array.from(group.processes.values()).map((p) => p.state);
+
+    // If any process is in error or crashed, the group is in that state
+    if (states.includes(ProcessState.ERROR)) {
+      group.aggregatedState = ProcessState.ERROR;
+    } else if (states.includes(ProcessState.CRASHED)) {
+      group.aggregatedState = ProcessState.CRASHED;
+    } else if (states.every((s) => s === ProcessState.RUNNING)) {
+      group.aggregatedState = ProcessState.RUNNING;
+    } else if (states.every((s) => s === ProcessState.STOPPED)) {
+      group.aggregatedState = ProcessState.STOPPED;
+    } else if (states.includes(ProcessState.STARTING)) {
+      group.aggregatedState = ProcessState.STARTING;
+    }
+
+    this.emit('process-status-changed', projectId, group.aggregatedState);
+  }
+
+  /**
+   * Start health checks for all processes
+   */
+  private startHealthCheck(projectId: string): void {
     this.stopHealthCheck(projectId);
 
-    // Initialize health status
-    const processInfo = this.processes.get(projectId);
-    if (!processInfo) return;
+    const group = this.processGroups.get(projectId);
+    if (!group) return;
 
-    processInfo.healthStatus = {
-      healthy: true,
-      checks: {
-        httpResponding: { status: 'pass', message: 'Server responding' },
-        processAlive: { status: 'pass', message: 'Process running' },
-        portListening: { status: 'pass', message: 'Port listening' },
-      },
-      lastChecked: new Date(),
-      consecutiveFailures: 0,
-    };
-
-    // Emit initial health status
-    this.emit('process-health-changed', projectId, processInfo.healthStatus);
+    // Initialize health status for all processes
+    for (const processInfo of group.processes.values()) {
+      processInfo.healthStatus = {
+        healthy: true,
+        checks: {
+          httpResponding: { status: 'pass', message: 'Server responding' },
+          processAlive: { status: 'pass', message: 'Process running' },
+          portListening: { status: 'pass', message: 'Port listening' },
+        },
+        lastChecked: new Date(),
+        consecutiveFailures: 0,
+      };
+    }
 
     // Start periodic check
     const interval = setInterval(async () => {
-      await this.performHealthCheck(projectId, port);
+      await this.performHealthCheck(projectId);
     }, this.HEALTH_CHECK_INTERVAL);
 
     this.healthCheckIntervals.set(projectId, interval);
   }
 
   /**
-   * Stop health check for a project
-   * @param projectId - Project identifier
+   * Stop health checks
    */
   private stopHealthCheck(projectId: string): void {
     const interval = this.healthCheckIntervals.get(projectId);
@@ -633,121 +619,121 @@ class ProcessManager extends EventEmitter {
   }
 
   /**
-   * Perform a single health check
-   * @param projectId - Project identifier
-   * @param port - Port number to check
+   * Perform health check on all endpoints
    */
-  private async performHealthCheck(projectId: string, port: number): Promise<void> {
-    const processInfo = this.processes.get(projectId);
-    if (!processInfo || !processInfo.healthStatus) return;
+  private async performHealthCheck(projectId: string): Promise<void> {
+    const group = this.processGroups.get(projectId);
+    if (!group) return;
 
-    const checks = processInfo.healthStatus.checks;
+    const healthConfig = group.strategy.getHealthCheckConfig(group.ports);
     let allHealthy = true;
 
-    // Check 1: Process still alive
-    try {
-      if (processInfo.process && !processInfo.process.killed) {
-        // Try to check if process is still alive (sending signal 0 doesn't kill it)
-        process.kill(processInfo.process.pid!, 0);
-        checks.processAlive = { status: 'pass', message: 'Process running' };
-      } else {
-        checks.processAlive = { status: 'fail', message: 'Process not running' };
+    for (const endpoint of healthConfig.endpoints) {
+      const port = this.extractPortFromUrl(endpoint.url);
+      const processInfo = Array.from(group.processes.values()).find(
+        (p) => p.config.port === port
+      );
+
+      if (!processInfo?.healthStatus) continue;
+
+      const checks = processInfo.healthStatus.checks;
+
+      // Check process alive
+      try {
+        if (processInfo.process && !processInfo.process.killed) {
+          process.kill(processInfo.process.pid!, 0);
+          checks.processAlive = { status: 'pass', message: 'Process running' };
+        } else {
+          checks.processAlive = { status: 'fail', message: 'Process not running' };
+          allHealthy = false;
+        }
+      } catch {
+        checks.processAlive = { status: 'fail', message: 'Process terminated' };
         allHealthy = false;
       }
-    } catch (error) {
-      checks.processAlive = { status: 'fail', message: 'Process terminated' };
-      allHealthy = false;
-    }
 
-    // Check 2: Port listening (simple TCP check would go here, but HTTP check covers this)
-    checks.portListening = { status: 'pass', message: `Port ${port} allocated` };
+      // Check HTTP responding
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.HEALTH_CHECK_TIMEOUT);
 
-    // Check 3: HTTP responding
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.HEALTH_CHECK_TIMEOUT);
+        const response = await fetch(endpoint.url, {
+          signal: controller.signal,
+          method: 'HEAD',
+        });
 
-      const response = await fetch(`http://localhost:${port}`, {
-        signal: controller.signal,
-        method: 'HEAD', // Lightweight request
-      });
+        clearTimeout(timeoutId);
 
-      clearTimeout(timeoutId);
-
-      if (response) {
-        checks.httpResponding = { status: 'pass', message: `Server responding (${response.status})` };
-      } else {
-        checks.httpResponding = { status: 'fail', message: 'No response from server' };
+        if (response) {
+          checks.httpResponding = { status: 'pass', message: `Responding (${response.status})` };
+        } else {
+          checks.httpResponding = { status: 'fail', message: 'No response' };
+          allHealthy = false;
+        }
+      } catch (error: any) {
+        checks.httpResponding = {
+          status: 'fail',
+          message: error.name === 'AbortError' ? 'Timeout' : error.message,
+        };
         allHealthy = false;
       }
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        checks.httpResponding = { status: 'fail', message: 'Request timeout (5s)' };
+
+      checks.portListening = { status: 'pass', message: `Port ${port} allocated` };
+      processInfo.healthStatus.lastChecked = new Date();
+
+      if (!allHealthy) {
+        processInfo.healthStatus.consecutiveFailures++;
+        if (processInfo.healthStatus.consecutiveFailures >= this.MAX_HEALTH_FAILURES) {
+          processInfo.healthStatus.healthy = false;
+          this.emit('process-health-critical', projectId, processInfo.healthStatus);
+        }
       } else {
-        checks.httpResponding = { status: 'fail', message: `Connection failed: ${error.message}` };
+        processInfo.healthStatus.consecutiveFailures = 0;
+        processInfo.healthStatus.healthy = true;
       }
-      allHealthy = false;
+
+      this.emit('process-health-changed', projectId, processInfo.healthStatus);
     }
-
-    // Update health status
-    processInfo.healthStatus.lastChecked = new Date();
-
-    if (!allHealthy) {
-      processInfo.healthStatus.consecutiveFailures++;
-
-      // After MAX_HEALTH_FAILURES consecutive failures, mark as unhealthy
-      if (processInfo.healthStatus.consecutiveFailures >= this.MAX_HEALTH_FAILURES) {
-        processInfo.healthStatus.healthy = false;
-
-        // Emit error and transition to ERROR state
-        this.emit('process-health-critical', projectId, processInfo.healthStatus);
-        processInfo.state = ProcessState.ERROR;
-        this.emit('process-status-changed', projectId, ProcessState.ERROR);
-
-        // Stop health check since we're in ERROR state
-        this.stopHealthCheck(projectId);
-      }
-    } else {
-      // Reset failure count on success
-      processInfo.healthStatus.consecutiveFailures = 0;
-      processInfo.healthStatus.healthy = true;
-    }
-
-    // Emit health status update
-    this.emit('process-health-changed', projectId, processInfo.healthStatus);
   }
 
   /**
-   * Get current health status for a project
-   * @param projectId - Project identifier
-   * @returns Health status or undefined if not available
+   * Get health status
    */
   getHealthStatus(projectId: string): HealthCheckStatus | undefined {
-    const processInfo = this.processes.get(projectId);
-    return processInfo?.healthStatus;
+    const group = this.processGroups.get(projectId);
+    if (!group) return undefined;
+
+    // Return first process health status (simplified)
+    const firstProcess = group.processes.values().next().value;
+    return firstProcess?.healthStatus;
   }
 
   /**
-   * Manually trigger a health check for a project
-   * @param projectId - Project identifier
+   * Trigger manual health check
    */
   async triggerHealthCheck(projectId: string): Promise<HealthCheckStatus | undefined> {
-    const processInfo = this.processes.get(projectId);
-    if (!processInfo || processInfo.state !== ProcessState.RUNNING) {
+    const group = this.processGroups.get(projectId);
+    if (!group || group.aggregatedState !== ProcessState.RUNNING) {
       return undefined;
     }
 
-    await this.performHealthCheck(projectId, processInfo.port);
-    return processInfo.healthStatus;
+    await this.performHealthCheck(projectId);
+    return this.getHealthStatus(projectId);
   }
 
   /**
-   * Set the currently active project
-   * Used to prevent accidental stopping of the active project's server
-   * @param projectId - The project ID that is now active (or null if none)
+   * Set currently active project
    */
   setCurrentProject(projectId: string | null): void {
     this.currentProjectId = projectId;
+  }
+
+  /**
+   * Get all port allocations for a project
+   */
+  getPortAllocations(projectId: string): PortAllocation[] | undefined {
+    const group = this.processGroups.get(projectId);
+    return group?.ports;
   }
 }
 

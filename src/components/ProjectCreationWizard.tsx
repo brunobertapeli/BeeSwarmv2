@@ -348,7 +348,11 @@ export function ProjectCreationWizard({
                 key="initializing"
                 icon={<Server className="w-10 h-10" />}
                 title="Initializing Development Server"
-                description="Starting Netlify Dev and Vite..."
+                description={
+                  template.deployServices?.includes('railway')
+                    ? "Starting backend and frontend servers..."
+                    : "Starting Netlify Dev and Vite..."
+                }
                 isLoading
               />
             )}

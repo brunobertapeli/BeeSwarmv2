@@ -31,8 +31,13 @@ export function registerProcessHandlers(): void {
         };
       }
 
-      // Start the server
-      const port = await processManager.startDevServer(projectId, project.path);
+      // Parse deployServices from project (stored as JSON string)
+      const deployServices = project.deployServices
+        ? JSON.parse(project.deployServices)
+        : ['netlify'];
+
+      // Start the server with appropriate strategy
+      const port = await processManager.startDevServer(projectId, project.path, deployServices);
 
       // Initialize log persistence for this project
       logPersistenceService.initializeProject(projectId);
@@ -80,8 +85,13 @@ export function registerProcessHandlers(): void {
         };
       }
 
-      // Restart the server
-      const port = await processManager.restartDevServer(projectId, project.path);
+      // Parse deployServices from project (stored as JSON string)
+      const deployServices = project.deployServices
+        ? JSON.parse(project.deployServices)
+        : ['netlify'];
+
+      // Restart the server with appropriate strategy
+      const port = await processManager.restartDevServer(projectId, project.path, deployServices);
 
       // Reinitialize log persistence after restart
       logPersistenceService.initializeProject(projectId);

@@ -5,6 +5,7 @@ import { portService } from './PortService'
 import { Template } from './BackendService'
 import { getCurrentUserId } from '../main'
 import { pathValidator } from '../utils/PathValidator'
+import { DeploymentStrategyFactory } from './deployment'
 import fs from 'fs'
 import path from 'path'
 import { shell, app } from 'electron'
@@ -95,8 +96,9 @@ class ProjectService {
         )
 
 
-        // Step 4: Validate template structure
-        const validationResult = templateValidator.validate(clonedPath)
+        // Step 4: Validate template structure based on deployment type
+        const deployServices = template.deployServices || ['netlify']
+        const validationResult = templateValidator.validate(clonedPath, deployServices)
 
         if (!validationResult.valid) {
           console.error('❌ Template validation failed:')
@@ -118,18 +120,12 @@ class ProjectService {
         }
 
 
-        // Step 5: Allocate ports and update configuration files
+        // Step 5: Allocate ports and update configuration files using deployment strategy
+        const strategy = DeploymentStrategyFactory.create(deployServices)
+        const ports = await strategy.allocatePorts(project.id)
 
-        // Allocate paired ports (Netlify + Vite)
-        const netlifyPort = await portService.findAvailablePort(project.id)
-        const vitePort = portService.getVitePort(netlifyPort)
-
-
-        // Update vite.config.ts with allocated Vite port
-        templateService.updateViteConfig(clonedPath, vitePort)
-
-        // Update netlify.toml with allocated Vite port
-        templateService.updateNetlifyToml(clonedPath, vitePort)
+        // Update project configs (vite.config.ts, netlify.toml, or backend .env depending on strategy)
+        strategy.updateProjectConfigs(clonedPath, ports)
 
 
         // Step 6: Transfer website import data if this is an import project

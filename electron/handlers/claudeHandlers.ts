@@ -753,9 +753,9 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
       '📋 Context update - TODO (placeholder)\n'
     );
 
-    // 4. Restart dev server (if running)
+    // 4. Restart dev server (if running or in error state - error might be recoverable after restart)
     const processState = processManager.getProcessStatus(projectId);
-    if (processState === 'running') {
+    if (processState === 'running' || processState === 'error') {
       const devServerStartTime = Date.now();
 
 
@@ -803,7 +803,13 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
 
         await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
 
-        const port = await processManager.startDevServer(projectId, projectPath);
+        // Get deployServices from project for correct strategy (Railway vs Netlify)
+        const project = databaseService.getProjectById(projectId);
+        const deployServices = project?.deployServices
+          ? JSON.parse(project.deployServices)
+          : ['netlify'];
+
+        const port = await processManager.startDevServer(projectId, projectPath, deployServices);
 
         const devServerElapsed = ((Date.now() - devServerStartTime) / 1000).toFixed(1);
 
@@ -1053,14 +1059,21 @@ async function performRestore(projectId: string, commitHash: string, projectPath
       }
 
 
-      // Restart dev server if running
+      // Restart dev server if running or in error state
       const processState = processManager.getProcessStatus(projectId);
-      if (processState === 'running') {
+      if (processState === 'running' || processState === 'error') {
 
         try {
           await processManager.stopDevServer(projectId);
           await new Promise((res) => setTimeout(res, 2000)); // Wait 2s
-          await processManager.startDevServer(projectId, projectPath);
+
+          // Get deployServices from project for correct strategy (Railway vs Netlify)
+          const proj = databaseService.getProjectById(projectId);
+          const deplServices = proj?.deployServices
+            ? JSON.parse(proj.deployServices)
+            : ['netlify'];
+
+          await processManager.startDevServer(projectId, projectPath, deplServices);
         } catch (error) {
           console.error(`❌ Failed to restart dev server:`, error);
         }

@@ -53,6 +53,9 @@ interface EnvVariable {
   isRequired?: boolean
 }
 
+// Re-export getEnvKeyTarget for components that need it
+export { getEnvKeyTarget } from '../../shared/envKeyTargets'
+
 // Service variants configuration
 const SERVICE_IDENTIFIERS: Record<string, {
   name: string
@@ -232,6 +235,46 @@ const getPlanLabel = (plan: 'free' | 'plus' | 'premium') => {
 
 // Forbidden categories for import flow
 const FORBIDDEN_IMPORT_CATEGORIES = ['Ecommerce']
+
+// Helper to determine if template uses Railway (dual process)
+const isRailwayTemplate = (deployServices?: string[]): boolean => {
+  return deployServices?.includes('railway') ?? false
+}
+
+// Generate initialization steps based on deployment service
+type InitStep = { label: string; isComplete: boolean }
+
+const getInitSteps = (
+  deployServices: string[] | undefined,
+  completedSteps: {
+    clone?: boolean
+    install?: boolean
+    backendServer?: boolean
+    frontendServer?: boolean
+    server?: boolean
+    ready?: boolean
+  }
+): InitStep[] => {
+  const isRailway = isRailwayTemplate(deployServices)
+
+  if (isRailway) {
+    return [
+      { label: 'Cloning template repository', isComplete: completedSteps.clone ?? false },
+      { label: 'Installing dependencies (npm install)', isComplete: completedSteps.install ?? false },
+      { label: 'Starting backend server', isComplete: completedSteps.backendServer ?? false },
+      { label: 'Starting frontend server', isComplete: completedSteps.frontendServer ?? false },
+      { label: 'Your project is ready', isComplete: completedSteps.ready ?? false }
+    ]
+  }
+
+  // Netlify (default) - single server
+  return [
+    { label: 'Cloning template repository', isComplete: completedSteps.clone ?? false },
+    { label: 'Installing dependencies (npm install)', isComplete: completedSteps.install ?? false },
+    { label: 'Starting development server', isComplete: completedSteps.server ?? false },
+    { label: 'Your project is ready', isComplete: completedSteps.ready ?? false }
+  ]
+}
 
 export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCreationFlowProps) {
   const { user, currentProjectId } = useAppStore()
@@ -455,15 +498,11 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
         setProjectId(createdProjectId)
 
         // Create initialization block to show in StatusSheet
+        const deployServices = selectedTemplate.deployServices
         await window.electronAPI?.chat.createInitializationBlock(
           createdProjectId,
           selectedTemplate.name,
-          [
-            { label: 'Cloning template repository', isComplete: true },
-            { label: 'Installing dependencies (npm install)', isComplete: false },
-            { label: 'Starting development server', isComplete: false },
-            { label: 'Your project is ready', isComplete: false }
-          ]
+          getInitSteps(deployServices, { clone: true })
         )
 
         // Step 2: Save environment variables
@@ -488,12 +527,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
         // Update initialization block - installing stage
         await window.electronAPI?.chat.updateInitializationBlock(
           createdProjectId,
-          [
-            { label: 'Cloning template repository', isComplete: true },
-            { label: 'Installing dependencies (npm install)', isComplete: true },
-            { label: 'Starting development server', isComplete: false },
-            { label: 'Your project is ready', isComplete: false }
-          ],
+          getInitSteps(deployServices, { clone: true, install: true }),
           false
         )
 
@@ -507,22 +541,36 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
         setCurrentStep('initializing')
 
         // Update initialization block - starting server stage
-        await window.electronAPI?.chat.updateInitializationBlock(
-          createdProjectId,
-          [
-            { label: 'Cloning template repository', isComplete: true },
-            { label: 'Installing dependencies (npm install)', isComplete: true },
-            { label: 'Starting development server', isComplete: true },
-            { label: 'Your project is ready', isComplete: false }
-          ],
-          false
-        )
+        // For Railway: show backend starting first, then frontend
+        const isRailway = isRailwayTemplate(deployServices)
+
+        if (isRailway) {
+          // Show backend starting
+          await window.electronAPI?.chat.updateInitializationBlock(
+            createdProjectId,
+            getInitSteps(deployServices, { clone: true, install: true, backendServer: true }),
+            false
+          )
+        }
 
         const serverResult = await window.electronAPI?.process.startDevServer(result.project.id)
 
         if (!serverResult?.success) {
           throw new Error('Failed to start development server')
         }
+
+        // Update to show all servers started
+        await window.electronAPI?.chat.updateInitializationBlock(
+          createdProjectId,
+          getInitSteps(deployServices, {
+            clone: true,
+            install: true,
+            backendServer: true,
+            frontendServer: true,
+            server: true
+          }),
+          false
+        )
 
         // Step 5: Clean up temp folder if this was a website import
         if (tempImportProjectId) {
@@ -533,12 +581,14 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
         // Step 6: Complete - mark initialization as complete
         await window.electronAPI?.chat.updateInitializationBlock(
           createdProjectId,
-          [
-            { label: 'Cloning template repository', isComplete: true },
-            { label: 'Installing dependencies (npm install)', isComplete: true },
-            { label: 'Starting development server', isComplete: true },
-            { label: 'Your project is ready', isComplete: true }
-          ],
+          getInitSteps(deployServices, {
+            clone: true,
+            install: true,
+            backendServer: true,
+            frontendServer: true,
+            server: true,
+            ready: true
+          }),
           true // Mark as complete
         )
 
@@ -1806,7 +1856,9 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 description={
                   currentStep === 'creating' ? 'Fetching template files from GitHub...' :
                   currentStep === 'installing' ? 'Running npm install... This may take a few minutes' :
-                  'Starting Netlify Dev and Vite...'
+                  selectedTemplate?.deployServices?.includes('railway')
+                    ? 'Starting backend and frontend servers...'
+                    : 'Starting Netlify Dev and Vite...'
                 }
                 isLoading
               />

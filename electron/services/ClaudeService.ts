@@ -79,38 +79,60 @@ interface ClaudeSession {
  */
 class ClaudeService extends EventEmitter {
   private sessions: Map<string, ClaudeSession> = new Map();
-  private systemPrompt: string | null = null;
+  // Cache prompts by type to avoid re-reading files
+  private promptCache: Map<string, string> = new Map();
 
   /**
-   * Load system prompt from file
-   * This is the general prompt that applies to all projects
+   * Load system prompt from file based on project's deployment service
+   * Netlify templates use netlify-system-prompt.txt
+   * Railway templates use railway-system-prompt.txt
    * Individual projects can extend this with their .claude/CLAUDE.md files
    */
 
-  private loadSystemPrompt(): string {
-    if (this.systemPrompt) {
-      return this.systemPrompt;
+  private loadSystemPrompt(projectId?: string): string {
+    // Determine which prompt file to load based on project's deployServices
+    let promptFileName = 'netlify-system-prompt.txt'; // Default to netlify
+
+    if (projectId) {
+      const project = databaseService.getProjectById(projectId);
+      if (project?.deployServices) {
+        try {
+          const deployServices = JSON.parse(project.deployServices) as string[];
+          if (deployServices.includes('railway')) {
+            promptFileName = 'railway-system-prompt.txt';
+          }
+        } catch (e) {
+          // Invalid JSON, use default
+        }
+      }
+    }
+
+    // Check cache first
+    const cached = this.promptCache.get(promptFileName);
+    if (cached) {
+      return cached;
     }
 
     try {
       // Try multiple locations for the system prompt
       const candidates = [
         // 1. Production: Copied to dist-electron/prompts
-        path.join(__dirname, 'prompts/system-prompt.txt'),
+        path.join(__dirname, `prompts/${promptFileName}`),
         // 2. Dev: Relative to source file (electron/services/../prompts)
-        path.join(__dirname, '../prompts/system-prompt.txt'),
+        path.join(__dirname, `../prompts/${promptFileName}`),
         // 3. Dev fallback: Relative to dist-electron root (dist-electron/../electron/prompts)
-        path.join(__dirname, '../electron/prompts/system-prompt.txt')
+        path.join(__dirname, `../electron/prompts/${promptFileName}`)
       ];
 
       for (const promptPath of candidates) {
         if (existsSync(promptPath)) {
-          this.systemPrompt = readFileSync(promptPath, 'utf-8');
-          return this.systemPrompt;
+          const prompt = readFileSync(promptPath, 'utf-8');
+          this.promptCache.set(promptFileName, prompt);
+          return prompt;
         }
       }
 
-      console.warn('⚠️ System prompt file not found. Checked:', candidates);
+      console.warn(`⚠️ System prompt file ${promptFileName} not found. Checked:`, candidates);
       return '';
     } catch (error) {
       console.warn('⚠️ Failed to load system prompt, using empty prompt:', error);
@@ -254,7 +276,7 @@ class ClaudeService extends EventEmitter {
       systemPrompt: {
         type: 'preset' as const,
         preset: 'claude_code' as const,
-        append: this.loadSystemPrompt() // Append custom system prompt
+        append: this.loadSystemPrompt(projectId) // Append custom system prompt based on project's deployServices
       },
       settingSources: ['project' as const], // Load .claude/CLAUDE.md files from projects
       ...(sessionId && { resume: sessionId }), // Resume if we have session ID
