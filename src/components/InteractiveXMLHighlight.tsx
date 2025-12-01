@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
-import { Settings, ExternalLink } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Settings, ExternalLink, Camera, Image } from 'lucide-react'
 import { KeywordHighlight } from './KeywordHighlight'
+import { useAppStore } from '../store/appStore'
 
 interface InteractiveXMLHighlightProps {
   text: string
@@ -15,6 +16,8 @@ interface XMLSegment {
   isXML?: boolean
   tag?: string
   content?: string
+  isPrintscreen?: boolean
+  route?: string
 }
 
 /**
@@ -29,6 +32,9 @@ interface XMLSegment {
  */
 export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected, keywords, blockId }: InteractiveXMLHighlightProps) {
   const [hoveredSegment, setHoveredSegment] = useState<number | null>(null)
+  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null)
+  const printscreenRefs = useRef<Map<number, HTMLSpanElement>>(new Map())
+  const { currentProjectId } = useAppStore()
 
   // Detect XML tags and notify parent
   useEffect(() => {
@@ -45,27 +51,84 @@ export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected, keywo
     }
   }, [text, onXMLDetected])
 
-  // Parse XML tags from text
+  // Convert route to filename (must match backend logic)
+  const routeToFilename = (route: string): string => {
+    let name = route.replace(/^\/+|\/+$/g, '').replace(/\//g, '-')
+    if (!name) name = 'index'
+    name = name.replace(/[^a-zA-Z0-9\-_]/g, '-')
+    return `${name}.png`
+  }
+
+  // Handle opening screenshot
+  const handleOpenScreenshot = async (route: string) => {
+    if (!currentProjectId) return
+
+    try {
+      // Get project path and open the screenshot
+      const result = await window.electronAPI?.projects.getById(currentProjectId)
+      if (result?.success && result.project?.path) {
+        const filename = routeToFilename(route)
+        const screenshotPath = `${result.project.path}/.codedeck/${filename}`
+        window.electronAPI?.shell?.openPath(screenshotPath)
+      }
+    } catch (error) {
+      console.error('Failed to open screenshot:', error)
+    }
+  }
+
+  // Handle hover for printscreen tooltip
+  const handlePrintscreenHover = (idx: number) => {
+    setHoveredSegment(idx)
+    const element = printscreenRefs.current.get(idx)
+    if (element) {
+      const rect = element.getBoundingClientRect()
+      setTooltipPosition({
+        top: rect.top - 8,
+        left: rect.left + rect.width / 2
+      })
+    }
+  }
+
+  const handlePrintscreenLeave = () => {
+    setHoveredSegment(null)
+    setTooltipPosition(null)
+  }
+
+  // Parse XML tags from text (including printscreen_tool)
   const parseXMLTags = (input: string): XMLSegment[] => {
     const segments: XMLSegment[] = []
-    // Match XML-style tags: <tagname>content</tagname>
-    const xmlPattern = /<(\w+)>(.*?)<\/\1>/g
+
+    // Combined pattern to match:
+    // 1. <printscreen_tool route="/path" /> or <printscreen_tool route="/path"></printscreen_tool>
+    // 2. Regular XML: <tagname>content</tagname>
+    const combinedPattern = /<printscreen_tool\s+route=["']([^"']+)["']\s*(?:\/>|><\/printscreen_tool>)|<(\w+)>(.*?)<\/\2>/g
+
     let lastIndex = 0
     let match: RegExpExecArray | null
 
-    while ((match = xmlPattern.exec(input)) !== null) {
+    while ((match = combinedPattern.exec(input)) !== null) {
       // Add text before match
       if (match.index > lastIndex) {
         segments.push({ text: input.substring(lastIndex, match.index) })
       }
 
-      // Add XML segment
-      segments.push({
-        text: match[0], // Full match including tags
-        isXML: true,
-        tag: match[1], // Tag name
-        content: match[2] // Content between tags
-      })
+      // Check if it's a printscreen_tool match (group 1) or regular XML (groups 2,3)
+      if (match[1] !== undefined) {
+        // Printscreen tool match
+        segments.push({
+          text: match[0],
+          isPrintscreen: true,
+          route: match[1]
+        })
+      } else {
+        // Regular XML match
+        segments.push({
+          text: match[0],
+          isXML: true,
+          tag: match[2],
+          content: match[3]
+        })
+      }
 
       lastIndex = match.index + match[0].length
     }
@@ -75,7 +138,7 @@ export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected, keywo
       segments.push({ text: input.substring(lastIndex) })
     }
 
-    // If no XML found, return original text as single segment
+    // If no matches found, return original text as single segment
     if (segments.length === 0) {
       segments.push({ text: input })
     }
@@ -110,8 +173,68 @@ export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected, keywo
   }
 
   return (
+    <>
     <span className="inline-block" style={{ display: 'inline' }}>
       {segments.map((segment, idx) => {
+        // Render printscreen_tool segments
+        if (segment.isPrintscreen) {
+          const isHovered = hoveredSegment === idx
+
+          return (
+            <span
+              key={idx}
+              ref={(el) => {
+                if (el) {
+                  printscreenRefs.current.set(idx, el)
+                }
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleOpenScreenshot(segment.route || '/')
+              }}
+              onMouseEnter={() => handlePrintscreenHover(idx)}
+              onMouseLeave={handlePrintscreenLeave}
+              className="inline-flex items-center gap-1.5 mx-0.5 cursor-pointer transition-all duration-200 relative"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                verticalAlign: 'baseline'
+              }}
+            >
+              {/* Screenshot pill with cyan/teal gradient */}
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-gradient-to-r from-cyan-500/30 via-teal-500/30 to-cyan-500/30 border border-cyan-400/30 backdrop-blur-sm relative overflow-hidden transition-all duration-200"
+              >
+                {/* Shimmer effect */}
+                <span
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none"
+                  style={{
+                    animation: 'textSweep 3s ease-in-out infinite',
+                    transform: 'translateX(-100%)'
+                  }}
+                />
+
+                {/* Camera icon */}
+                <Camera size={12} className="relative z-10 text-cyan-300" />
+
+                {/* Text */}
+                <span className="relative z-10 text-[11px] font-medium text-cyan-200">
+                  Screenshot captured
+                </span>
+
+                {/* Route badge */}
+                <span className="relative z-10 text-[10px] font-mono text-cyan-400/80 bg-cyan-500/20 px-1.5 py-0.5 rounded">
+                  {segment.route}
+                </span>
+
+                {/* Image icon for click hint */}
+                <Image size={10} className="relative z-10 text-cyan-300 opacity-70" />
+              </span>
+            </span>
+          )
+        }
+
+        // Render regular XML segments
         if (segment.isXML && segment.tag && segment.content) {
           const isHovered = hoveredSegment === idx
           const gradient = getGradientForTag(segment.tag)
@@ -137,9 +260,6 @@ export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected, keywo
               {/* Animated gradient background */}
               <span
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-gradient-to-r ${gradient} border border-white/20 backdrop-blur-sm relative overflow-hidden transition-all duration-200`}
-                style={{
-                  boxShadow: '0 0 10px rgba(139, 92, 246, 0.2)'
-                }}
               >
                 {/* Running text effect - black gradient sweep (always animating) */}
                 <span
@@ -217,5 +337,33 @@ export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected, keywo
         }
       `}</style>
     </span>
+
+    {/* Fixed tooltip for printscreen - renders outside the span to avoid z-index issues */}
+    {hoveredSegment !== null && tooltipPosition && segments[hoveredSegment]?.isPrintscreen && (
+      <div
+        style={{
+          position: 'fixed',
+          top: tooltipPosition.top,
+          left: tooltipPosition.left,
+          transform: 'translate(-50%, -100%)',
+          zIndex: 99999,
+          pointerEvents: 'none',
+          width: 'max-content',
+          maxWidth: '280px'
+        }}
+      >
+        <div className="bg-gray-900 border border-cyan-500/30 rounded-lg shadow-2xl px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Camera size={14} className="text-cyan-400 flex-shrink-0" />
+            <span className="text-[11px] text-cyan-200 font-medium">
+              Click to view screenshot
+            </span>
+          </div>
+          {/* Arrow pointing down */}
+          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-gray-900 border-b border-r border-cyan-500/30 transform rotate-45" />
+        </div>
+      </div>
+    )}
+    </>
   )
 }

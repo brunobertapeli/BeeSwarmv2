@@ -7,12 +7,77 @@ import { chatHistoryManager } from '../services/ChatHistoryManager';
 import { projectLockService } from '../services/ProjectLockService';
 import { placeholderImageService } from '../services/PlaceholderImageService';
 import { previewService } from '../services/PreviewService';
+import { screenshotToolService } from '../services/ScreenshotToolService';
 import { emitChatEvent } from './chatHandlers';
 import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import { getCurrentUserId } from '../main';
 import { validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware';
+
+/**
+ * Parse all <printscreen_tool> XML tags from Claude's text output
+ * Returns array of routes found
+ * Supports: <printscreen_tool route="/path" /> or <printscreen_tool route="/path"></printscreen_tool>
+ */
+function parsePrintscreenTools(text: string): string[] {
+  // Match self-closing: <printscreen_tool route="/path" />
+  // Match with closing: <printscreen_tool route="/path"></printscreen_tool>
+  const pattern = /<printscreen_tool\s+route=["']([^"']+)["']\s*(?:\/>|><\/printscreen_tool>)/gi;
+  const routes: string[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match[1]) {
+      routes.push(match[1]);
+    }
+  }
+
+  return routes;
+}
+
+/**
+ * Convert route to filename (must match ScreenshotToolService logic)
+ */
+function routeToFilename(route: string): string {
+  let name = route.replace(/^\/+|\/+$/g, '').replace(/\//g, '-');
+  if (!name) name = 'index';
+  name = name.replace(/[^a-zA-Z0-9\-_]/g, '-');
+  return `${name}.png`;
+}
+
+/**
+ * Handle <printscreen_tool> XML tags - capture screenshots of specified routes
+ */
+async function handlePrintscreenTool(projectId: string, text: string): Promise<void> {
+  const routes = parsePrintscreenTools(text);
+
+  for (const route of routes) {
+    console.log(`[ClaudeHandlers] Detected <printscreen_tool route="${route}" />`);
+
+    // Log to terminal
+    terminalAggregator.addSystemLine(
+      projectId,
+      `\n📸 Claude requested screenshot of route: ${route}\n`
+    );
+
+    // Capture the screenshot
+    const screenshotPath = await screenshotToolService.capture(projectId, route);
+    const filename = routeToFilename(route);
+
+    if (screenshotPath) {
+      terminalAggregator.addSystemLine(
+        projectId,
+        `✅ Screenshot saved: .codedeck/${filename}\n\n`
+      );
+    } else {
+      terminalAggregator.addSystemLine(
+        projectId,
+        `❌ Failed to capture screenshot for ${route}\n\n`
+      );
+    }
+  }
+}
 
 /**
  * Clear ephemeral log files in the project's .codedeck/ directory
@@ -461,6 +526,12 @@ function setupClaudeEventForwarding(): void {
             terminalAggregator.addClaudeLine(projectId, block.text + '\n');
             terminalAggregator.addClaudeLine(projectId, '###\n');
             terminalAggregator.addClaudeLine(projectId, '\n');
+
+            // Check for <printscreen_tool> XML tag and capture screenshot
+            // This runs async but we don't await - screenshot will be ready for Claude's next read
+            handlePrintscreenTool(projectId, block.text).catch((err) => {
+              console.error(`[ClaudeHandlers] Error handling printscreen_tool:`, err);
+            });
           }
 
           // Tool use blocks - Claude executing tools

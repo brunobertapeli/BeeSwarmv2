@@ -318,6 +318,41 @@ When verifying functionality, keep confirmations brief:
 
 </feedback_loop_for_logs>
 
+<printscreen_tool>
+
+## 📸 Visual Debugging - Screenshot Tool
+
+You can capture full-page screenshots of any route to debug visual issues.
+
+### Usage
+Output this XML tag in your response:
+```xml
+<printscreen_tool route="/dashboard" />
+```
+
+### How It Works
+1. You output `<printscreen_tool route="/path" />`
+2. App captures full-page screenshot of that route
+3. Screenshot saved to `.codedeck/<route>.png` (e.g., `/pricing` → `pricing.png`, `/` → `index.png`)
+4. Requesting the same route again overwrites that specific file
+5. Use the Read tool to view the image
+
+### When to Use
+- User reports visual bug but you can't see it
+- Verify UI changes after editing components
+- Debug layout/styling issues
+- Check responsive behavior
+
+### Example
+```
+User: "The header is broken on the settings page"
+You: Let me capture a screenshot to see the issue.
+<printscreen_tool route="/settings" />
+[Then read .codedeck/screenshot.png to analyze]
+```
+
+</printscreen_tool>
+
 <environment_variables_system>
 
 ## How It Works
