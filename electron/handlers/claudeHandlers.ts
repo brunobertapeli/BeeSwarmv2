@@ -15,25 +15,40 @@ import * as fs from 'fs';
 import { getCurrentUserId } from '../main';
 import { validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware';
 
+interface PrintscreenRequest {
+  route: string;
+  fullPage: boolean;
+}
+
 /**
  * Parse all <printscreen_tool> XML tags from Claude's text output
- * Returns array of routes found
- * Supports: <printscreen_tool route="/path" /> or <printscreen_tool route="/path"></printscreen_tool>
+ * Returns array of {route, fullPage} objects
+ * Supports: <printscreen_tool route="/path" /> or <printscreen_tool route="/path" fullpage="true" />
  */
-function parsePrintscreenTools(text: string): string[] {
-  // Match self-closing: <printscreen_tool route="/path" />
-  // Match with closing: <printscreen_tool route="/path"></printscreen_tool>
-  const pattern = /<printscreen_tool\s+route=["']([^"']+)["']\s*(?:\/>|><\/printscreen_tool>)/gi;
-  const routes: string[] = [];
+function parsePrintscreenTools(text: string): PrintscreenRequest[] {
+  // Match printscreen_tool with route and optional fullpage attribute
+  const pattern = /<printscreen_tool\s+([^>]+?)(?:\/>|><\/printscreen_tool>)/gi;
+  const requests: PrintscreenRequest[] = [];
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(text)) !== null) {
-    if (match[1]) {
-      routes.push(match[1]);
-    }
+    const attrs = match[1];
+
+    // Extract route
+    const routeMatch = attrs.match(/route=["']([^"']+)["']/i);
+    if (!routeMatch) continue;
+
+    // Extract fullpage (optional, defaults to false)
+    const fullPageMatch = attrs.match(/fullpage=["']([^"']+)["']/i);
+    const fullPage = fullPageMatch ? fullPageMatch[1].toLowerCase() === 'true' : false;
+
+    requests.push({
+      route: routeMatch[1],
+      fullPage
+    });
   }
 
-  return routes;
+  return requests;
 }
 
 /**
@@ -50,19 +65,20 @@ function routeToFilename(route: string): string {
  * Handle <printscreen_tool> XML tags - capture screenshots of specified routes
  */
 async function handlePrintscreenTool(projectId: string, text: string): Promise<void> {
-  const routes = parsePrintscreenTools(text);
+  const requests = parsePrintscreenTools(text);
 
-  for (const route of routes) {
-    console.log(`[ClaudeHandlers] Detected <printscreen_tool route="${route}" />`);
+  for (const { route, fullPage } of requests) {
+    const modeLabel = fullPage ? ' (full page)' : '';
+    console.log(`[ClaudeHandlers] Detected <printscreen_tool route="${route}"${fullPage ? ' fullpage="true"' : ''} />`);
 
     // Log to terminal
     terminalAggregator.addSystemLine(
       projectId,
-      `\n📸 Claude requested screenshot of route: ${route}\n`
+      `\n📸 Claude requested screenshot of route: ${route}${modeLabel}\n`
     );
 
     // Capture the screenshot
-    const screenshotPath = await screenshotToolService.capture(projectId, route);
+    const screenshotPath = await screenshotToolService.capture(projectId, route, fullPage);
     const filename = routeToFilename(route);
 
     if (screenshotPath) {

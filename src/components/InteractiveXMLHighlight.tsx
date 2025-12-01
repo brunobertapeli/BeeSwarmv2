@@ -18,6 +18,7 @@ interface XMLSegment {
   content?: string
   isPrintscreen?: boolean
   route?: string
+  fullPage?: boolean
 }
 
 /**
@@ -99,9 +100,9 @@ export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected, keywo
     const segments: XMLSegment[] = []
 
     // Combined pattern to match:
-    // 1. <printscreen_tool route="/path" /> or <printscreen_tool route="/path"></printscreen_tool>
+    // 1. <printscreen_tool ...attributes... /> or <printscreen_tool ...></printscreen_tool>
     // 2. Regular XML: <tagname>content</tagname>
-    const combinedPattern = /<printscreen_tool\s+route=["']([^"']+)["']\s*(?:\/>|><\/printscreen_tool>)|<(\w+)>(.*?)<\/\2>/g
+    const combinedPattern = /<printscreen_tool\s+([^>]+?)(?:\/>|><\/printscreen_tool>)|<(\w+)>(.*?)<\/\2>/g
 
     let lastIndex = 0
     let match: RegExpExecArray | null
@@ -114,11 +115,16 @@ export function InteractiveXMLHighlight({ text, onXMLClick, onXMLDetected, keywo
 
       // Check if it's a printscreen_tool match (group 1) or regular XML (groups 2,3)
       if (match[1] !== undefined) {
-        // Printscreen tool match
+        // Printscreen tool match - parse attributes
+        const attrs = match[1]
+        const routeMatch = attrs.match(/route=["']([^"']+)["']/i)
+        const fullPageMatch = attrs.match(/fullpage=["']([^"']+)["']/i)
+
         segments.push({
           text: match[0],
           isPrintscreen: true,
-          route: match[1]
+          route: routeMatch ? routeMatch[1] : '/',
+          fullPage: fullPageMatch ? fullPageMatch[1].toLowerCase() === 'true' : false
         })
       } else {
         // Regular XML match

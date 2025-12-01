@@ -17,12 +17,13 @@ class ScreenshotToolService extends EventEmitter {
   private isCapturing: Map<string, boolean> = new Map();
 
   /**
-   * Capture a full-page screenshot of a specific route
+   * Capture a screenshot of a specific route
    * @param projectId - Project identifier
    * @param route - Route to capture (e.g., "/dashboard", "/")
+   * @param fullPage - If true, captures full page; if false (default), captures viewport only
    * @returns Promise<string> - Path to the saved screenshot
    */
-  async capture(projectId: string, route: string = '/'): Promise<string | null> {
+  async capture(projectId: string, route: string = '/', fullPage: boolean = false): Promise<string | null> {
     // Prevent concurrent captures for the same project
     if (this.isCapturing.get(projectId)) {
       console.warn(`[ScreenshotTool] Already capturing for project ${projectId}`);
@@ -80,9 +81,9 @@ class ScreenshotToolService extends EventEmitter {
       await this.waitForPageReady(hiddenWindow);
       console.log(`[ScreenshotTool] Page ready`);
 
-      // Capture full-page screenshot using CDP
-      console.log(`[ScreenshotTool] Capturing with CDP...`);
-      const screenshot = await this.captureFullPage(hiddenWindow);
+      // Capture screenshot using CDP
+      console.log(`[ScreenshotTool] Capturing with CDP (fullPage: ${fullPage})...`);
+      const screenshot = await this.captureScreenshot(hiddenWindow, fullPage);
       console.log(`[ScreenshotTool] CDP capture done`);
 
       if (!screenshot) {
@@ -121,9 +122,10 @@ class ScreenshotToolService extends EventEmitter {
   }
 
   /**
-   * Capture full-page screenshot using Chrome DevTools Protocol
+   * Capture screenshot using Chrome DevTools Protocol
+   * @param fullPage - If true, captures entire page; if false, captures viewport only
    */
-  private async captureFullPage(window: BrowserWindow): Promise<Buffer | null> {
+  private async captureScreenshot(window: BrowserWindow, fullPage: boolean): Promise<Buffer | null> {
     try {
       const webContents = window.webContents;
 
@@ -133,36 +135,38 @@ class ScreenshotToolService extends EventEmitter {
       console.log(`[ScreenshotTool] Debugger attached`);
 
       try {
-        // Get page dimensions
-        console.log(`[ScreenshotTool] Getting layout metrics...`);
-        const layoutResult = await webContents.debugger.sendCommand(
-          'Page.getLayoutMetrics'
-        );
-        console.log(`[ScreenshotTool] Layout metrics:`, JSON.stringify(layoutResult));
+        if (fullPage) {
+          // Full page mode: get page dimensions and expand viewport
+          console.log(`[ScreenshotTool] Getting layout metrics for full page...`);
+          const layoutResult = await webContents.debugger.sendCommand(
+            'Page.getLayoutMetrics'
+          );
+          console.log(`[ScreenshotTool] Layout metrics:`, JSON.stringify(layoutResult));
 
-        const contentSize = (layoutResult as any).contentSize || (layoutResult as any).cssContentSize;
-        if (!contentSize) {
-          console.error(`[ScreenshotTool] No contentSize in layout metrics`);
-          return null;
+          const contentSize = (layoutResult as any).contentSize || (layoutResult as any).cssContentSize;
+          if (!contentSize) {
+            console.error(`[ScreenshotTool] No contentSize in layout metrics`);
+            return null;
+          }
+
+          const { width, height } = contentSize;
+
+          // Set viewport to full page size (with max limits to prevent memory issues)
+          const maxWidth = Math.min(width, 1920);
+          const maxHeight = Math.min(height, 10000); // Cap at 10000px height
+
+          await webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
+            width: Math.ceil(maxWidth),
+            height: Math.ceil(maxHeight),
+            deviceScaleFactor: 1,
+            mobile: false,
+          });
         }
-
-        const { width, height } = contentSize;
-
-        // Set viewport to full page size (with max limits to prevent memory issues)
-        const maxWidth = Math.min(width, 1920);
-        const maxHeight = Math.min(height, 10000); // Cap at 10000px height
-
-        await webContents.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
-          width: Math.ceil(maxWidth),
-          height: Math.ceil(maxHeight),
-          deviceScaleFactor: 1,
-          mobile: false,
-        });
 
         // Capture screenshot with CDP
         const { data } = await webContents.debugger.sendCommand('Page.captureScreenshot', {
           format: 'png',
-          captureBeyondViewport: true,
+          captureBeyondViewport: fullPage,
           fromSurface: true,
         }) as { data: string };
 
