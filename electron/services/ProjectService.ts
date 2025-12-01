@@ -1,7 +1,6 @@
 import { databaseService, Project } from './DatabaseService'
 import { templateService } from './TemplateService'
 import { templateValidator } from './TemplateValidator'
-import { portService } from './PortService'
 import { Template } from './BackendService'
 import { getCurrentUserId } from '../main'
 import { pathValidator } from '../utils/PathValidator'
@@ -45,13 +44,6 @@ class ProjectService {
       // Generate project record first to get ID (used as immutable folder name)
       const tempPath = 'temp' // Temporary, will be updated after we have the ID
 
-      console.log('🔍 Template data:', {
-        id: template.id,
-        name: template.name,
-        deployServices: template.deployServices,
-        envFiles: template.envFiles
-      })
-
       const project = databaseService.createProject({
         userId: userId, // SECURITY: Store userId with project
         name: projectName,
@@ -70,12 +62,6 @@ class ProjectService {
         projectAssetsWidgetState: null,
         whiteboardWidgetState: null,
         iconsWidgetState: null
-      })
-
-      console.log('🔍 Project created with:', {
-        id: project.id,
-        deployServices: project.deployServices,
-        envFiles: project.envFiles
       })
 
       // Now that we have project ID, generate the real path using ID as folder name
@@ -259,9 +245,6 @@ class ProjectService {
       }
     } else {
     }
-
-    // Release allocated port
-    portService.releasePort(id)
 
     // Delete from database (do this last so other services can still access project data)
     databaseService.deleteProject(id)

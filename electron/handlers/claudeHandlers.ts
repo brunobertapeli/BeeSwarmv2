@@ -286,23 +286,15 @@ export function registerClaudeHandlers(): void {
         );
 
         if (lastValidBlock?.commitHash) {
-
-          // Import and call restore function directly (not via IPC)
-          const gitHandlers = await import('./gitHandlers.js');
-
           // Small delay to ensure block is completed first
           setTimeout(async () => {
             try {
-              // Call the restore function - we need to extract it from the module
-              // Since registerGitHandlers wraps it, we'll create a new restore directly
               await performRestore(projectId, lastValidBlock.commitHash!, project.path);
             } catch (error) {
               console.error(`❌ Error reverting to checkpoint:`, error);
             }
           }, 100);
-        } else {
         }
-      } else {
       }
 
       return {
@@ -792,7 +784,8 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
       });
 
       try {
-        await processManager.stopDevServer(projectId);
+        // Force stop even if this is the current project - this is an intentional restart after Claude edits
+        await processManager.stopDevServer(projectId, true);
 
         terminalAggregator.addDevServerLine(projectId, {
           timestamp: new Date(),
@@ -854,7 +847,6 @@ async function handleClaudeCompletion(projectId: string, projectPath: string): P
           message: 'Failed to restart dev server',
         });
       }
-    } else {
     }
 
   } catch (error) {
@@ -1064,7 +1056,8 @@ async function performRestore(projectId: string, commitHash: string, projectPath
       if (processState === 'running' || processState === 'error') {
 
         try {
-          await processManager.stopDevServer(projectId);
+          // Force stop - this is an intentional restart after restore
+          await processManager.stopDevServer(projectId, true);
           await new Promise((res) => setTimeout(res, 2000)); // Wait 2s
 
           // Get deployServices from project for correct strategy (Railway vs Netlify)

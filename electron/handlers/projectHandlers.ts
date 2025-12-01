@@ -7,6 +7,9 @@ import { dependencyService } from '../services/DependencyService'
 import { getCurrentUserId, getCurrentUserEmail } from '../main'
 import { requireAuth, validateProjectOwnership, UnauthorizedError } from '../middleware/authMiddleware'
 import { claudeService } from '../services/ClaudeService'
+import { processManager } from '../services/ProcessManager'
+import { terminalService } from '../services/TerminalService'
+import { terminalAggregator } from '../services/TerminalAggregator'
 import { getEnvKeyTarget } from '../../shared/envKeyTargets'
 import fs from 'fs'
 import path from 'path'
@@ -135,19 +138,15 @@ export function registerProjectHandlers() {
       // This prevents errors when cleanup operations try to validate project ownership
       try {
         // Stop any running processes (force=true to bypass active project check)
-        const processManager = (await import('../services/ProcessManager')).processManager
         const status = processManager.getProcessStatus(projectId)
         if (status === 'running') {
           await processManager.stopDevServer(projectId, true)
         }
 
         // Destroy Claude session (if any)
-        const claudeService = (await import('../services/ClaudeService')).claudeService
         claudeService.destroySession(projectId)
 
         // Destroy terminal session (if any)
-        const terminalService = (await import('../services/TerminalService')).terminalService
-        const terminalAggregator = (await import('../services/TerminalAggregator')).terminalAggregator
         terminalService.destroySession(projectId)
         terminalAggregator.deleteBuffer(projectId)
       } catch (cleanupError) {

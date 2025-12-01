@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import axios from 'axios';
 import { getCurrentUserId } from '../main';
+import { databaseService } from '../services/DatabaseService';
 
 interface ImageData {
   id: string;
@@ -54,7 +55,6 @@ export function registerWebsiteImportHandlers(): void {
   // Check if a project is a website import and if migration is completed
   ipcMain.handle('website-import:check-status', async (_event, projectId: string) => {
     try {
-      const { databaseService } = await import('../services/DatabaseService');
       const project = databaseService.getProjectById(projectId);
 
       if (!project) {
@@ -101,7 +101,6 @@ export function registerWebsiteImportHandlers(): void {
   // Mark migration as completed
   ipcMain.handle('website-import:mark-complete', async (_event, projectId: string) => {
     try {
-      const { databaseService } = await import('../services/DatabaseService');
       const project = databaseService.getProjectById(projectId);
 
       if (!project) {

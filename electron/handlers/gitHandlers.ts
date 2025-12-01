@@ -595,7 +595,8 @@ async function restartDevServer(projectId: string, projectPath: string): Promise
     });
 
     try {
-      await processManager.stopDevServer(projectId);
+      // Force stop - this is an intentional restart after checkpoint restore
+      await processManager.stopDevServer(projectId, true);
 
       terminalAggregator.addDevServerLine(projectId, {
         timestamp: new Date(),

@@ -174,36 +174,6 @@ class TemplateService {
       throw error
     }
   }
-
-  /**
-   * Update netlify.toml with allocated Vite port (targetPort)
-   * @param projectPath - Absolute path to project root
-   * @param vitePort - Allocated Vite port number
-   */
-  updateNetlifyToml(projectPath: string, vitePort: number): void {
-    const netlifyTomlPath = path.join(projectPath, 'netlify.toml')
-
-    if (!fs.existsSync(netlifyTomlPath)) {
-      console.warn('⚠️ netlify.toml not found, skipping port update')
-      return
-    }
-
-    try {
-      let config = fs.readFileSync(netlifyTomlPath, 'utf-8')
-
-      // Replace targetPort configuration
-      // Match: targetPort = 5174, targetPort = 3000, etc.
-      config = config.replace(
-        /targetPort\s*=\s*\d+/g,
-        `targetPort = ${vitePort}`
-      )
-
-      fs.writeFileSync(netlifyTomlPath, config, 'utf-8')
-    } catch (error) {
-      console.error('❌ Failed to update netlify.toml:', error)
-      throw error
-    }
-  }
 }
 
 export const templateService = new TemplateService()
