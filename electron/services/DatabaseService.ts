@@ -93,6 +93,13 @@ export interface IconsWidgetState {
   zIndex: number
 }
 
+export interface ChatWidgetState {
+  enabled: boolean
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  zIndex: number
+}
+
 export interface ChatBlock {
   id: string
   projectId: string
@@ -413,6 +420,12 @@ class DatabaseService {
       const hasIconsWidgetState = tableInfo.some(col => col.name === 'iconsWidgetState')
       if (!hasIconsWidgetState) {
         this.db.exec('ALTER TABLE projects ADD COLUMN iconsWidgetState TEXT')
+      }
+
+      // Migration 24: Add chatWidgetState column if it doesn't exist
+      const hasChatWidgetState = tableInfo.some(col => col.name === 'chatWidgetState')
+      if (!hasChatWidgetState) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN chatWidgetState TEXT')
       }
 
       // Future migrations can be added here
@@ -992,6 +1005,47 @@ class DatabaseService {
       return JSON.parse(project.iconsWidgetState) as IconsWidgetState
     } catch (error) {
       console.error('❌ Failed to parse Icons widget state:', error)
+      return null
+    }
+  }
+
+  /**
+   * Save Chat widget state for a project
+   */
+  saveChatWidgetState(projectId: string, widgetState: ChatWidgetState): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save Chat widget state after database closed - ignoring')
+      return
+    }
+
+    const stateJson = JSON.stringify(widgetState)
+    const sql = 'UPDATE projects SET chatWidgetState = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(stateJson, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save Chat widget state:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get Chat widget state for a project
+   */
+  getChatWidgetState(projectId: string): ChatWidgetState | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!project?.chatWidgetState) {
+      return null
+    }
+
+    try {
+      return JSON.parse(project.chatWidgetState) as ChatWidgetState
+    } catch (error) {
+      console.error('❌ Failed to parse Chat widget state:', error)
       return null
     }
   }

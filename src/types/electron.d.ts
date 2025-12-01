@@ -513,6 +513,25 @@ export interface ElectronAPI {
       } | null;
       error?: string;
     }>;
+    saveChatWidgetState: (id: string, widgetState: {
+      enabled: boolean;
+      position: { x: number; y: number };
+      size: { width: number; height: number };
+      zIndex: number;
+    }) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    getChatWidgetState: (id: string) => Promise<{
+      success: boolean;
+      widgetState?: {
+        enabled: boolean;
+        position: { x: number; y: number };
+        size: { width: number; height: number };
+        zIndex: number;
+      } | null;
+      error?: string;
+    }>;
     getAssetsStructure: (id: string) => Promise<{
       success: boolean;
       assets?: Array<{

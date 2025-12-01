@@ -171,8 +171,18 @@ interface LayoutStoreState {
   iconsWidgetZIndex: number;
   loadIconsWidgetState: (projectId: string) => Promise<void>;
 
+  // Chat widget state
+  chatWidgetEnabled: boolean;
+  setChatWidgetEnabled: (enabled: boolean) => void;
+  chatWidgetPosition: { x: number; y: number };
+  setChatWidgetPosition: (position: { x: number; y: number }) => void;
+  chatWidgetSize: { width: number; height: number };
+  setChatWidgetSize: (size: { width: number; height: number }) => void;
+  chatWidgetZIndex: number;
+  loadChatWidgetState: (projectId: string) => Promise<void>;
+
   // Unified bring to front for all widgets and sticky notes
-  bringWidgetToFront: (widgetType: 'kanban' | 'analytics' | 'projectAssets' | 'whiteboard' | 'icons' | 'stickyNote', stickyNoteId?: string) => void;
+  bringWidgetToFront: (widgetType: 'kanban' | 'analytics' | 'projectAssets' | 'whiteboard' | 'icons' | 'chat' | 'stickyNote', stickyNoteId?: string) => void;
 
   // Helper to check if in specific state
   isState: (state: LayoutState) => boolean;
@@ -340,6 +350,27 @@ const debouncedSaveIconsWidgetState = (projectId: string, widgetState: {
   }, 500); // 500ms debounce
 };
 
+// Debounce helper for saving Chat widget state
+let saveChatTimeout: NodeJS.Timeout | null = null;
+const debouncedSaveChatWidgetState = (projectId: string, widgetState: {
+  enabled: boolean;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  zIndex: number;
+}) => {
+  if (saveChatTimeout) {
+    clearTimeout(saveChatTimeout);
+  }
+
+  saveChatTimeout = setTimeout(async () => {
+    try {
+      await window.electronAPI?.projects.saveChatWidgetState(projectId, widgetState);
+    } catch (error) {
+      console.error('Failed to save Chat widget state:', error);
+    }
+  }, 500); // 500ms debounce
+};
+
 export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   // State
   layoutState: 'DEFAULT', // Start in DEFAULT state
@@ -389,6 +420,12 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   iconsWidgetPosition: { x: 5, y: 48 }, // 5px from left, below header (40px + 3px padding + 5px)
   iconsWidgetSize: { width: 420, height: 298 },
   iconsWidgetZIndex: 54,
+
+  // Chat widget initial state
+  chatWidgetEnabled: false,
+  chatWidgetPosition: { x: 5, y: 48 }, // 5px from left, below header
+  chatWidgetSize: { width: 420, height: 550 },
+  chatWidgetZIndex: 55,
 
   // Setters
   setLayoutState: (state) => set({ layoutState: state }),
@@ -931,6 +968,80 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
     }
   },
 
+  // Chat widget functions
+  setChatWidgetEnabled: (enabled) => {
+    set({ chatWidgetEnabled: enabled });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveChatWidgetState(currentProjectId, {
+        enabled,
+        position: state.chatWidgetPosition,
+        size: state.chatWidgetSize,
+        zIndex: state.chatWidgetZIndex
+      });
+    }
+  },
+
+  setChatWidgetPosition: (position) => {
+    set({ chatWidgetPosition: position });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveChatWidgetState(currentProjectId, {
+        enabled: state.chatWidgetEnabled,
+        position,
+        size: state.chatWidgetSize,
+        zIndex: state.chatWidgetZIndex
+      });
+    }
+  },
+
+  setChatWidgetSize: (size) => {
+    set({ chatWidgetSize: size });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveChatWidgetState(currentProjectId, {
+        enabled: state.chatWidgetEnabled,
+        position: state.chatWidgetPosition,
+        size,
+        zIndex: state.chatWidgetZIndex
+      });
+    }
+  },
+
+  loadChatWidgetState: async (projectId: string) => {
+    try {
+      const result = await window.electronAPI?.projects.getChatWidgetState(projectId);
+      if (result?.success && result.widgetState) {
+        set({
+          chatWidgetEnabled: result.widgetState.enabled,
+          chatWidgetPosition: result.widgetState.position,
+          chatWidgetSize: result.widgetState.size,
+          chatWidgetZIndex: result.widgetState.zIndex ?? 55
+        });
+      } else {
+        // Reset to defaults if no saved state
+        set({
+          chatWidgetEnabled: false,
+          chatWidgetPosition: { x: 5, y: 48 },
+          chatWidgetSize: { width: 420, height: 550 },
+          chatWidgetZIndex: 55
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load Chat widget state:', error);
+      // Reset to defaults on error
+      set({
+        chatWidgetEnabled: false,
+        chatWidgetPosition: { x: 5, y: 48 },
+        chatWidgetSize: { width: 420, height: 550 },
+        chatWidgetZIndex: 55
+      });
+    }
+  },
+
   // Unified bring to front for all widgets and sticky notes
   bringWidgetToFront: (widgetType, stickyNoteId) => {
     const state = get();
@@ -943,6 +1054,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       { type: 'projectAssets', zIndex: state.projectAssetsWidgetZIndex },
       { type: 'whiteboard', zIndex: state.whiteboardWidgetZIndex },
       { type: 'icons', zIndex: state.iconsWidgetZIndex },
+      { type: 'chat', zIndex: state.chatWidgetZIndex },
       ...state.stickyNotes.map(note => ({ type: 'stickyNote', id: note.id, zIndex: note.zIndex }))
     ];
 
@@ -965,6 +1077,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         else if (item.type === 'projectAssets') set({ projectAssetsWidgetZIndex: normalizedZ });
         else if (item.type === 'whiteboard') set({ whiteboardWidgetZIndex: normalizedZ });
         else if (item.type === 'icons') set({ iconsWidgetZIndex: normalizedZ });
+        else if (item.type === 'chat') set({ chatWidgetZIndex: normalizedZ });
         else if (item.type === 'stickyNote' && item.id) {
           set((s) => ({
             stickyNotes: s.stickyNotes.map(n => n.id === item.id ? { ...n, zIndex: normalizedZ } : n)
@@ -1024,6 +1137,16 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
           enabled: state.iconsWidgetEnabled,
           position: state.iconsWidgetPosition,
           size: state.iconsWidgetSize,
+          zIndex: newTopZ
+        });
+      }
+    } else if (widgetType === 'chat') {
+      set({ chatWidgetZIndex: newTopZ });
+      if (currentProjectId) {
+        debouncedSaveChatWidgetState(currentProjectId, {
+          enabled: state.chatWidgetEnabled,
+          position: state.chatWidgetPosition,
+          size: state.chatWidgetSize,
           zIndex: newTopZ
         });
       }

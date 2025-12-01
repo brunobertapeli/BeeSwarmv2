@@ -23,7 +23,8 @@ import {
   Camera,
   FolderOpen,
   Github,
-  PenTool
+  PenTool,
+  MessageSquare
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore, type DeploymentStatus } from '../store/appStore'
@@ -84,7 +85,7 @@ function ActionBar({
   onRefreshEnvCount
 }: ActionBarProps) {
   const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, modalFreezeActive, setStatusSheetExpanded, bringWidgetToFront } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, chatWidgetEnabled, setChatWidgetEnabled, modalFreezeActive, setStatusSheetExpanded, bringWidgetToFront } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
@@ -361,11 +362,19 @@ function ActionBar({
           toggleWhiteboard()
         }
       }
+
+      // C - Toggle Chat Widget (only in TOOLS mode, and not when modal is open)
+      if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+        if (layoutState === 'TOOLS') {
+          e.preventDefault()
+          toggleChat()
+        }
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, whiteboardWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setWhiteboardWidgetEnabled, setEditModeEnabled, modalFreezeActive]) // Re-run when modal state changes
+  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, whiteboardWidgetEnabled, chatWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setWhiteboardWidgetEnabled, setChatWidgetEnabled, setEditModeEnabled, modalFreezeActive]) // Re-run when modal state changes
 
   // Listen for global shortcuts from Electron main process
   useEffect(() => {
@@ -799,6 +808,21 @@ function ActionBar({
     toast.info(
       newState ? 'Whiteboard Enabled' : 'Whiteboard Disabled',
       newState ? 'Whiteboard widget shown' : 'Whiteboard widget hidden'
+    )
+  }
+
+  const toggleChat = () => {
+    // Only allow in TOOLS mode
+    if (layoutState !== 'TOOLS') return
+
+    const newState = !chatWidgetEnabled
+    setChatWidgetEnabled(newState)
+    if (newState) {
+      bringWidgetToFront('chat')
+    }
+    toast.info(
+      newState ? 'AI Chat Enabled' : 'AI Chat Disabled',
+      newState ? 'AI Chat widget shown' : 'AI Chat widget hidden'
     )
   }
 
@@ -1542,6 +1566,27 @@ function ActionBar({
                       />
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle Whiteboard (W)
+                      </span>
+                    </motion.button>
+
+                    <motion.button
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2, delay: 0.35 }}
+                      onClick={toggleChat}
+                      className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
+                    >
+                      <MessageSquare
+                        size={15}
+                        className={`transition-colors ${
+                          chatWidgetEnabled
+                            ? 'text-cyan-500'
+                            : 'text-gray-400 hover:text-cyan-400'
+                        }`}
+                      />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                        Toggle AI Chat (C)
                       </span>
                     </motion.button>
                   </motion.div>

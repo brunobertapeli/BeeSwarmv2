@@ -21,6 +21,7 @@ import AnalyticsWidget from './AnalyticsWidget'
 import ProjectAssetsWidget from './ProjectAssetsWidget'
 import WhiteboardWidget from './WhiteboardWidget'
 import IconsWidget from './IconsWidget'
+import ChatWidget from './ChatWidget'
 import GitHubSheet from './GitHubSheet'
 import { ModalPortal } from './ModalPortal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
@@ -52,7 +53,7 @@ function ProjectView() {
     setSelectedDevice,
   } = useAppStore()
 
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState, whiteboardWidgetEnabled, loadWhiteboardWidgetState, iconsWidgetEnabled, setIconsWidgetEnabled, loadIconsWidgetState } = useLayoutStore()
+  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState, whiteboardWidgetEnabled, loadWhiteboardWidgetState, iconsWidgetEnabled, setIconsWidgetEnabled, loadIconsWidgetState, chatWidgetEnabled, loadChatWidgetState } = useLayoutStore()
   const toast = useToast()
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'environment' | 'deployment'>('general')
   const [projects, setProjects] = useState<Project[]>([])
@@ -149,8 +150,9 @@ function ProjectView() {
       loadProjectAssetsWidgetState(currentProjectId)
       loadWhiteboardWidgetState(currentProjectId)
       loadIconsWidgetState(currentProjectId)
+      loadChatWidgetState(currentProjectId)
     }
-  }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState, loadProjectAssetsWidgetState, loadWhiteboardWidgetState, loadIconsWidgetState])
+  }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState, loadProjectAssetsWidgetState, loadWhiteboardWidgetState, loadIconsWidgetState, loadChatWidgetState])
 
   // Handle freeze frame when UserProfile opens/closes
   useEffect(() => {
@@ -871,6 +873,9 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Icons Widget */}
       {iconsWidgetEnabled && layoutState === 'TOOLS' && <IconsWidget />}
+
+      {/* Chat Widget */}
+      {chatWidgetEnabled && layoutState === 'TOOLS' && <ChatWidget />}
 
       {/* Sticky Notes */}
       {layoutState === 'TOOLS' && stickyNotes.map((note) => (

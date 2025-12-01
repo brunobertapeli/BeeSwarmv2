@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { projectService } from '../services/ProjectService'
 import { backendService } from '../services/BackendService'
-import { databaseService, KanbanState, StickyNotesState, AnalyticsWidgetState, WhiteboardWidgetState } from '../services/DatabaseService'
+import { databaseService, KanbanState, StickyNotesState, AnalyticsWidgetState, WhiteboardWidgetState, ChatWidgetState } from '../services/DatabaseService'
 import { envService } from '../services/EnvService'
 import { dependencyService } from '../services/DependencyService'
 import { getCurrentUserId, getCurrentUserEmail } from '../main'
@@ -818,6 +818,63 @@ export function registerProjectHandlers() {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get Icons widget state'
+      }
+    }
+  })
+
+  // Save Chat widget state
+  ipcMain.handle('project:save-chat-widget-state', async (_event, projectId: string, widgetState: ChatWidgetState) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      databaseService.saveChatWidgetState(projectId, widgetState)
+
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('❌ Error saving Chat widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save Chat widget state'
+      }
+    }
+  })
+
+  // Get Chat widget state
+  ipcMain.handle('project:get-chat-widget-state', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      const widgetState = databaseService.getChatWidgetState(projectId)
+
+      return {
+        success: true,
+        widgetState
+      }
+    } catch (error) {
+      console.error('❌ Error getting Chat widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Chat widget state'
       }
     }
   })
