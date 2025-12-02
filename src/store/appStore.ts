@@ -165,8 +165,8 @@ export const initAuth = async () => {
           return
         }
 
-        // All validations passed, restore session
-        await window.electronAPI?.auth.restoreSession(user.id, user.email)
+        // All validations passed, restore session with access token for AI features
+        await window.electronAPI?.auth.restoreSession(user.id, user.email, session?.access_token)
 
         // Validate user plan against MongoDB on startup
         try {

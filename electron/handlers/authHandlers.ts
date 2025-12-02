@@ -148,6 +148,9 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
         session.access_token
       )
 
+      // Store the auth token for authenticated AI requests
+      backendService.setAuthToken(backendToken)
+
       const userResult = {
         id: user.id,
         email: userData.email,
@@ -253,9 +256,15 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
   })
 
   // Restore user session (called when session is restored from localStorage)
-  ipcMain.handle('auth:restore-session', async (_event, userId: string, userEmail?: string) => {
+  ipcMain.handle('auth:restore-session', async (_event, userId: string, userEmail?: string, accessToken?: string) => {
     try {
       setCurrentUser(userId, userEmail)
+
+      // If access token is provided, set it for authenticated AI requests
+      if (accessToken) {
+        backendService.setAuthToken(accessToken)
+      }
+
       return { success: true }
     } catch (error: any) {
       return { success: false, error: error.message }

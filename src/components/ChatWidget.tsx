@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
-import { X, Send, ChevronDown, Plus, Sparkles, User, Bot, Clock, Trash2, MessageSquare, Image as ImageIcon, Download, FolderPlus, ExternalLink, Copy, Check } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { X, Send, ChevronDown, Plus, Sparkles, User, Bot, Clock, Trash2, MessageSquare, Image as ImageIcon, FolderPlus, ExternalLink, Copy, Check, AlertCircle, Lock, Crown, FolderOpen, Play } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLayoutStore } from '../store/layoutStore'
+import { useAppStore } from '../store/appStore'
 import bgImage from '../assets/images/bg.jpg'
 import noiseBgImage from '../assets/images/noise_bg.png'
 
@@ -14,6 +15,7 @@ interface Message {
   timestamp: Date
   type?: 'text' | 'image'
   imageUrl?: string
+  imageLocalPath?: string // Local file path for Show in Finder, Open, etc.
 }
 
 interface Conversation {
@@ -26,71 +28,22 @@ interface Conversation {
   model: string
 }
 
-// Placeholder conversations for demo
-const PLACEHOLDER_CONVERSATIONS: Conversation[] = [
-  {
-    id: '1',
-    title: 'Landing page hero section',
-    preview: 'Create a modern hero section with...',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 mins ago
-    modelCategory: 'chat',
-    model: 'claude-sonnet-4-5-20250929',
-    messages: [
-      { id: '1a', role: 'user', content: 'Create a modern hero section with a gradient background and animated text', timestamp: new Date(Date.now() - 1000 * 60 * 35) },
-      { id: '1b', role: 'assistant', content: 'I\'ll create a stunning hero section with a smooth gradient and text animations. Here\'s what I\'m implementing:\n\n1. A dynamic gradient background transitioning from purple to blue\n2. Fade-in animations for the headline\n3. A floating CTA button with hover effects\n\nLet me add this to your code...', timestamp: new Date(Date.now() - 1000 * 60 * 34) },
-      { id: '1c', role: 'user', content: 'Perfect! Can you also add a subtle particle effect?', timestamp: new Date(Date.now() - 1000 * 60 * 30) },
-    ]
-  },
-  {
-    id: '2',
-    title: 'API integration help',
-    preview: 'How do I connect to the...',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-    modelCategory: 'chat',
-    model: 'claude-opus-4-1-20250805',
-    messages: [
-      { id: '2a', role: 'user', content: 'How do I connect to the Stripe API for payments?', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2) },
-      { id: '2b', role: 'assistant', content: 'I\'ll help you integrate Stripe for payments. First, you\'ll need to:\n\n1. Install the Stripe SDK: `npm install stripe @stripe/stripe-js`\n2. Set up your API keys in environment variables\n3. Create a payment intent endpoint\n\nWould you like me to implement this now?', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2 + 1000 * 60) },
-    ]
-  },
-  {
-    id: '3',
-    title: 'App icon design',
-    preview: 'Generate a modern app icon...',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-    modelCategory: 'images',
-    model: 'dall-e-3',
-    messages: [
-      { id: '3a', role: 'user', content: 'Generate a modern app icon for a productivity app, minimalist style', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24) },
-      { id: '3b', role: 'assistant', content: 'Here\'s your generated image:', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 + 1000 * 30), type: 'image', imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=512&h=512&fit=crop' },
-    ]
-  },
-  {
-    id: '4',
-    title: 'Performance optimization',
-    preview: 'My app is running slow...',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3), // 3 days ago
-    modelCategory: 'chat',
-    model: 'claude-haiku-4-5-20251001',
-    messages: [
-      { id: '4a', role: 'user', content: 'My app is running slow, can you help optimize it?', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3) },
-      { id: '4b', role: 'assistant', content: 'Let me analyze your codebase for performance issues. I\'ll check for:\n\n1. Unnecessary re-renders\n2. Large bundle sizes\n3. Unoptimized images\n4. Memory leaks\n\nRunning analysis...', timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3 + 1000 * 60) },
-    ]
-  },
-]
-
 type ModelCategory = 'chat' | 'images'
 
-const CHAT_MODELS = [
-  { value: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5', description: 'Fast & capable' },
-  { value: 'claude-opus-4-1-20250805', displayName: 'Opus 4.1', description: 'Most powerful' },
-  { value: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', description: 'Lightning fast' },
-]
+interface AIModel {
+  id: string
+  displayName: string
+  description: string
+  provider: string
+}
 
-const IMAGE_MODELS = [
-  { value: 'dall-e-3', displayName: 'DALL-E 3', description: 'Best quality' },
-  { value: 'stable-diffusion-xl', displayName: 'SDXL', description: 'Fast & flexible' },
-  { value: 'midjourney-v6', displayName: 'Midjourney', description: 'Artistic style' },
+// Fallback models when backend is unavailable
+const FALLBACK_CHAT_MODELS: AIModel[] = [
+  { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini', description: 'Fast & efficient', provider: 'openai' },
+  { id: 'gpt-4.1', displayName: 'GPT-4.1', description: 'Most powerful', provider: 'openai' },
+]
+const FALLBACK_IMAGE_MODELS: AIModel[] = [
+  { id: 'gpt-image-1', displayName: 'GPT Image', description: 'Best quality', provider: 'openai' },
 ]
 
 function ChatWidget() {
@@ -104,29 +57,56 @@ function ChatWidget() {
     bringWidgetToFront
   } = useLayoutStore()
 
+  const { currentProjectId, user } = useAppStore()
+
   const [isDragging, setIsDragging] = useState(false)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isResizing, setIsResizing] = useState(false)
   const [resizeDirection, setResizeDirection] = useState<ResizeDirection>(null)
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 })
 
+  // Models state - fetched from backend
+  const [chatModels, setChatModels] = useState<AIModel[]>(FALLBACK_CHAT_MODELS)
+  const [imageModels, setImageModels] = useState<AIModel[]>(FALLBACK_IMAGE_MODELS)
+  const [modelsLoading, setModelsLoading] = useState(true)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+
   // Chat state
-  const [conversations, setConversations] = useState<Conversation[]>(PLACEHOLDER_CONVERSATIONS)
-  const [activeConversation, setActiveConversation] = useState<Conversation | null>(PLACEHOLDER_CONVERSATIONS[0])
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [activeConversation, setActiveConversation] = useState<Conversation | null>(null)
   const [message, setMessage] = useState('')
   const [modelCategory, setModelCategory] = useState<ModelCategory>('chat')
-  const [selectedChatModel, setSelectedChatModel] = useState('claude-sonnet-4-5-20250929')
-  const [selectedImageModel, setSelectedImageModel] = useState('dall-e-3')
+  const [selectedChatModel, setSelectedChatModel] = useState('gpt-4.1-mini')
+  const [selectedImageModel, setSelectedImageModel] = useState('gpt-image-1')
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [savedToAssetsId, setSavedToAssetsId] = useState<string | null>(null)
+  const [streamingContent, setStreamingContent] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [projectPath, setProjectPath] = useState<string | null>(null)
 
   // Get current model based on category
-  const currentModels = modelCategory === 'chat' ? CHAT_MODELS : IMAGE_MODELS
+  const currentModels = modelCategory === 'chat' ? chatModels : imageModels
   const selectedModel = modelCategory === 'chat' ? selectedChatModel : selectedImageModel
   const setSelectedModel = modelCategory === 'chat' ? setSelectedChatModel : setSelectedImageModel
-  const currentModelDisplay = currentModels.find(m => m.value === selectedModel)?.displayName || 'Select'
+  // Show first model's name as fallback if current selection not found
+  const currentModelDisplay = currentModels.find(m => m.id === selectedModel)?.displayName
+    || currentModels[0]?.displayName
+    || (modelCategory === 'chat' ? 'GPT-4.1 Mini' : 'GPT Image')
+
+  // Check if user has access to current feature based on plan
+  const userPlan = user?.plan || 'free'
+  const hasChatAccess = userPlan === 'plus' || userPlan === 'premium'
+  const hasImageAccess = userPlan === 'premium'
+  const hasCurrentFeatureAccess = modelCategory === 'chat' ? hasChatAccess : hasImageAccess
+  const requiredPlan = modelCategory === 'chat' ? 'Plus' : 'Premium'
+
+  // Handle upgrade click - open pricing page
+  const handleUpgrade = async () => {
+    await window.electronAPI?.shell?.openExternal('https://www.codedeckai.com/#pricing')
+  }
 
   const widgetRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
@@ -175,6 +155,176 @@ function ChatWidget() {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showModelDropdown])
+
+  // Fetch models from backend on mount
+  useEffect(() => {
+    const fetchModels = async () => {
+      try {
+        setModelsLoading(true)
+        setModelsError(null)
+        const result = await window.electronAPI?.chatWidget?.getModels()
+        if (result?.success && result.models) {
+          setChatModels(result.models.chat || FALLBACK_CHAT_MODELS)
+          setImageModels(result.models.images || FALLBACK_IMAGE_MODELS)
+          // Set first model as default if available
+          if (result.models.chat?.length > 0) {
+            setSelectedChatModel(result.models.chat[0].id)
+          }
+          if (result.models.images?.length > 0) {
+            setSelectedImageModel(result.models.images[0].id)
+          }
+        }
+      } catch (err: any) {
+        console.error('Failed to fetch models:', err)
+        setModelsError(err.message || 'Failed to load models')
+      } finally {
+        setModelsLoading(false)
+      }
+    }
+    fetchModels()
+  }, [])
+
+  // Load conversations and project path when projectId changes
+  useEffect(() => {
+    const loadConversations = async () => {
+      if (!currentProjectId) {
+        setConversations([])
+        setActiveConversation(null)
+        setProjectPath(null)
+        return
+      }
+
+      try {
+        // Get project path
+        const projectResult = await window.electronAPI?.projects?.getById(currentProjectId)
+        if (projectResult?.success && projectResult.project?.path) {
+          setProjectPath(projectResult.project.path)
+        }
+
+        // Load conversations from SQLite
+        const result = await window.electronAPI?.chatWidget?.getConversations(currentProjectId)
+        if (result?.success && result.conversations) {
+          // Convert stored conversations to local format
+          const loadedConversations: Conversation[] = await Promise.all(
+            result.conversations.map(async (c: any) => {
+              // Parse messages from JSON string if needed
+              const messages = typeof c.messages === 'string'
+                ? JSON.parse(c.messages)
+                : (c.messages || [])
+
+              // Convert timestamp numbers back to Date objects and load images
+              const parsedMessages = await Promise.all(
+                messages.map(async (m: any) => {
+                  const msg: Message = {
+                    ...m,
+                    timestamp: new Date(m.timestamp)
+                  }
+
+                  // For image messages, reload the image from disk if it exists
+                  if (m.type === 'image' && m.imageLocalPath) {
+                    try {
+                      const imageData = await window.electronAPI?.files?.readFileAsBase64(m.imageLocalPath)
+                      if (imageData) {
+                        msg.imageUrl = `data:image/png;base64,${imageData}`
+                      }
+                    } catch (err) {
+                      // Image file might have been deleted - that's ok
+                      console.log('Image file not found:', m.imageLocalPath)
+                    }
+                  }
+
+                  return msg
+                })
+              )
+
+              return {
+                id: c.id,
+                title: c.title,
+                preview: parsedMessages.length > 0
+                  ? parsedMessages[parsedMessages.length - 1].content?.slice(0, 40) + '...'
+                  : '',
+                timestamp: new Date(c.updatedAt),
+                messages: parsedMessages,
+                modelCategory: c.modelCategory || 'chat',
+                model: c.model || 'gpt-4.1-mini'
+              }
+            })
+          )
+          setConversations(loadedConversations)
+
+          // Select the most recent conversation if none is active
+          if (loadedConversations.length > 0 && !activeConversation) {
+            const mostRecent = loadedConversations[0]
+            setActiveConversation(mostRecent)
+            // Restore the model category and model from the conversation
+            setModelCategory(mostRecent.modelCategory)
+            if (mostRecent.modelCategory === 'chat') {
+              setSelectedChatModel(mostRecent.model)
+            } else {
+              setSelectedImageModel(mostRecent.model)
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error('Failed to load conversations:', err)
+      }
+    }
+    loadConversations()
+  }, [currentProjectId])
+
+  // Set up stream listeners
+  useEffect(() => {
+    const handleStreamChunk = (chunk: string) => {
+      setStreamingContent(prev => prev + chunk)
+    }
+
+    const handleStreamDone = () => {
+      // Finalize the streamed message
+      setStreamingContent(prev => {
+        if (prev && activeConversation) {
+          const aiMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: prev,
+            timestamp: new Date(),
+            type: 'text'
+          }
+
+          const updatedConversation = {
+            ...activeConversation,
+            messages: [...activeConversation.messages, aiMessage]
+          }
+
+          setActiveConversation(updatedConversation)
+          setConversations(convs => convs.map(c => c.id === activeConversation.id ? updatedConversation : c))
+
+          // Save to database
+          window.electronAPI?.chatWidget?.updateConversation(
+            activeConversation.id,
+            updatedConversation.title,
+            updatedConversation.messages
+          ).catch(console.error)
+        }
+        return ''
+      })
+      setIsTyping(false)
+    }
+
+    const handleStreamError = (errorMsg: string) => {
+      setError(errorMsg)
+      setIsTyping(false)
+      setStreamingContent('')
+    }
+
+    // Register listeners
+    window.electronAPI?.chatWidget?.onStreamChunk(handleStreamChunk)
+    window.electronAPI?.chatWidget?.onStreamDone(handleStreamDone)
+    window.electronAPI?.chatWidget?.onStreamError(handleStreamError)
+
+    return () => {
+      window.electronAPI?.chatWidget?.removeStreamListeners()
+    }
+  }, [activeConversation])
 
   const handleResizeStart = (e: React.MouseEvent, direction: ResizeDirection) => {
     e.preventDefault()
@@ -272,7 +422,9 @@ function ChatWidget() {
   }, [isDragging, isResizing, dragOffset, resizeDirection, resizeStart, chatWidgetPosition, chatWidgetSize, setChatWidgetPosition, setChatWidgetSize])
 
   const handleSend = async () => {
-    if (!message.trim()) return
+    if (!message.trim() || !hasCurrentFeatureAccess) return
+
+    setError(null)
 
     const newMessage: Message = {
       id: Date.now().toString(),
@@ -280,6 +432,8 @@ function ChatWidget() {
       content: message.trim(),
       timestamp: new Date()
     }
+
+    let currentConversation = activeConversation
 
     if (activeConversation) {
       // Add to existing conversation
@@ -291,10 +445,18 @@ function ChatWidget() {
       }
       setActiveConversation(updatedConversation)
       setConversations(prev => prev.map(c => c.id === activeConversation.id ? updatedConversation : c))
+      currentConversation = updatedConversation
+
+      // Update in database
+      window.electronAPI?.chatWidget?.updateConversation(
+        activeConversation.id,
+        updatedConversation.title,
+        updatedConversation.messages
+      ).catch(console.error)
     } else {
       // Create new conversation
       const newConversation: Conversation = {
-        id: Date.now().toString(),
+        id: Date.now().toString(), // Temporary ID until we get the real one from DB
         title: message.trim().slice(0, 30) + (message.length > 30 ? '...' : ''),
         preview: message.trim().slice(0, 40) + '...',
         timestamp: new Date(),
@@ -304,42 +466,95 @@ function ChatWidget() {
       }
       setActiveConversation(newConversation)
       setConversations(prev => [newConversation, ...prev])
+      currentConversation = newConversation
+
+      // Save to database and get the real ID
+      if (currentProjectId) {
+        try {
+          const result = await window.electronAPI?.chatWidget?.createConversation(
+            currentProjectId,
+            newConversation.title,
+            newConversation.messages,
+            newConversation.modelCategory,
+            newConversation.model
+          )
+          if (result?.success && result.conversation?.id) {
+            // Update local state with the database-generated ID
+            const dbId = result.conversation.id
+            const updatedConv = { ...newConversation, id: dbId }
+            setActiveConversation(updatedConv)
+            setConversations(prev => prev.map(c => c.id === newConversation.id ? updatedConv : c))
+            currentConversation = updatedConv
+          }
+        } catch (err) {
+          console.error('Failed to create conversation:', err)
+        }
+      }
     }
 
+    const userPrompt = message.trim()
     setMessage('')
-
-    // Simulate AI response
     setIsTyping(true)
-    setTimeout(() => {
-      const aiResponse: Message = modelCategory === 'images'
-        ? {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: 'Here\'s your generated image:',
-            timestamp: new Date(),
-            type: 'image',
-            // Placeholder image URL - will be replaced with actual generated image
-            imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=512&h=512&fit=crop'
-          }
-        : {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: 'This is a placeholder response. The AI chat functionality will be implemented soon. For now, you can see how the interface works!',
-            timestamp: new Date(),
-            type: 'text'
-          }
 
-      setActiveConversation(prev => {
-        if (!prev) return prev
-        const updated = {
-          ...prev,
-          messages: [...prev.messages, aiResponse]
+    try {
+      if (modelCategory === 'images') {
+        // Image generation - direct response, not streaming
+        if (!projectPath) {
+          throw new Error('No project path available for saving images')
         }
-        setConversations(convs => convs.map(c => c.id === prev.id ? updated : c))
-        return updated
-      })
+
+        const result = await window.electronAPI?.chatWidget?.generateImage(
+          projectPath,
+          userPrompt,
+          '1024x1024' // Default size
+        )
+
+        if (!result?.success) {
+          throw new Error(result?.error || 'Image generation failed')
+        }
+
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: 'Here\'s your generated image:',
+          timestamp: new Date(),
+          type: 'image',
+          imageUrl: result.imageDataUrl, // Use base64 data URL for display
+          imageLocalPath: result.localPath // Store local path for file operations
+        }
+
+        const updatedConversation = {
+          ...currentConversation!,
+          messages: [...currentConversation!.messages, aiResponse]
+        }
+
+        setActiveConversation(updatedConversation)
+        setConversations(convs => convs.map(c => c.id === currentConversation!.id ? updatedConversation : c))
+
+        // Save to database
+        window.electronAPI?.chatWidget?.updateConversation(
+          currentConversation!.id,
+          updatedConversation.title,
+          updatedConversation.messages
+        ).catch(console.error)
+
+        setIsTyping(false)
+      } else {
+        // Chat - streaming response
+        const messagesToSend = currentConversation!.messages.map(m => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content
+        }))
+
+        // Start streaming - chunks will be handled by the stream listeners
+        await window.electronAPI?.chatWidget?.chat(messagesToSend, selectedModel)
+        // Note: isTyping will be set to false by handleStreamDone or handleStreamError
+      }
+    } catch (err: any) {
+      console.error('AI request failed:', err)
+      setError(err.message || 'Request failed')
       setIsTyping(false)
-    }, 1500)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -354,11 +569,17 @@ function ChatWidget() {
     setMessage('')
   }
 
-  const deleteConversation = (id: string, e: React.MouseEvent) => {
+  const deleteConversation = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     setConversations(prev => prev.filter(c => c.id !== id))
     if (activeConversation?.id === id) {
       setActiveConversation(null)
+    }
+    // Delete from database
+    try {
+      await window.electronAPI?.chatWidget?.deleteConversation(id)
+    } catch (err) {
+      console.error('Failed to delete conversation:', err)
     }
   }
 
@@ -521,40 +742,84 @@ function ChatWidget() {
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 flex items-center justify-center mb-4 relative">
                     <Sparkles size={28} className="text-cyan-400" />
                     <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg bg-dark-card border border-cyan-500/30 flex items-center justify-center">
-                      <Bot size={12} className="text-cyan-400" />
+                      {hasCurrentFeatureAccess ? (
+                        <Bot size={12} className="text-cyan-400" />
+                      ) : (
+                        <Lock size={12} className="text-cyan-400" />
+                      )}
                     </div>
                   </div>
                   <h4 className="text-lg font-semibold text-gray-200 mb-1">
                     Chat with <span className="text-cyan-400">{currentModelDisplay}</span>
                   </h4>
-                  <p className="text-sm text-gray-500 max-w-[260px] leading-relaxed">
-                    Ask anything about your project — code, design, debugging, or ideas. I'm here to help.
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-2 mt-4">
-                    <span className="px-2 py-1 text-[10px] bg-cyan-500/10 text-cyan-400/70 rounded-full border border-cyan-500/20">Code review</span>
-                    <span className="px-2 py-1 text-[10px] bg-cyan-500/10 text-cyan-400/70 rounded-full border border-cyan-500/20">Debug issues</span>
-                    <span className="px-2 py-1 text-[10px] bg-cyan-500/10 text-cyan-400/70 rounded-full border border-cyan-500/20">Explain code</span>
-                  </div>
+                  {hasCurrentFeatureAccess ? (
+                    <>
+                      <p className="text-sm text-gray-500 max-w-[260px] leading-relaxed">
+                        Ask anything about your project — code, design, debugging, or ideas. I'm here to help.
+                      </p>
+                      <div className="flex flex-wrap justify-center gap-2 mt-4">
+                        <span className="px-2 py-1 text-[10px] bg-cyan-500/10 text-cyan-400/70 rounded-full border border-cyan-500/20">Code review</span>
+                        <span className="px-2 py-1 text-[10px] bg-cyan-500/10 text-cyan-400/70 rounded-full border border-cyan-500/20">Debug issues</span>
+                        <span className="px-2 py-1 text-[10px] bg-cyan-500/10 text-cyan-400/70 rounded-full border border-cyan-500/20">Explain code</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-500 max-w-[260px] leading-relaxed mb-4">
+                        Upgrade to <span className="text-cyan-400 font-medium">{requiredPlan}</span> to unlock AI chat and get help with your code.
+                      </p>
+                      <button
+                        onClick={handleUpgrade}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-white text-sm font-medium rounded-lg transition-all shadow-lg shadow-cyan-500/20"
+                      >
+                        <Crown size={14} />
+                        Upgrade to {requiredPlan}
+                      </button>
+                    </>
+                  )}
                 </>
               ) : (
                 <>
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 flex items-center justify-center mb-4 relative">
                     <ImageIcon size={28} className="text-purple-400" />
                     <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg bg-dark-card border border-purple-500/30 flex items-center justify-center">
-                      <Sparkles size={12} className="text-purple-400" />
+                      {hasCurrentFeatureAccess ? (
+                        <Sparkles size={12} className="text-purple-400" />
+                      ) : (
+                        <Lock size={12} className="text-purple-400" />
+                      )}
                     </div>
                   </div>
                   <h4 className="text-lg font-semibold text-gray-200 mb-1">
                     Create with <span className="text-purple-400">{currentModelDisplay}</span>
                   </h4>
-                  <p className="text-sm text-gray-500 max-w-[260px] leading-relaxed">
-                    Describe your vision and watch it come to life. Generate stunning images in seconds.
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-2 mt-4">
-                    <span className="px-2 py-1 text-[10px] bg-purple-500/10 text-purple-400/70 rounded-full border border-purple-500/20">UI mockups</span>
-                    <span className="px-2 py-1 text-[10px] bg-purple-500/10 text-purple-400/70 rounded-full border border-purple-500/20">Icons & logos</span>
-                    <span className="px-2 py-1 text-[10px] bg-purple-500/10 text-purple-400/70 rounded-full border border-purple-500/20">Illustrations</span>
-                  </div>
+                  {hasCurrentFeatureAccess ? (
+                    <>
+                      <p className="text-sm text-gray-500 max-w-[260px] leading-relaxed">
+                        Describe your vision and watch it come to life. Generate stunning images in seconds.
+                      </p>
+                      <div className="flex flex-wrap justify-center gap-2 mt-4">
+                        <span className="px-2 py-1 text-[10px] bg-purple-500/10 text-purple-400/70 rounded-full border border-purple-500/20">UI mockups</span>
+                        <span className="px-2 py-1 text-[10px] bg-purple-500/10 text-purple-400/70 rounded-full border border-purple-500/20">Icons & logos</span>
+                        <span className="px-2 py-1 text-[10px] bg-purple-500/10 text-purple-400/70 rounded-full border border-purple-500/20">Illustrations</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-500 max-w-[260px] leading-relaxed mb-4">
+                        Upgrade to <span className="text-purple-400 font-medium">{requiredPlan}</span> to unlock AI image generation.
+                      </p>
+                      <button
+                        onClick={handleUpgrade}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-400 hover:to-pink-400 text-white text-sm font-medium rounded-lg transition-all shadow-lg shadow-purple-500/20"
+                      >
+                        <Crown size={14} />
+                        Upgrade to {requiredPlan}
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -605,32 +870,70 @@ function ChatWidget() {
                           </div>
                           <div className="flex items-center gap-1">
                             <button
-                              onClick={() => {
-                                // Download image
-                                const link = document.createElement('a')
-                                link.href = msg.imageUrl!
-                                link.download = `generated-${msg.id}.png`
-                                link.click()
+                              onClick={async () => {
+                                // Show in Finder
+                                if (msg.imageLocalPath) {
+                                  await window.electronAPI?.shell?.showItemInFolder(msg.imageLocalPath)
+                                }
                               }}
                               className="p-1.5 rounded-lg bg-dark-bg/50 border border-dark-border/50 hover:border-purple-500/30 hover:bg-purple-500/10 transition-all group"
-                              title="Download"
+                              title="Show in Finder"
                             >
-                              <Download size={12} className="text-gray-500 group-hover:text-purple-400" />
+                              <FolderOpen size={12} className="text-gray-500 group-hover:text-purple-400" />
                             </button>
                             <button
-                              onClick={() => {
-                                // Save to project assets
-                                console.log('Save to assets:', msg.imageUrl)
+                              onClick={async () => {
+                                // Save to project assets images folder
+                                if (msg.imageLocalPath && currentProjectId) {
+                                  try {
+                                    // Get assets structure to find the images folder path
+                                    const assetsResult = await window.electronAPI?.projects?.getAssetsStructure(currentProjectId)
+                                    if (!assetsResult?.success || !assetsResult.assets) {
+                                      throw new Error('Could not find assets folder')
+                                    }
+
+                                    // Find the "images" folder in assets
+                                    const imagesFolder = assetsResult.assets.find((a: any) => a.name === 'images' && a.type === 'folder')
+                                    if (!imagesFolder?.path) {
+                                      throw new Error('Images folder not found in assets')
+                                    }
+
+                                    // Read the image file
+                                    const imageData = await window.electronAPI?.files?.readFileAsBase64(msg.imageLocalPath)
+                                    if (imageData) {
+                                      const fileName = msg.imageLocalPath.split('/').pop() || `image_${Date.now()}.png`
+                                      const destPath = `${imagesFolder.path}/${fileName}`
+
+                                      // Save to assets
+                                      await window.electronAPI?.files?.saveBase64Image(destPath, imageData)
+                                      // Show checkmark briefly
+                                      setSavedToAssetsId(msg.id)
+                                      setTimeout(() => setSavedToAssetsId(null), 2000)
+                                    }
+                                  } catch (err: any) {
+                                    console.error('Failed to save to assets:', err)
+                                  }
+                                }
                               }}
-                              className="p-1.5 rounded-lg bg-dark-bg/50 border border-dark-border/50 hover:border-purple-500/30 hover:bg-purple-500/10 transition-all group"
+                              className={`p-1.5 rounded-lg bg-dark-bg/50 border transition-all group ${
+                                savedToAssetsId === msg.id
+                                  ? 'border-green-500/50 bg-green-500/10'
+                                  : 'border-dark-border/50 hover:border-purple-500/30 hover:bg-purple-500/10'
+                              }`}
                               title="Save to Assets"
                             >
-                              <FolderPlus size={12} className="text-gray-500 group-hover:text-purple-400" />
+                              {savedToAssetsId === msg.id ? (
+                                <Check size={12} className="text-green-400" />
+                              ) : (
+                                <FolderPlus size={12} className="text-gray-500 group-hover:text-purple-400" />
+                              )}
                             </button>
                             <button
-                              onClick={() => {
-                                // Open in new tab
-                                window.open(msg.imageUrl, '_blank')
+                              onClick={async () => {
+                                // Open image with default app
+                                if (msg.imageLocalPath) {
+                                  await window.electronAPI?.shell?.openPath(msg.imageLocalPath)
+                                }
                               }}
                               className="p-1.5 rounded-lg bg-dark-bg/50 border border-dark-border/50 hover:border-purple-500/30 hover:bg-purple-500/10 transition-all group"
                               title="Open"
@@ -679,17 +982,54 @@ function ChatWidget() {
                 </div>
               ))}
 
-              {/* Typing indicator */}
+              {/* Typing indicator / Streaming content */}
               {isTyping && (
                 <div className="flex gap-3">
-                  <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500/20 to-green-500/20 border border-cyan-500/30 flex items-center justify-center">
-                    <Bot size={14} className="text-cyan-400" />
+                  <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${
+                    modelCategory === 'images'
+                      ? 'bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30'
+                      : 'bg-gradient-to-br from-cyan-500/20 to-green-500/20 border border-cyan-500/30'
+                  }`}>
+                    {modelCategory === 'images' ? (
+                      <ImageIcon size={14} className="text-purple-400" />
+                    ) : (
+                      <Bot size={14} className="text-cyan-400" />
+                    )}
                   </div>
-                  <div className="bg-dark-bg/50 border border-dark-border/50 px-4 py-3 rounded-xl">
-                    <div className="flex gap-1">
-                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <div className="flex-1 max-w-[85%]">
+                    {streamingContent ? (
+                      <div className="bg-dark-bg/50 border border-dark-border/50 px-3 py-2 rounded-xl">
+                        <p className="text-sm text-gray-300 whitespace-pre-wrap">{streamingContent}</p>
+                        <span className="inline-block w-2 h-4 bg-cyan-400/50 animate-pulse ml-0.5" />
+                      </div>
+                    ) : (
+                      <div className="bg-dark-bg/50 border border-dark-border/50 px-4 py-3 rounded-xl">
+                        <div className="flex gap-1">
+                          <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Error display */}
+              {error && (
+                <div className="flex gap-3">
+                  <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 border border-red-500/30 flex items-center justify-center">
+                    <AlertCircle size={14} className="text-red-400" />
+                  </div>
+                  <div className="flex-1 max-w-[85%]">
+                    <div className="bg-red-500/10 border border-red-500/30 px-3 py-2 rounded-xl">
+                      <p className="text-sm text-red-400">{error}</p>
+                      <button
+                        onClick={() => setError(null)}
+                        className="text-xs text-gray-500 hover:text-gray-300 mt-1"
+                      >
+                        Dismiss
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -771,15 +1111,15 @@ function ChatWidget() {
                     <div className="relative p-1.5 space-y-0.5">
                       {currentModels.map((model) => (
                         <button
-                          key={model.value}
+                          key={model.id}
                           onClick={() => {
-                            setSelectedModel(model.value)
+                            setSelectedModel(model.id)
                             setShowModelDropdown(false)
 
                             // Start new conversation if model or category changed from active conversation
                             if (activeConversation && activeConversation.messages.length > 0) {
                               const categoryChanged = modelCategory !== activeConversation.modelCategory
-                              const modelChanged = model.value !== activeConversation.model
+                              const modelChanged = model.id !== activeConversation.model
                               if (categoryChanged || modelChanged) {
                                 setActiveConversation(null)
                                 setMessage('')
@@ -787,7 +1127,7 @@ function ChatWidget() {
                             }
                           }}
                           className={`w-full px-2.5 py-2 rounded-lg text-left transition-colors ${
-                            selectedModel === model.value
+                            selectedModel === model.id
                               ? modelCategory === 'chat'
                                 ? 'bg-cyan-500/15 border border-cyan-500/30'
                                 : 'bg-purple-500/15 border border-purple-500/30'
@@ -796,13 +1136,13 @@ function ChatWidget() {
                         >
                           <div className="flex items-center justify-between">
                             <span className={`text-xs font-medium ${
-                              selectedModel === model.value
+                              selectedModel === model.id
                                 ? modelCategory === 'chat' ? 'text-cyan-400' : 'text-purple-400'
                                 : 'text-gray-300'
                             }`}>
                               {model.displayName}
                             </span>
-                            {selectedModel === model.value && (
+                            {selectedModel === model.id && (
                               <div className={`w-1.5 h-1.5 rounded-full ${
                                 modelCategory === 'chat' ? 'bg-cyan-400' : 'bg-purple-400'
                               }`} />
@@ -817,36 +1157,51 @@ function ChatWidget() {
               </AnimatePresence>
             </div>
 
-            {/* Input Box */}
-            <div className="relative flex-1 flex items-center">
-              <textarea
-                ref={inputRef}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onMouseDown={(e) => e.stopPropagation()}
-                placeholder={modelCategory === 'chat' ? 'Ask anything...' : 'Describe your vision...'}
-                rows={1}
-                className={`w-full h-10 bg-dark-bg/60 border border-dark-border/50 rounded-xl px-3 pr-10 text-sm text-white placeholder-gray-500 outline-none resize-none transition-colors scrollbar-hide flex items-center ${
-                  modelCategory === 'chat' ? 'focus:border-cyan-500/50' : 'focus:border-purple-500/50'
-                }`}
-                style={{ paddingTop: '10px', paddingBottom: '10px', maxHeight: '100px' }}
-              />
+            {/* Input Box - Disabled with upgrade prompt when no access */}
+            {hasCurrentFeatureAccess ? (
+              <div className="relative flex-1 flex items-center">
+                <textarea
+                  ref={inputRef}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  placeholder={modelCategory === 'chat' ? 'Ask anything...' : 'Describe your vision...'}
+                  rows={1}
+                  className={`w-full h-10 bg-dark-bg/60 border border-dark-border/50 rounded-xl px-3 pr-10 text-sm text-white placeholder-gray-500 outline-none resize-none transition-colors scrollbar-hide flex items-center ${
+                    modelCategory === 'chat' ? 'focus:border-cyan-500/50' : 'focus:border-purple-500/50'
+                  }`}
+                  style={{ paddingTop: '10px', paddingBottom: '10px', maxHeight: '100px' }}
+                />
+                <button
+                  onClick={handleSend}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  disabled={!message.trim()}
+                  className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg transition-all ${
+                    message.trim()
+                      ? modelCategory === 'chat'
+                        ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
+                        : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                      : 'text-gray-600 cursor-not-allowed'
+                  }`}
+                >
+                  <Send size={14} />
+                </button>
+              </div>
+            ) : (
               <button
-                onClick={handleSend}
+                onClick={handleUpgrade}
                 onMouseDown={(e) => e.stopPropagation()}
-                disabled={!message.trim()}
-                className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg transition-all ${
-                  message.trim()
-                    ? modelCategory === 'chat'
-                      ? 'bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30'
-                      : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
-                    : 'text-gray-600 cursor-not-allowed'
+                className={`flex-1 h-10 flex items-center justify-center gap-2 rounded-xl border transition-all ${
+                  modelCategory === 'chat'
+                    ? 'bg-cyan-500/10 border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-400'
+                    : 'bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/20 text-purple-400'
                 }`}
               >
-                <Send size={14} />
+                <Lock size={14} />
+                <span className="text-sm font-medium">Upgrade to {requiredPlan} to unlock</span>
               </button>
-            </div>
+            )}
 
             {/* New Chat Button */}
             {activeConversation && (

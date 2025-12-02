@@ -39,7 +39,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     handleCallback: (url) => ipcRenderer.invoke('auth:handle-callback', url),
     getSession: () => ipcRenderer.invoke('auth:get-session'),
     signOut: () => ipcRenderer.invoke('auth:sign-out'),
-    restoreSession: (userId, userEmail) => ipcRenderer.invoke('auth:restore-session', userId, userEmail),
+    restoreSession: (userId, userEmail, accessToken) => ipcRenderer.invoke('auth:restore-session', userId, userEmail, accessToken),
     validateUser: (email, userId) => ipcRenderer.invoke('auth:validate-user', email, userId),
     createStripePortal: (sessionData) => ipcRenderer.invoke('auth:create-stripe-portal', sessionData),
     onCallback: (callback) => {
@@ -341,6 +341,42 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const listener = (_event, projectId) => callback(projectId)
       ipcRenderer.on('chat:history-deleted', listener)
       return () => ipcRenderer.removeListener('chat:history-deleted', listener)
+    }
+  },
+
+  // ChatWidget AI methods (chat/image generation)
+  chatWidget: {
+    getModels: () => ipcRenderer.invoke('chatWidget:get-models'),
+    getUsage: () => ipcRenderer.invoke('chatWidget:get-usage'),
+    chat: (messages, model) => ipcRenderer.invoke('chatWidget:chat', messages, model),
+    generateImage: (projectPath, prompt, size) => ipcRenderer.invoke('chatWidget:generate-image', projectPath, prompt, size),
+
+    // Conversation persistence
+    getConversations: (projectId) => ipcRenderer.invoke('chatWidget:get-conversations', projectId),
+    createConversation: (projectId, title, messages, modelCategory, model) => ipcRenderer.invoke('chatWidget:create-conversation', projectId, title, messages, modelCategory, model),
+    updateConversation: (conversationId, title, messages) => ipcRenderer.invoke('chatWidget:update-conversation', conversationId, title, messages),
+    deleteConversation: (conversationId) => ipcRenderer.invoke('chatWidget:delete-conversation', conversationId),
+
+    // Streaming event listeners
+    onStreamChunk: (callback) => {
+      const listener = (_event, chunk) => callback(chunk)
+      ipcRenderer.on('chatWidget:stream-chunk', listener)
+      return () => ipcRenderer.removeListener('chatWidget:stream-chunk', listener)
+    },
+    onStreamDone: (callback) => {
+      const listener = (_event, usage) => callback(usage)
+      ipcRenderer.on('chatWidget:stream-done', listener)
+      return () => ipcRenderer.removeListener('chatWidget:stream-done', listener)
+    },
+    onStreamError: (callback) => {
+      const listener = (_event, error) => callback(error)
+      ipcRenderer.on('chatWidget:stream-error', listener)
+      return () => ipcRenderer.removeListener('chatWidget:stream-error', listener)
+    },
+    removeStreamListeners: () => {
+      ipcRenderer.removeAllListeners('chatWidget:stream-chunk')
+      ipcRenderer.removeAllListeners('chatWidget:stream-done')
+      ipcRenderer.removeAllListeners('chatWidget:stream-error')
     }
   },
 

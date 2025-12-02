@@ -100,6 +100,27 @@ export interface ChatWidgetState {
   zIndex: number
 }
 
+export interface ChatWidgetMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+  type?: 'text' | 'image'
+  imageUrl?: string
+  imageLocalPath?: string // Local file path for loading images from disk
+}
+
+export interface ChatWidgetConversation {
+  id: string
+  projectId: string
+  title: string
+  modelCategory: 'chat' | 'images'
+  model: string
+  messages: string  // JSON array of ChatWidgetMessage
+  createdAt: number
+  updatedAt: number
+}
+
 export interface ChatBlock {
   id: string
   projectId: string
@@ -154,6 +175,9 @@ class DatabaseService {
 
       // Create research agents table
       this.createResearchAgentsTable()
+
+      // Create chatwidget conversations table
+      this.createChatWidgetConversationsTable()
 
       // Run migrations
       this.runMigrations()
@@ -247,6 +271,30 @@ class DatabaseService {
     // Create index for faster queries by projectId
     this.db!.exec('CREATE INDEX IF NOT EXISTS idx_research_agents_projectId ON research_agents(projectId)')
     this.db!.exec('CREATE INDEX IF NOT EXISTS idx_research_agents_status ON research_agents(projectId, status)')
+  }
+
+  /**
+   * Create chatwidget_conversations table for AI chat/image conversations
+   */
+  private createChatWidgetConversationsTable(): void {
+    const sql = `
+      CREATE TABLE IF NOT EXISTS chatwidget_conversations (
+        id TEXT PRIMARY KEY,
+        projectId TEXT NOT NULL,
+        title TEXT NOT NULL,
+        modelCategory TEXT NOT NULL,
+        model TEXT NOT NULL,
+        messages TEXT NOT NULL,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL,
+        FOREIGN KEY (projectId) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `
+
+    this.db!.exec(sql)
+
+    // Create index for faster queries by projectId
+    this.db!.exec('CREATE INDEX IF NOT EXISTS idx_chatwidget_conversations_projectId ON chatwidget_conversations(projectId)')
   }
 
   /**
@@ -1668,6 +1716,185 @@ class DatabaseService {
       this.db.prepare(sql).run(projectId)
     } catch (error) {
       console.error('❌ Failed to delete research agents:', error)
+      throw error
+    }
+  }
+
+  // ==================== CHATWIDGET CONVERSATION METHODS ====================
+
+  /**
+   * Generate chatwidget conversation ID
+   */
+  private generateChatWidgetConversationId(): string {
+    return `cwconv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+
+  /**
+   * Create a new chatwidget conversation
+   */
+  createChatWidgetConversation(
+    projectId: string,
+    title: string,
+    modelCategory: 'chat' | 'images',
+    model: string,
+    messages: ChatWidgetMessage[] = []
+  ): ChatWidgetConversation {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const now = Date.now()
+    const conversation: ChatWidgetConversation = {
+      id: this.generateChatWidgetConversationId(),
+      projectId,
+      title,
+      modelCategory,
+      model,
+      messages: JSON.stringify(messages),
+      createdAt: now,
+      updatedAt: now
+    }
+
+    const sql = `
+      INSERT INTO chatwidget_conversations (id, projectId, title, modelCategory, model, messages, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `
+
+    try {
+      this.db.prepare(sql).run(
+        conversation.id,
+        conversation.projectId,
+        conversation.title,
+        conversation.modelCategory,
+        conversation.model,
+        conversation.messages,
+        conversation.createdAt,
+        conversation.updatedAt
+      )
+
+      return conversation
+    } catch (error) {
+      console.error('❌ Failed to create chatwidget conversation:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get all chatwidget conversations for a project
+   */
+  getChatWidgetConversations(projectId: string): ChatWidgetConversation[] {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'SELECT * FROM chatwidget_conversations WHERE projectId = ? ORDER BY updatedAt DESC'
+
+    try {
+      const rows = this.db.prepare(sql).all(projectId) as ChatWidgetConversation[]
+      return rows
+    } catch (error) {
+      console.error('❌ Failed to get chatwidget conversations:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get a specific chatwidget conversation by ID
+   */
+  getChatWidgetConversation(conversationId: string): ChatWidgetConversation | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'SELECT * FROM chatwidget_conversations WHERE id = ?'
+
+    try {
+      const row = this.db.prepare(sql).get(conversationId) as ChatWidgetConversation | undefined
+      return row || null
+    } catch (error) {
+      console.error('❌ Failed to get chatwidget conversation:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Update a chatwidget conversation
+   */
+  updateChatWidgetConversation(
+    conversationId: string,
+    updates: {
+      title?: string
+      messages?: ChatWidgetMessage[]
+    }
+  ): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to update chatwidget conversation after database closed - ignoring')
+      return
+    }
+
+    const fields: string[] = []
+    const values: any[] = []
+
+    if (updates.title !== undefined) {
+      fields.push('title = ?')
+      values.push(updates.title)
+    }
+    if (updates.messages !== undefined) {
+      fields.push('messages = ?')
+      values.push(JSON.stringify(updates.messages))
+    }
+
+    // Always update updatedAt
+    fields.push('updatedAt = ?')
+    values.push(Date.now())
+
+    if (fields.length === 1) {
+      return // Nothing to update except updatedAt
+    }
+
+    values.push(conversationId)
+    const sql = `UPDATE chatwidget_conversations SET ${fields.join(', ')} WHERE id = ?`
+
+    try {
+      this.db.prepare(sql).run(...values)
+    } catch (error) {
+      console.error('❌ Failed to update chatwidget conversation:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Delete a chatwidget conversation
+   */
+  deleteChatWidgetConversation(conversationId: string): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'DELETE FROM chatwidget_conversations WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(conversationId)
+    } catch (error) {
+      console.error('❌ Failed to delete chatwidget conversation:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Delete all chatwidget conversations for a project
+   */
+  deleteChatWidgetConversations(projectId: string): void {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const sql = 'DELETE FROM chatwidget_conversations WHERE projectId = ?'
+
+    try {
+      this.db.prepare(sql).run(projectId)
+    } catch (error) {
+      console.error('❌ Failed to delete chatwidget conversations:', error)
       throw error
     }
   }

@@ -262,7 +262,7 @@ export interface ElectronAPI {
       error?: string
     }>
     signOut: () => Promise<{ success: boolean; error?: string }>
-    restoreSession: (userId: string) => Promise<{ success: boolean; error?: string }>
+    restoreSession: (userId: string, userEmail?: string, accessToken?: string) => Promise<{ success: boolean; error?: string }>
     validateUser: (email: string, userId: string) => Promise<{
       success: boolean
       user?: {
@@ -956,6 +956,126 @@ export interface ElectronAPI {
     onBlockUpdated: (callback: (projectId: string, block: ChatBlock) => void) => () => void
     onBlockCompleted: (callback: (projectId: string, block: ChatBlock) => void) => () => void
     onHistoryDeleted: (callback: (projectId: string) => void) => () => void
+  }
+
+  // ChatWidget AI methods (chat/image generation with external AI providers)
+  chatWidget: {
+    getModels: () => Promise<{
+      success: boolean
+      models?: {
+        chat: Array<{
+          id: string
+          displayName: string
+          description: string
+          provider: string
+          maxTokens?: number
+        }>
+        images: Array<{
+          id: string
+          displayName: string
+          description: string
+          provider: string
+          sizes?: string[]
+        }>
+      }
+      error?: string
+    }>
+    getUsage: () => Promise<{
+      success: boolean
+      usage?: {
+        chatTokens: number
+        imageCount: number
+        date: string
+      }
+      limits?: {
+        chatTokensPerDay: number
+        imagesPerDay: number
+      }
+      plan?: string
+      error?: string
+    }>
+    chat: (messages: Array<{ role: string; content: string }>, model: string) => Promise<{
+      success: boolean
+      usage?: any
+      error?: string
+    }>
+    generateImage: (projectPath: string, prompt: string, size?: string) => Promise<{
+      success: boolean
+      localPath?: string
+      filePath?: string
+      imageDataUrl?: string
+      usage?: {
+        imagesGenerated: number
+        imagesRemaining: number
+      }
+      error?: string
+    }>
+    getConversations: (projectId: string) => Promise<{
+      success: boolean
+      conversations?: Array<{
+        id: string
+        projectId: string
+        title: string
+        modelCategory: 'chat' | 'images'
+        model: string
+        messages: string
+        createdAt: number
+        updatedAt: number
+      }>
+      error?: string
+    }>
+    createConversation: (
+      projectId: string,
+      title: string,
+      messages: Array<{
+        id: string
+        role: 'user' | 'assistant'
+        content: string
+        timestamp: Date
+        type?: 'text' | 'image'
+        imageUrl?: string
+        imageLocalPath?: string
+      }>,
+      modelCategory: 'chat' | 'images',
+      model: string
+    ) => Promise<{
+      success: boolean
+      conversation?: {
+        id: string
+        projectId: string
+        title: string
+        modelCategory: 'chat' | 'images'
+        model: string
+        messages: string
+        createdAt: number
+        updatedAt: number
+      }
+      error?: string
+    }>
+    updateConversation: (
+      conversationId: string,
+      title: string,
+      messages: Array<{
+        id: string
+        role: 'user' | 'assistant'
+        content: string
+        timestamp: Date
+        type?: 'text' | 'image'
+        imageUrl?: string
+        imageLocalPath?: string
+      }>
+    ) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    deleteConversation: (conversationId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    onStreamChunk: (callback: (chunk: string) => void) => () => void
+    onStreamDone: (callback: (usage: any) => void) => () => void
+    onStreamError: (callback: (error: string) => void) => () => void
+    removeStreamListeners: () => void
   }
 
   app: {

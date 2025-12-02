@@ -40,15 +40,52 @@ export interface Template {
   screenshot?: string
 }
 
+// AI Models interfaces
+export interface AIModel {
+  id: string
+  displayName: string
+  description: string
+  provider: string
+  maxTokens?: number
+  sizes?: string[]
+}
+
+export interface AIModelsResponse {
+  chat: AIModel[]
+  images: AIModel[]
+}
+
+export interface AIUsageResponse {
+  usage: {
+    chatTokens: number
+    imageCount: number
+    date: string
+  }
+  limits: {
+    chatTokensPerDay: number
+    imagesPerDay: number
+  }
+  plan: string
+}
+
 class BackendService {
   private baseUrl: string = ''
   private initialized: boolean = false
+  private authToken: string = ''
 
   private init() {
     if (this.initialized) return
 
     this.baseUrl = process.env.VITE_BACKEND_URL || 'https://codedeck-backend.onrender.com'
     this.initialized = true
+  }
+
+  setAuthToken(token: string): void {
+    this.authToken = token
+  }
+
+  getAuthToken(): string {
+    return this.authToken
   }
 
   private async makeRequest<T>(
@@ -371,6 +408,205 @@ class BackendService {
 
       req.end()
     })
+  }
+
+  // Authenticated request helper for AI endpoints
+  private async makeAuthenticatedRequest<T>(
+    path: string,
+    method: 'GET' | 'POST' = 'GET',
+    body?: any
+  ): Promise<T> {
+    this.init()
+
+    if (!this.authToken) {
+      throw new Error('Not authenticated')
+    }
+
+    return new Promise((resolve, reject) => {
+      const url = new URL(path, this.baseUrl)
+      const isHttps = url.protocol === 'https:'
+      const client = isHttps ? https : http
+
+      const options: https.RequestOptions = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${this.authToken}`
+        }
+      }
+
+      const req = client.request(url, options, (res) => {
+        let data = ''
+
+        res.on('data', (chunk) => {
+          data += chunk
+        })
+
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(data)
+
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              resolve(parsed)
+            } else {
+              reject(new Error(parsed.error || `HTTP ${res.statusCode}`))
+            }
+          } catch (error) {
+            reject(new Error('Invalid JSON response'))
+          }
+        })
+      })
+
+      req.on('error', (error) => {
+        reject(error)
+      })
+
+      if (body && method === 'POST') {
+        req.write(JSON.stringify(body))
+      }
+
+      req.end()
+    })
+  }
+
+  // AI Methods
+
+  async getAIModels(): Promise<AIModelsResponse> {
+    const response = await this.makeAuthenticatedRequest<{ success: boolean; models: AIModelsResponse; plan: string; limits: any }>(
+      '/api/v1/ai/models'
+    )
+    return response.models
+  }
+
+  async getAIUsage(): Promise<AIUsageResponse> {
+    const response = await this.makeAuthenticatedRequest<{ success: boolean } & AIUsageResponse>(
+      '/api/v1/ai/usage'
+    )
+    return {
+      usage: response.usage,
+      limits: response.limits,
+      plan: response.plan
+    }
+  }
+
+  async generateImage(prompt: string, size?: string): Promise<{ image: string; usage: { imagesGenerated: number; imagesRemaining: number } }> {
+    const response = await this.makeAuthenticatedRequest<{
+      success: boolean
+      image: string
+      usage: { imagesGenerated: number; imagesRemaining: number }
+    }>(
+      '/api/v1/ai/image',
+      'POST',
+      { prompt, size }
+    )
+    return { image: response.image, usage: response.usage }
+  }
+
+  // Streaming chat - returns a readable stream
+  streamChat(
+    messages: Array<{ role: string; content: string }>,
+    model: string,
+    onChunk: (chunk: string) => void,
+    onDone: (usage: any) => void,
+    onError: (error: Error) => void
+  ): void {
+    this.init()
+
+    if (!this.authToken) {
+      onError(new Error('Not authenticated'))
+      return
+    }
+
+    const url = new URL('/api/v1/ai/chat', this.baseUrl)
+    const isHttps = url.protocol === 'https:'
+    const client = isHttps ? https : http
+
+    const payload = JSON.stringify({ messages, model })
+
+    const options: https.RequestOptions = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+        'Authorization': `Bearer ${this.authToken}`
+      }
+    }
+
+    const req = client.request(url, options, (res) => {
+      if (res.statusCode !== 200) {
+        let errorData = ''
+        res.on('data', (chunk) => { errorData += chunk })
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(errorData)
+            onError(new Error(parsed.error || `HTTP ${res.statusCode}`))
+          } catch {
+            onError(new Error(`HTTP ${res.statusCode}`))
+          }
+        })
+        return
+      }
+
+      let buffer = ''
+
+      res.on('data', (chunk) => {
+        buffer += chunk.toString()
+
+        // Process complete SSE events
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') {
+              continue
+            }
+
+            try {
+              const parsed = JSON.parse(data)
+
+              if (parsed.type === 'chunk' && parsed.content) {
+                onChunk(parsed.content)
+              } else if (parsed.type === 'done') {
+                onDone(parsed.usage)
+              } else if (parsed.type === 'error') {
+                onError(new Error(parsed.error))
+              }
+            } catch {
+              // Ignore parse errors for incomplete data
+            }
+          }
+        }
+      })
+
+      res.on('end', () => {
+        // Process any remaining data in buffer
+        if (buffer.startsWith('data: ')) {
+          const data = buffer.slice(6)
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.type === 'done') {
+              onDone(parsed.usage)
+            }
+          } catch {
+            // Ignore
+          }
+        }
+      })
+
+      res.on('error', (error) => {
+        onError(error)
+      })
+    })
+
+    req.on('error', (error) => {
+      onError(error)
+    })
+
+    req.write(payload)
+    req.end()
   }
 }
 

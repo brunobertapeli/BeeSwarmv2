@@ -26,6 +26,7 @@ import { registerClaudeMdHandlers } from './handlers/claudeMdHandlers.js'
 import { registerImageHandlers } from './handlers/imageHandlers.js'
 import { registerFileHandlers } from './handlers/fileHandlers.js'
 import { registerAnalyticsHandlers } from './handlers/analyticsHandlers.js'
+import { registerChatWidgetHandlers, setChatWidgetWindow } from './handlers/chatWidgetHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { analyticsService } from './services/AnalyticsService.js'
 import { layoutManager } from './services/LayoutManager.js'
@@ -358,6 +359,7 @@ User: ${currentUserId || 'not logged in'}
   setChatHandlersWindow(mainWindow.webContents)
   setResearchAgentHandlersWindow(mainWindow.webContents)
   setGitHandlersWindow(mainWindow.webContents)
+  setChatWidgetWindow(mainWindow.webContents)
 }
 
 // Initialize database and register IPC handlers only once
@@ -402,6 +404,7 @@ async function initializeApp() {
     registerSupportHandlers()
     registerGitHandlers()
     registerWebsiteImportHandlers()
+    registerChatWidgetHandlers()
 
     // App-level IPC handlers
     ipcMain.on('app:flash-window', () => {

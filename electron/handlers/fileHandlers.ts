@@ -384,6 +384,10 @@ ipcMain.handle('files:save-base64-image', async (_event, filePath: string, base6
   try {
     console.log('💾 [FileHandlers] Saving image to:', filePath);
 
+    // Ensure directory exists
+    const dir = path.dirname(filePath);
+    await fs.mkdir(dir, { recursive: true });
+
     // Remove data URL prefix if present (e.g., "data:image/png;base64,")
     const base64Content = base64Data.replace(/^data:image\/\w+;base64,/, '');
 
