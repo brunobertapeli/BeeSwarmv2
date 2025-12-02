@@ -506,5 +506,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
     openPath: (path) => ipcRenderer.invoke('shell:open-path', path),
     showItemInFolder: (path) => ipcRenderer.invoke('shell:show-item-in-folder', path)
+  },
+
+  // Deployment token methods (global, not project-specific)
+  deployment: {
+    saveToken: (serviceId, token) => ipcRenderer.invoke('deployment:save-token', serviceId, token),
+    getToken: (serviceId) => ipcRenderer.invoke('deployment:get-token', serviceId),
+    isConnected: (serviceId) => ipcRenderer.invoke('deployment:is-connected', serviceId),
+    getConnectedServices: () => ipcRenderer.invoke('deployment:get-connected-services'),
+    disconnect: (serviceId) => ipcRenderer.invoke('deployment:disconnect', serviceId),
+    getCliStatus: () => ipcRenderer.invoke('deployment:get-cli-status'),
+    isCliAvailable: (provider) => ipcRenderer.invoke('deployment:is-cli-available', provider)
   }
 })

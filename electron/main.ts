@@ -27,6 +27,7 @@ import { registerImageHandlers } from './handlers/imageHandlers.js'
 import { registerFileHandlers } from './handlers/fileHandlers.js'
 import { registerAnalyticsHandlers } from './handlers/analyticsHandlers.js'
 import { registerChatWidgetHandlers, setChatWidgetWindow } from './handlers/chatWidgetHandlers.js'
+import { registerDeploymentHandlers } from './handlers/deploymentHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { analyticsService } from './services/AnalyticsService.js'
 import { layoutManager } from './services/LayoutManager.js'
@@ -405,6 +406,7 @@ async function initializeApp() {
     registerGitHandlers()
     registerWebsiteImportHandlers()
     registerChatWidgetHandlers()
+    registerDeploymentHandlers()
 
     // App-level IPC handlers
     ipcMain.on('app:flash-window', () => {

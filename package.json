@@ -9,7 +9,9 @@
     "build": "tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "vite build && tsc -p tsconfig.electron.json && electron-builder"
+    "electron:build": "vite build && tsc -p tsconfig.electron.json && electron-builder",
+    "download-cli": "node scripts/download-railway-cli.cjs",
+    "prebuild": "npm run download-cli"
   },
   "keywords": [
     "electron",
@@ -37,6 +39,7 @@
     "framer-motion": "^12.23.24",
     "image-size": "^2.0.2",
     "mongodb": "^6.20.0",
+    "netlify-cli": "^23.12.2",
     "node-pty": "^1.0.0",
     "puppeteer": "^24.29.1",
     "react": "^18.2.0",
@@ -77,8 +80,42 @@
       "dist/**/*",
       "dist-electron/**/*"
     ],
+    "asarUnpack": [
+      "node_modules/netlify-cli/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/binaries/${platform}-${arch}",
+        "to": "binaries",
+        "filter": ["**/*"]
+      }
+    ],
     "mac": {
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "extraResources": [
+        {
+          "from": "resources/binaries/darwin-${arch}",
+          "to": "binaries"
+        }
+      ]
+    },
+    "win": {
+      "target": ["nsis"],
+      "extraResources": [
+        {
+          "from": "resources/binaries/win32-x64",
+          "to": "binaries"
+        }
+      ]
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "extraResources": [
+        {
+          "from": "resources/binaries/linux-x64",
+          "to": "binaries"
+        }
+      ]
     }
   }
 }

@@ -1322,6 +1322,57 @@ export interface ElectronAPI {
     }>
   }
 
+  // Deployment token methods (global, not project-specific)
+  deployment: {
+    saveToken: (serviceId: string, token: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    getToken: (serviceId: string) => Promise<{
+      success: boolean
+      token?: string | null
+      connected?: boolean
+      error?: string
+    }>
+    isConnected: (serviceId: string) => Promise<{
+      success: boolean
+      connected?: boolean
+      error?: string
+    }>
+    getConnectedServices: () => Promise<{
+      success: boolean
+      services?: string[]
+      error?: string
+    }>
+    disconnect: (serviceId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    getCliStatus: () => Promise<{
+      success: boolean
+      status?: {
+        railway: {
+          available: boolean
+          path: string | null
+          version: string | null
+          error: string | null
+        }
+        netlify: {
+          available: boolean
+          path: string | null
+          version: string | null
+          error: string | null
+        }
+      }
+      error?: string
+    }>
+    isCliAvailable: (provider: 'railway' | 'netlify') => Promise<{
+      success: boolean
+      available?: boolean
+      error?: string
+    }>
+  }
+
 }
 
 declare global {

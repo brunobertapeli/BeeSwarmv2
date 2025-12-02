@@ -58,7 +58,7 @@ function ProjectSettings({
   onSelectProject,
   deployServices
 }: ProjectSettingsProps) {
-  const { netlifyConnected, setNetlifyConnected, currentProjectId } = useAppStore()
+  const { currentProjectId } = useAppStore()
   const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
   const toast = useToast()
   const [editedName, setEditedName] = useState(projectName)
@@ -85,6 +85,13 @@ function ProjectSettings({
   const [addingVarForFile, setAddingVarForFile] = useState<string | null>(null)
   const [newVarKey, setNewVarKey] = useState('')
   const [newVarValue, setNewVarValue] = useState('')
+
+  // Deployment token state (global, not project-specific)
+  const [connectedServices, setConnectedServices] = useState<Set<string>>(new Set())
+  const [expandedService, setExpandedService] = useState<string | null>(null)
+  const [tokenInput, setTokenInput] = useState('')
+  const [savingToken, setSavingToken] = useState(false)
+  const [loadingConnections, setLoadingConnections] = useState(true)
 
   // Track if there are unsaved changes
   const hasUnsavedChanges = editedName.trim() !== projectName && editedName.trim() !== '' || Object.keys(envFileChanges).length > 0
@@ -163,6 +170,27 @@ function ProjectSettings({
     loadEnvFiles()
   }, [isOpen, isSetupMode, activeTab, projectId])
 
+  // Load connected deployment services (global, not project-specific)
+  useEffect(() => {
+    const loadConnectedServices = async () => {
+      if (!isOpen) return
+
+      setLoadingConnections(true)
+      try {
+        const result = await window.electronAPI?.deployment?.getConnectedServices()
+        if (result?.success && result.services) {
+          setConnectedServices(new Set(result.services))
+        }
+      } catch (error) {
+        console.error('Failed to load connected services:', error)
+      } finally {
+        setLoadingConnections(false)
+      }
+    }
+
+    loadConnectedServices()
+  }, [isOpen])
+
   // Handle freeze frame when settings opens/closes
   useEffect(() => {
     const activeProjectId = projectId || currentProjectId
@@ -213,22 +241,87 @@ function ProjectSettings({
     name: string
     logo: string
     description: string
-    docUrl?: string
+    tokenUrl: string
+    tokenPlaceholder: string
+    tokenEnvVar: string
   }> = {
     netlify: {
       name: 'Netlify',
       logo: '/src/assets/images/netlify.svg',
-      description: 'Deploy with instant rollbacks and automatic HTTPS'
+      description: 'Deploy with instant rollbacks and automatic HTTPS',
+      tokenUrl: 'https://app.netlify.com/user/applications#personal-access-tokens',
+      tokenPlaceholder: 'nfp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      tokenEnvVar: 'NETLIFY_AUTH_TOKEN'
     },
     vercel: {
       name: 'Vercel',
       logo: '/src/assets/images/vercel.svg',
-      description: 'Deploy with edge functions and instant cache invalidation'
+      description: 'Deploy with edge functions and instant cache invalidation',
+      tokenUrl: 'https://vercel.com/account/tokens',
+      tokenPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      tokenEnvVar: 'VERCEL_TOKEN'
     },
     cloudflare: {
       name: 'Cloudflare Pages',
       logo: '/src/assets/images/cloudflare.svg',
-      description: 'Deploy with global CDN and Workers'
+      description: 'Deploy with global CDN and Workers',
+      tokenUrl: 'https://dash.cloudflare.com/profile/api-tokens',
+      tokenPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      tokenEnvVar: 'CLOUDFLARE_API_TOKEN'
+    },
+    railway: {
+      name: 'Railway',
+      logo: '/src/assets/tech-icons/railway.svg',
+      description: 'Deploy with instant infrastructure and automatic scaling',
+      tokenUrl: 'https://railway.com/account/tokens',
+      tokenPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+      tokenEnvVar: 'RAILWAY_TOKEN'
+    }
+  }
+
+  // Handle saving deployment token
+  const handleSaveToken = async (serviceId: string) => {
+    if (!tokenInput.trim()) {
+      toast.error('Token required', 'Please enter your personal access token')
+      return
+    }
+
+    setSavingToken(true)
+    try {
+      const result = await window.electronAPI?.deployment?.saveToken(serviceId, tokenInput.trim())
+      if (result?.success) {
+        setConnectedServices(prev => new Set([...prev, serviceId]))
+        setExpandedService(null)
+        setTokenInput('')
+        toast.success('Connected', `${deploymentServiceConfigs[serviceId]?.name || serviceId} connected successfully`)
+      } else {
+        toast.error('Failed to save', result?.error || 'Could not save token')
+      }
+    } catch (error) {
+      console.error('Error saving token:', error)
+      toast.error('Error', 'Failed to save token')
+    } finally {
+      setSavingToken(false)
+    }
+  }
+
+  // Handle disconnecting deployment service
+  const handleDisconnect = async (serviceId: string) => {
+    try {
+      const result = await window.electronAPI?.deployment?.disconnect(serviceId)
+      if (result?.success) {
+        setConnectedServices(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(serviceId)
+          return newSet
+        })
+        toast.success('Disconnected', `${deploymentServiceConfigs[serviceId]?.name || serviceId} disconnected`)
+      } else {
+        toast.error('Failed to disconnect', result?.error || 'Could not disconnect service')
+      }
+    } catch (error) {
+      console.error('Error disconnecting:', error)
+      toast.error('Error', 'Failed to disconnect service')
     }
   }
 
@@ -319,16 +412,6 @@ function ProjectSettings({
     } catch (error) {
       console.error('Error showing in Finder:', error)
       toast.error('Failed to open', 'Could not open project location')
-    }
-  }
-
-  const handleToggleNetlify = () => {
-    if (netlifyConnected) {
-      setNetlifyConnected(false)
-      toast.warning('Netlify disconnected', 'You can reconnect anytime from settings')
-    } else {
-      setNetlifyConnected(true)
-      toast.success('Netlify connected!', 'You can now deploy your project')
     }
   }
 
@@ -974,7 +1057,12 @@ function ProjectSettings({
                   Deployment Services
                 </h3>
 
-                {parsedDeployServices.length === 0 ? (
+                {loadingConnections ? (
+                  <div className="text-center py-8">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-xs text-gray-500">Loading connections...</p>
+                  </div>
+                ) : parsedDeployServices.length === 0 ? (
                   <div className="text-center py-8">
                     <Info size={16} className="text-gray-600 mx-auto mb-2" />
                     <p className="text-xs text-gray-500">
@@ -987,55 +1075,140 @@ function ProjectSettings({
                       const config = deploymentServiceConfigs[serviceId]
                       if (!config) return null
 
-                      const isConnected = serviceId === 'netlify' ? netlifyConnected : false
-                      const handleClick = serviceId === 'netlify' ? handleToggleNetlify : () => {}
+                      const isConnected = connectedServices.has(serviceId)
+                      const isExpanded = expandedService === serviceId
 
                       return (
-                        <button
+                        <div
                           key={serviceId}
-                          onClick={handleClick}
-                          className="w-full flex items-center justify-between p-3 bg-dark-bg/30 border border-dark-border/50 hover:border-dark-border rounded-lg transition-all group"
+                          className={`bg-dark-bg/30 border rounded-lg transition-all overflow-hidden ${
+                            isExpanded ? 'border-primary/50' : 'border-dark-border/50 hover:border-dark-border'
+                          }`}
                         >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded flex items-center justify-center bg-dark-bg/50">
-                              <img
-                                src={config.logo}
-                                alt={config.name}
-                                className="w-5 h-5"
-                                style={{
-                                  filter: isConnected ? 'none' : 'grayscale(100%) brightness(0.5)'
-                                }}
-                              />
+                          {/* Service Header */}
+                          <div
+                            className="flex items-center justify-between p-3 cursor-pointer"
+                            onClick={() => {
+                              if (isConnected) return // Don't expand if connected
+                              setExpandedService(isExpanded ? null : serviceId)
+                              setTokenInput('')
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded flex items-center justify-center bg-dark-bg/50">
+                                <img
+                                  src={config.logo}
+                                  alt={config.name}
+                                  className="w-5 h-5"
+                                  style={{
+                                    filter: isConnected ? 'none' : 'grayscale(100%) brightness(0.5)'
+                                  }}
+                                />
+                              </div>
+                              <div className="text-left">
+                                <p className="text-xs font-medium text-white">{config.name}</p>
+                                <p className="text-[10px] text-gray-500">
+                                  {isConnected ? 'Connected' : config.description}
+                                </p>
+                              </div>
                             </div>
-                            <div className="text-left">
-                              <p className="text-xs font-medium text-white">{config.name}</p>
-                              <p className="text-[10px] text-gray-500">
-                                {isConnected ? 'Connected' : config.description}
-                              </p>
+                            <div className="flex items-center gap-2">
+                              {isConnected ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDisconnect(serviceId)
+                                  }}
+                                  className="text-[10px] font-medium px-2 py-1 rounded bg-primary/20 text-primary hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                                >
+                                  Disconnect
+                                </button>
+                              ) : (
+                                <span className={`text-[10px] font-medium px-2 py-1 rounded ${
+                                  isExpanded
+                                    ? 'bg-primary/20 text-primary'
+                                    : 'bg-gray-700/50 text-gray-500'
+                                }`}>
+                                  {isExpanded ? 'Connecting...' : 'Connect'}
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {config.docUrl && (
-                              <a
-                                href={config.docUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="p-1.5 hover:bg-dark-bg/50 rounded transition-all"
-                                title="View documentation"
-                              >
-                                <ExternalLink size={12} className="text-gray-500" />
-                              </a>
-                            )}
-                            <span className={`text-[10px] font-medium px-2 py-1 rounded ${
-                              isConnected
-                                ? 'bg-primary/20 text-primary'
-                                : 'bg-gray-700/50 text-gray-500'
-                            }`}>
-                              {isConnected ? 'Connected' : 'Connect'}
-                            </span>
-                          </div>
-                        </button>
+
+                          {/* Expanded Token Input */}
+                          {isExpanded && !isConnected && (
+                            <div className="px-3 pb-3 pt-0 space-y-3 border-t border-dark-border/30">
+                              <div className="pt-3">
+                                <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                                  Personal Access Token
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="password"
+                                    value={tokenInput}
+                                    onChange={(e) => setTokenInput(e.target.value)}
+                                    placeholder={config.tokenPlaceholder}
+                                    className="w-full bg-dark-bg/50 border border-dark-border rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 outline-none focus:border-primary/50 transition-all font-mono"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && tokenInput.trim()) {
+                                        handleSaveToken(serviceId)
+                                      } else if (e.key === 'Escape') {
+                                        setExpandedService(null)
+                                        setTokenInput('')
+                                      }
+                                    }}
+                                  />
+                                </div>
+                                {/* Get Token Button - Prominent for non-tech users */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    window.electronAPI?.shell?.openExternal(config.tokenUrl)
+                                  }}
+                                  className="w-full mt-3 px-3 py-2.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 hover:border-primary/50 rounded-lg text-xs font-medium text-primary transition-all flex items-center justify-center gap-2"
+                                >
+                                  <ExternalLink size={14} />
+                                  Get your {config.name} token
+                                </button>
+                                <p className="text-[10px] text-gray-500 text-center mt-2">
+                                  Opens in your browser. Copy the token and paste it above.
+                                </p>
+
+                                {/* Action buttons */}
+                                <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-dark-border/30">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setExpandedService(null)
+                                      setTokenInput('')
+                                    }}
+                                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleSaveToken(serviceId)
+                                    }}
+                                    disabled={!tokenInput.trim() || savingToken}
+                                    className={`px-4 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5 ${
+                                      tokenInput.trim() && !savingToken
+                                        ? 'bg-primary text-white hover:bg-primary-dark'
+                                        : 'bg-gray-700/50 text-gray-500 cursor-not-allowed'
+                                    }`}
+                                  >
+                                    {savingToken && (
+                                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    )}
+                                    {savingToken ? 'Saving...' : 'Save Token'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       )
                     })}
                   </div>
