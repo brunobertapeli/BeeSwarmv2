@@ -1,8 +1,17 @@
-import { ipcMain, safeStorage } from 'electron'
+import { ipcMain, safeStorage, WebContents } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
 import { deploymentService, DeploymentProvider } from '../services/DeploymentService.js'
+import { databaseService } from '../services/DatabaseService.js'
+import { envService } from '../services/EnvService.js'
+
+// Store reference to main window for sending events
+let mainWindowContents: WebContents | null = null
+
+export function setDeploymentMainWindow(webContents: WebContents) {
+  mainWindowContents = webContents
+}
 
 // Store deployment tokens in a JSON file in user data directory
 // This is global (not project-specific)
@@ -156,6 +165,111 @@ export function registerDeploymentHandlers() {
       return { success: true, available }
     } catch (error: any) {
       console.error(`Error checking CLI availability for ${provider}:`, error)
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Deploy project to a provider
+  ipcMain.handle('deployment:deploy', async (_event, projectId: string, provider: DeploymentProvider) => {
+    try {
+      console.log(`🚀 [DEPLOY] Starting deployment for project ${projectId} to ${provider}`)
+
+      // Send progress event helper
+      const sendProgress = (message: string) => {
+        console.log(`📤 [DEPLOY] Progress: ${message}`)
+        if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+          mainWindowContents.send('deployment:progress', projectId, message)
+        }
+      }
+
+      // 1. Get project data
+      const project = databaseService.getProjectById(projectId)
+      if (!project) {
+        return { success: false, error: 'Project not found' }
+      }
+
+      sendProgress(`Starting deployment to ${provider}...`)
+
+      // 2. Get token for provider
+      const tokens = readTokensFile()
+      const tokenData = tokens[provider]
+      if (!tokenData) {
+        return { success: false, error: `No token found for ${provider}. Please connect in Settings.` }
+      }
+
+      let token: string
+      if (tokenData.isFallback) {
+        token = Buffer.from(tokenData.encrypted, 'base64').toString('utf-8')
+      } else {
+        try {
+          const buffer = Buffer.from(tokenData.encrypted, 'base64')
+          token = safeStorage.decryptString(buffer)
+        } catch (decryptError) {
+          console.error('Failed to decrypt deployment token:', decryptError)
+          return { success: false, error: 'Failed to decrypt token' }
+        }
+      }
+
+      // 3. Get environment variables from project's .env files
+      const envVars: Record<string, string> = {}
+
+      if (project.envFiles) {
+        try {
+          const envFilesConfig = JSON.parse(project.envFiles)
+          const envFilesData = envService.readProjectEnvFiles(project.path, envFilesConfig)
+
+          // Flatten all env vars from all files
+          for (const envFile of envFilesData) {
+            for (const [key, value] of Object.entries(envFile.variables)) {
+              if (value && value.trim()) {
+                envVars[key] = value
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error reading env files:', error)
+          // Continue without env vars
+        }
+      }
+
+      sendProgress(`Found ${Object.keys(envVars).length} environment variables`)
+
+      // 4. Get existing deployment ID
+      const existingId = databaseService.getDeploymentId(projectId, provider)
+
+      // 5. Deploy
+      const result = await deploymentService.deploy(
+        provider,
+        project.path,
+        project.name,
+        token,
+        envVars,
+        existingId,
+        sendProgress
+      )
+
+      // 6. Save deployment ID if new
+      if (result.success) {
+        if (provider === 'netlify' && result.siteId) {
+          databaseService.saveDeploymentId(projectId, 'netlify', result.siteId)
+        } else if (provider === 'railway' && result.projectId) {
+          databaseService.saveDeploymentId(projectId, 'railway', result.projectId)
+        }
+
+        // Save live URL
+        if (result.url) {
+          databaseService.saveLiveUrl(projectId, result.url)
+        }
+      }
+
+      // 7. Send completion event
+      if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+        mainWindowContents.send('deployment:complete', projectId, result)
+      }
+
+      return result
+    } catch (error: any) {
+      console.error(`Error deploying to ${provider}:`, error)
       return { success: false, error: error.message }
     }
   })

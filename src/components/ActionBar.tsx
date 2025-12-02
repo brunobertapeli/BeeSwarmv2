@@ -27,7 +27,7 @@ import {
   MessageSquare
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useAppStore, type DeploymentStatus } from '../store/appStore'
+import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import StatusSheet from './StatusSheet'
@@ -50,6 +50,7 @@ interface ActionBarProps {
   autoMessage?: string
   onAutoMessageSent?: () => void
   onRefreshEnvCount?: () => void // Callback to allow parent to trigger env count refresh
+  deployServices?: string[] // Array of deployment services available for this project
 }
 
 type ViewMode = 'desktop' | 'mobile'
@@ -63,13 +64,11 @@ const getModelDisplayName = (modelId: string): string => {
   return modelId
 }
 
-// Deployment stages with user-friendly labels
-const DEPLOYMENT_STAGES = [
-  { status: 'creating' as DeploymentStatus, label: 'Creating instance', icon: Rocket },
-  { status: 'building' as DeploymentStatus, label: 'Building app', icon: Loader2 },
-  { status: 'setting-keys' as DeploymentStatus, label: 'Setting up keys', icon: Loader2 },
-  { status: 'finalizing' as DeploymentStatus, label: 'Finalizing', icon: Loader2 },
-]
+// Provider display names
+const PROVIDER_NAMES: Record<string, string> = {
+  netlify: 'Netlify',
+  railway: 'Railway'
+}
 
 function ActionBar({
   projectId,
@@ -82,9 +81,10 @@ function ActionBar({
   autoPinned = false,
   autoMessage,
   onAutoMessageSent,
-  onRefreshEnvCount
+  onRefreshEnvCount,
+  deployServices = []
 }: ActionBarProps) {
-  const { netlifyConnected, deploymentStatus, setDeploymentStatus, viewMode, setViewMode } = useAppStore()
+  const { viewMode, setViewMode } = useAppStore()
   const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, chatWidgetEnabled, setChatWidgetEnabled, modalFreezeActive, setStatusSheetExpanded, bringWidgetToFront } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
@@ -106,6 +106,13 @@ function ActionBar({
   const [showScreenshotModal, setShowScreenshotModal] = useState(false)
   const [emptyEnvVarsCount, setEmptyEnvVarsCount] = useState(0)
   const [screenshotData, setScreenshotData] = useState<string | null>(null)
+  // Deployment state
+  const [connectedProviders, setConnectedProviders] = useState<string[]>([])
+  const [isDeploying, setIsDeploying] = useState(false)
+  const [deployingProvider, setDeployingProvider] = useState<string | null>(null)
+  const [showProviderMenu, setShowProviderMenu] = useState(false)
+  const [liveUrl, setLiveUrl] = useState<string | null>(null)
+  const providerMenuRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<ContentEditableInputRef>(null)
   const actionBarRef = useRef<HTMLDivElement>(null)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
@@ -139,10 +146,6 @@ function ActionBar({
 
   // Check if Claude is working (also block if status is undefined to prevent race condition)
   const isClaudeWorking = claudeStatus === 'starting' || claudeStatus === 'running' || claudeStatus === undefined
-
-  // Check if deployment is in progress
-  const isDeploying = deploymentStatus !== 'idle' && deploymentStatus !== 'live'
-  const isLive = deploymentStatus === 'live'
   const isInputBlocked = isClaudeWorking || isDeploying
 
   useEffect(() => {
@@ -257,6 +260,79 @@ function ActionBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
+  // Check which providers from deployServices are connected
+  useEffect(() => {
+    if (!deployServices || deployServices.length === 0) {
+      setConnectedProviders([])
+      return
+    }
+
+    const checkConnectedProviders = async () => {
+      try {
+        const result = await window.electronAPI?.deployment?.getConnectedServices()
+        if (result?.success && result.services) {
+          // Filter to only include providers that are in deployServices
+          const connected = result.services.filter((s: string) => deployServices.includes(s))
+          setConnectedProviders(connected)
+        }
+      } catch (error) {
+        console.error('Failed to check connected providers:', error)
+      }
+    }
+
+    checkConnectedProviders()
+  }, [deployServices])
+
+  // Check for live URL on mount and when projectId changes
+  useEffect(() => {
+    if (!projectId) return
+
+    const checkLiveUrl = async () => {
+      try {
+        const result = await window.electronAPI?.projects?.getById(projectId)
+        if (result?.success && result.project?.liveUrl) {
+          setLiveUrl(result.project.liveUrl)
+        }
+      } catch (error) {
+        console.error('Failed to check live URL:', error)
+      }
+    }
+
+    checkLiveUrl()
+  }, [projectId])
+
+  // Listen for deployment events
+  useEffect(() => {
+    if (!projectId || !window.electronAPI?.deployment) return
+
+    const unsubProgress = window.electronAPI.deployment.onProgress((id: string, message: string) => {
+      if (id === projectId) {
+        console.log(`[DEPLOY ${id}] ${message}`)
+      }
+    })
+
+    const unsubComplete = window.electronAPI.deployment.onComplete((id: string, result: any) => {
+      if (id === projectId) {
+        setIsDeploying(false)
+        setDeployingProvider(null)
+
+        if (result.success) {
+          if (result.url) {
+            setLiveUrl(result.url)
+          }
+          toast.success('Deployment complete!', result.url ? `Live at: ${result.url}` : 'Your app is now live')
+        } else {
+          toast.error('Deployment failed', result.error || 'Unknown error')
+        }
+      }
+    })
+
+    return () => {
+      unsubProgress?.()
+      unsubComplete?.()
+    }
+  }, [projectId, toast])
+
   // Watch for prefilled message from other components (e.g., image reference)
   useEffect(() => {
     if (prefilledMessage !== null) {
@@ -283,16 +359,19 @@ function ActionBar({
       if (tweakMenuRef.current && !tweakMenuRef.current.contains(event.target as Node)) {
         setShowTweakMenu(false)
       }
+      if (providerMenuRef.current && !providerMenuRef.current.contains(event.target as Node)) {
+        setShowProviderMenu(false)
+      }
     }
 
-    if (showModelDropdown || showPlusMenu || showTweakMenu) {
+    if (showModelDropdown || showPlusMenu || showTweakMenu || showProviderMenu) {
       document.addEventListener('mousedown', handleClickOutside)
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showModelDropdown, showPlusMenu, showTweakMenu])
+  }, [showModelDropdown, showPlusMenu, showTweakMenu, showProviderMenu])
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -674,52 +753,75 @@ function ActionBar({
     prevProjectIdRef.current = projectId
   }, [autoMessage, projectId])
 
-  const handleDeploy = () => {
-    if (!netlifyConnected || isDeploying || isLive) return
+  const handleDeploy = async (provider?: string) => {
+    if (!projectId || isDeploying) return
 
-    // Reset progress
+    // Determine which provider to use
+    let targetProvider = provider
+
+    if (!targetProvider) {
+      if (connectedProviders.length === 0) {
+        // No connected providers - open settings
+        onOpenSettings?.('deployment')
+        return
+      } else if (connectedProviders.length === 1) {
+        // Only one provider - use it directly
+        targetProvider = connectedProviders[0]
+      } else {
+        // Multiple providers - show menu
+        setShowProviderMenu(true)
+        return
+      }
+    }
+
+    // Close menu if open
+    setShowProviderMenu(false)
+
+    // Start deployment
+    console.log(`🚀 Starting deployment to ${targetProvider}...`)
+    setIsDeploying(true)
+    setDeployingProvider(targetProvider)
     setDeployProgress(0)
 
-    // Start deployment flow
-    let currentStageIndex = 0
-    setDeploymentStatus(DEPLOYMENT_STAGES[0].status)
-
-    const interval = setInterval(() => {
-      currentStageIndex++
-      if (currentStageIndex < DEPLOYMENT_STAGES.length) {
-        setDeploymentStatus(DEPLOYMENT_STAGES[currentStageIndex].status)
-      } else {
-        // All stages complete - set to live
-        setDeploymentStatus('live')
-        clearInterval(interval)
-        // Show success toast
-        toast.success('Deployment complete!', 'Your app is now live')
+    try {
+      const result = await window.electronAPI?.deployment?.deploy(projectId, targetProvider)
+      // Result will be handled by onComplete event listener
+      if (!result?.success) {
+        // Handle immediate errors
+        setIsDeploying(false)
+        setDeployingProvider(null)
+        toast.error('Deployment failed', result?.error || 'Unknown error')
       }
-    }, 2500) // 2.5 seconds per stage
+    } catch (error) {
+      console.error('Deployment error:', error)
+      setIsDeploying(false)
+      setDeployingProvider(null)
+      toast.error('Deployment failed', error instanceof Error ? error.message : 'Unknown error')
+    }
   }
 
-  // Update progress bar during deployment
+  // Update progress bar during deployment (slower animation since actual deploy takes time)
   useEffect(() => {
     if (isDeploying) {
       const progressInterval = setInterval(() => {
         setDeployProgress((prev) => {
-          if (prev >= 100) return 100
-          return prev + 1 // Increment by 1% every 100ms
+          if (prev >= 95) return 95 // Cap at 95% until complete
+          return prev + 0.5 // Slower increment
         })
-      }, 100)
+      }, 200)
 
       return () => clearInterval(progressInterval)
-    } else if (deploymentStatus === 'idle') {
+    } else if (!isDeploying && !liveUrl) {
       setDeployProgress(0)
-    } else if (deploymentStatus === 'live') {
+    } else if (liveUrl) {
       setDeployProgress(100)
     }
-  }, [isDeploying, deploymentStatus])
+  }, [isDeploying, liveUrl])
 
   const handleVisitLive = () => {
-    // Open the hosted URL
-    const url = 'https://your-app.netlify.app' // This will come from backend
-    window.open(url, '_blank')
+    if (liveUrl) {
+      window.open(liveUrl, '_blank')
+    }
   }
 
   const toggleViewMode = async () => {
@@ -1699,68 +1801,108 @@ function ActionBar({
             <div className="w-px h-5 bg-dark-border/50" />
 
             {/* Deploy Button */}
-            {!netlifyConnected ? (
-              // Not connected - show disabled state
-              <button
-                disabled
-                className="px-2.5 py-1.5 bg-gray-700/30 border border-gray-700/50 rounded-lg transition-all cursor-not-allowed relative icon-button-group"
-              >
-                <div className="flex items-center gap-1.5">
-                  <Rocket size={13} className="text-gray-600" />
-                  <span className="text-[11px] text-gray-600 font-medium">Deploy</span>
-                </div>
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
-                  Connect Netlify first
-                </span>
-              </button>
-            ) : isLive ? (
-              // Live - show visit button
-              <button
-                onClick={handleVisitLive}
-                className="px-2.5 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 hover:border-primary/50 rounded-lg transition-all relative icon-button-group"
-              >
-                <div className="flex items-center gap-1.5">
-                  <Globe size={13} className="text-primary" />
-                  <span className="text-[11px] text-primary font-medium">Live</span>
-                  <ExternalLink size={10} className="text-primary opacity-60" />
-                </div>
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
-                  Visit live site
-                </span>
-              </button>
-            ) : isDeploying ? (
-              // Deploying - show progress animation
-              <button
-                disabled
-                className="relative px-2.5 py-1.5 bg-primary/10 border border-primary/30 rounded-lg transition-all cursor-wait overflow-hidden"
-              >
-                {/* Progress bar background */}
-                <div
-                  className="absolute inset-0 bg-primary/20 transition-all duration-300"
-                  style={{ width: `${deployProgress}%` }}
-                />
+            <div className="relative" ref={providerMenuRef}>
+              {liveUrl && !isDeploying ? (
+                // Live - show visit button
+                <button
+                  onClick={handleVisitLive}
+                  className="px-2.5 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 hover:border-primary/50 rounded-lg transition-all relative icon-button-group"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Globe size={13} className="text-primary" />
+                    <span className="text-[11px] text-primary font-medium">Live</span>
+                    <ExternalLink size={10} className="text-primary opacity-60" />
+                  </div>
+                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                    Visit live site
+                  </span>
+                </button>
+              ) : isDeploying ? (
+                // Deploying - show progress animation
+                <button
+                  disabled
+                  className="relative px-2.5 py-1.5 bg-primary/10 border border-primary/30 rounded-lg transition-all cursor-wait overflow-hidden"
+                >
+                  {/* Progress bar background */}
+                  <div
+                    className="absolute inset-0 bg-primary/20 transition-all duration-300"
+                    style={{ width: `${deployProgress}%` }}
+                  />
 
-                {/* Icon and text */}
-                <div className="relative flex items-center gap-1.5">
-                  <Rocket size={13} className="text-primary" />
-                  <span className="text-[11px] text-primary font-medium">Deploy</span>
-                </div>
-              </button>
-            ) : (
-              // Idle - show deploy button
-              <button
-                onClick={handleDeploy}
-                className="px-2.5 py-1.5 bg-dark-bg/30 hover:bg-dark-bg border border-dark-border hover:border-primary/50 rounded-lg transition-all relative icon-button-group"
-              >
-                <div className="flex items-center gap-1.5">
-                  <Rocket size={13} className="text-gray-400 group-hover:text-primary transition-colors" />
-                  <span className="text-[11px] text-gray-300 hover:text-white font-medium transition-colors">Deploy</span>
-                </div>
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
-                  Deploy to Netlify
-                </span>
-              </button>
-            )}
+                  {/* Icon and text */}
+                  <div className="relative flex items-center gap-1.5">
+                    <Loader2 size={13} className="text-primary animate-spin" />
+                    <span className="text-[11px] text-primary font-medium">
+                      {deployingProvider ? PROVIDER_NAMES[deployingProvider] || deployingProvider : 'Deploying'}...
+                    </span>
+                  </div>
+                </button>
+              ) : connectedProviders.length === 0 ? (
+                // No connected providers - show disabled state
+                <button
+                  onClick={() => onOpenSettings?.('deployment')}
+                  className="px-2.5 py-1.5 bg-gray-700/30 border border-gray-700/50 hover:border-gray-600 rounded-lg transition-all cursor-pointer relative icon-button-group"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Rocket size={13} className="text-gray-600" />
+                    <span className="text-[11px] text-gray-600 font-medium">Deploy</span>
+                  </div>
+                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                    Configure deployment in Settings
+                  </span>
+                </button>
+              ) : (
+                // Has connected providers - show deploy button
+                <>
+                  <button
+                    onClick={() => handleDeploy()}
+                    className="px-2.5 py-1.5 bg-dark-bg/30 hover:bg-dark-bg border border-dark-border hover:border-primary/50 rounded-lg transition-all relative icon-button-group"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Rocket size={13} className="text-gray-400 group-hover:text-primary transition-colors" />
+                      <span className="text-[11px] text-gray-300 hover:text-white font-medium transition-colors">Deploy</span>
+                      {connectedProviders.length > 1 && (
+                        <ChevronDown size={10} className="text-gray-500" />
+                      )}
+                    </div>
+                    <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                      {connectedProviders.length === 1
+                        ? `Deploy to ${PROVIDER_NAMES[connectedProviders[0]] || connectedProviders[0]}`
+                        : 'Choose provider'}
+                    </span>
+                  </button>
+
+                  {/* Provider Menu */}
+                  {showProviderMenu && connectedProviders.length > 1 && (
+                    <>
+                      <div className="fixed inset-0 z-[200]" onClick={() => setShowProviderMenu(false)} />
+                      <div className="absolute bottom-full right-0 mb-1 bg-dark-card border border-dark-border rounded-lg shadow-2xl p-2 min-w-[140px] z-[201] overflow-hidden">
+                        <div
+                          className="absolute inset-0 opacity-10 pointer-events-none"
+                          style={{
+                            backgroundImage: `url(${bgImage})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center',
+                          }}
+                        />
+                        <div className="relative z-10 space-y-1">
+                          {connectedProviders.map((provider) => (
+                            <button
+                              key={provider}
+                              onClick={() => handleDeploy(provider)}
+                              className="w-full px-3 py-2 rounded-lg text-left text-[11px] text-gray-300 hover:bg-dark-bg/50 hover:text-white transition-colors flex items-center gap-2"
+                            >
+                              <Rocket size={12} />
+                              <span>{PROVIDER_NAMES[provider] || provider}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

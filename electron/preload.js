@@ -516,6 +516,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getConnectedServices: () => ipcRenderer.invoke('deployment:get-connected-services'),
     disconnect: (serviceId) => ipcRenderer.invoke('deployment:disconnect', serviceId),
     getCliStatus: () => ipcRenderer.invoke('deployment:get-cli-status'),
-    isCliAvailable: (provider) => ipcRenderer.invoke('deployment:is-cli-available', provider)
+    isCliAvailable: (provider) => ipcRenderer.invoke('deployment:is-cli-available', provider),
+    deploy: (projectId, provider) => ipcRenderer.invoke('deployment:deploy', projectId, provider),
+
+    // Deployment event listeners
+    onProgress: (callback) => {
+      const listener = (_event, projectId, message) => callback(projectId, message)
+      ipcRenderer.on('deployment:progress', listener)
+      return () => ipcRenderer.removeListener('deployment:progress', listener)
+    },
+    onComplete: (callback) => {
+      const listener = (_event, projectId, result) => callback(projectId, result)
+      ipcRenderer.on('deployment:complete', listener)
+      return () => ipcRenderer.removeListener('deployment:complete', listener)
+    }
   }
 })

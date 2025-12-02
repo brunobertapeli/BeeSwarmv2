@@ -22,6 +22,9 @@ export interface Project {
   deployServices: string | null // JSON array of deployment services
   envFiles: string | null // JSON array of { path, label, description }
   imagePath: string | null // Path to template images
+  netlifyId: string | null // Netlify site ID for redeployment
+  railwayId: string | null // Railway project ID for redeployment
+  liveUrl: string | null // Last deployed live URL
   kanbanState: string | null // JSON string with { enabled, position, size }
   stickyNotesState: string | null // JSON string with sticky notes array
   analyticsWidgetState: string | null // JSON string with { enabled, position, size }
@@ -474,6 +477,24 @@ class DatabaseService {
       const hasChatWidgetState = tableInfo.some(col => col.name === 'chatWidgetState')
       if (!hasChatWidgetState) {
         this.db.exec('ALTER TABLE projects ADD COLUMN chatWidgetState TEXT')
+      }
+
+      // Migration 25: Add netlifyId column if it doesn't exist
+      const hasNetlifyId = tableInfo.some(col => col.name === 'netlifyId')
+      if (!hasNetlifyId) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN netlifyId TEXT')
+      }
+
+      // Migration 26: Add railwayId column if it doesn't exist
+      const hasRailwayId = tableInfo.some(col => col.name === 'railwayId')
+      if (!hasRailwayId) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN railwayId TEXT')
+      }
+
+      // Migration 27: Add liveUrl column if it doesn't exist
+      const hasLiveUrl = tableInfo.some(col => col.name === 'liveUrl')
+      if (!hasLiveUrl) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN liveUrl TEXT')
       }
 
       // Future migrations can be added here
@@ -1096,6 +1117,71 @@ class DatabaseService {
       console.error('❌ Failed to parse Chat widget state:', error)
       return null
     }
+  }
+
+  /**
+   * Save deployment ID for a provider
+   */
+  saveDeploymentId(projectId: string, provider: 'netlify' | 'railway', deploymentId: string): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save deployment ID after database closed - ignoring')
+      return
+    }
+
+    const column = provider === 'netlify' ? 'netlifyId' : 'railwayId'
+    const sql = `UPDATE projects SET ${column} = ? WHERE id = ?`
+
+    try {
+      this.db.prepare(sql).run(deploymentId, projectId)
+    } catch (error) {
+      console.error(`❌ Failed to save ${provider} deployment ID:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Get deployment ID for a provider
+   */
+  getDeploymentId(projectId: string, provider: 'netlify' | 'railway'): string | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!project) return null
+
+    return provider === 'netlify' ? project.netlifyId : project.railwayId
+  }
+
+  /**
+   * Save live URL for a project
+   */
+  saveLiveUrl(projectId: string, url: string): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save live URL after database closed - ignoring')
+      return
+    }
+
+    const sql = 'UPDATE projects SET liveUrl = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(url, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save live URL:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get live URL for a project
+   */
+  getLiveUrl(projectId: string): string | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    return project?.liveUrl || null
   }
 
   /**

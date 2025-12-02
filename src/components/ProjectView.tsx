@@ -847,6 +847,7 @@ Please read the manifest to understand what my website is about, then create an 
               autoMessage={websiteImportPrompt}
               onAutoMessageSent={handleWebsiteImportPromptSent}
               onRefreshEnvCount={() => {}}
+              deployServices={currentProject?.deployServices ? JSON.parse(currentProject.deployServices) : []}
             />
           </div>
         </div>
