@@ -70,7 +70,6 @@ class DeploymentService {
           version,
           error: null
         }
-        console.log(`✅ Railway CLI ready: ${this.railwayCliPath} (${version})`)
       } else {
         status.railway.error = 'Railway CLI binary not found'
         console.warn('⚠️ Railway CLI not found')
@@ -91,7 +90,6 @@ class DeploymentService {
           version,
           error: null
         }
-        console.log(`✅ Netlify CLI ready: ${this.netlifyCliPath} (${version})`)
       } else {
         status.netlify.error = 'Netlify CLI not found'
         console.warn('⚠️ Netlify CLI not found')
@@ -129,7 +127,6 @@ class DeploymentService {
         platformKey,
         binaryName
       )
-      console.log(`[DeploymentService] Dev mode - looking for Railway CLI at: ${binaryPath}`)
     } else {
       // Production: use binaries from app resources
       binaryPath = path.join(
@@ -186,11 +183,8 @@ class DeploymentService {
       )
     }
 
-    console.log(`[DeploymentService] Looking for Netlify CLI in:`, possiblePaths)
-
     for (const p of possiblePaths) {
       if (fs.existsSync(p)) {
-        console.log(`[DeploymentService] Found Netlify CLI at: ${p}`)
         return p
       }
     }
@@ -403,7 +397,6 @@ class DeploymentService {
     onProgress: (message: string) => void
   ): Promise<{ success: boolean; output: string; error?: string }> {
     return new Promise((resolve) => {
-      console.log(`🚀 [DEPLOY] Running: ${cmd} ${args.join(' ')}`)
       onProgress(`Running: ${cmd} ${args.join(' ')}`)
 
       const proc = spawn(cmd, args, {
@@ -419,13 +412,11 @@ class DeploymentService {
       proc.stdout?.on('data', (data) => {
         const text = data.toString()
         stdout += text
-        console.log(`📤 [DEPLOY STDOUT] ${text}`)
         onProgress(text)
 
         // Auto-answer interactive prompts by sending Enter
         // Detect prompts like "? Team:" or "? Select" and send newline to accept default
         if (options.stdinInput && !stdinSent && (text.includes('?') || text.includes('arrow keys'))) {
-          console.log(`📝 [DEPLOY] Detected prompt, sending input...`)
           setTimeout(() => {
             proc.stdin?.write(options.stdinInput)
             proc.stdin?.end()
@@ -437,7 +428,6 @@ class DeploymentService {
       proc.stderr?.on('data', (data) => {
         const text = data.toString()
         stderr += text
-        console.log(`📤 [DEPLOY STDERR] ${text}`)
         onProgress(text)
       })
 
@@ -477,7 +467,6 @@ class DeploymentService {
     try {
       // Step 1: Build the project
       onProgress('📦 Building project...')
-      console.log('🔨 [NETLIFY] Building project...')
 
       const buildResult = await this.runCommand(
         'npm',
@@ -502,7 +491,6 @@ class DeploymentService {
         if (fs.existsSync(checkPath)) {
           buildDir = dir
           fullBuildPath = checkPath
-          console.log(`📁 [NETLIFY] Found build output at: ${dir}`)
           break
         }
       }
@@ -522,7 +510,6 @@ class DeploymentService {
             if (stateContent.siteId) {
               siteId = stateContent.siteId
               onProgress(`📎 Found existing Netlify site: ${siteId.substring(0, 8)}...`)
-              console.log(`📎 [NETLIFY] Found existing siteId in state.json: ${siteId}`)
             }
           } catch (e) {
             console.warn('⚠️ [NETLIFY] Could not read state.json:', e)
@@ -533,7 +520,6 @@ class DeploymentService {
       // Step 3: Create site if still no siteId
       if (!siteId) {
         onProgress('🌐 Creating Netlify site...')
-        console.log('🌐 [NETLIFY] Creating site...')
 
         // Clean project name for Netlify (lowercase, no special chars)
         const cleanName = projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-')
@@ -575,7 +561,6 @@ class DeploymentService {
       // Step 4: Set environment variables
       if (Object.keys(envVars).length > 0 && siteId) {
         onProgress('🔐 Setting environment variables...')
-        console.log('🔐 [NETLIFY] Setting env vars...')
 
         for (const [key, value] of Object.entries(envVars)) {
           if (value && value.trim()) {
@@ -591,7 +576,6 @@ class DeploymentService {
 
       // Step 5: Deploy
       onProgress('🚀 Deploying to Netlify...')
-      console.log('🚀 [NETLIFY] Deploying...')
 
       // Build deploy args - use --site flag if we have a siteId
       const deployArgs = [...baseArgs, 'deploy', '--prod', '--dir', buildDir, '--no-build']
@@ -617,7 +601,6 @@ class DeploymentService {
       const url = urlMatch?.[1] || null
 
       onProgress(`✅ Deployed successfully!${url ? ` Live at: ${url}` : ''}`)
-      console.log(`✅ [NETLIFY] Deploy complete! URL: ${url}`)
 
       // NOTE: We no longer delete .netlify/state.json after deployment
       // The ProcessManager now injects NETLIFY_AUTH_TOKEN when running `netlify dev`,
@@ -660,7 +643,6 @@ class DeploymentService {
     const hasFrontend = fs.existsSync(path.join(projectPath, 'frontend'))
     const isFullStack = hasBackend && hasFrontend
 
-    console.log(`🚂 [RAILWAY] Project type: ${isFullStack ? 'Full-stack (backend + frontend)' : 'Single service'}`)
 
     try {
       let projectId = existingProjectId
@@ -727,7 +709,6 @@ class DeploymentService {
           // Use production environment, or fall back to first environment
           const prodEnv = environments.find((e: any) => e.node.name === 'production')
           environmentId = prodEnv?.node?.id || environments[0]?.node?.id || null
-          console.log(`🔗 [RAILWAY] Environment ID: ${environmentId}`)
         } catch (apiError) {
           console.error(`❌ [RAILWAY] Failed to get environment ID:`, apiError)
         }
@@ -779,10 +760,8 @@ class DeploymentService {
               const service = edge.node
               if (service.name.toLowerCase().includes('backend')) {
                 backendServiceId = service.id
-                console.log(`🔗 [RAILWAY] Found existing Backend Service: ${backendServiceId}`)
               } else if (service.name.toLowerCase().includes('frontend')) {
                 frontendServiceId = service.id
-                console.log(`🔗 [RAILWAY] Found existing Frontend Service: ${frontendServiceId}`)
               }
             }
           } catch (apiError) {
@@ -819,7 +798,6 @@ class DeploymentService {
             const backendResult = await createBackendResponse.json() as { data?: { serviceCreate?: { id: string } }, errors?: unknown[] }
             if (backendResult.data?.serviceCreate?.id) {
               backendServiceId = backendResult.data.serviceCreate.id
-              console.log(`🔗 [RAILWAY] Backend Service created via API: ${backendServiceId}`)
             }
           } catch (apiError) {
             console.error(`❌ [RAILWAY] API error creating backend service:`, apiError)
@@ -851,7 +829,6 @@ class DeploymentService {
           const backendServiceMatch = backendDeployResult.output.match(/\/service\/([a-f0-9-]{36})/i)
           backendServiceId = backendServiceMatch?.[1] || null
         }
-        console.log(`🔗 [RAILWAY] Backend Service ID: ${backendServiceId}`)
 
         // Get backend domain (use --service flag since we're at project root)
         onProgress('🌐 Getting backend URL...')
@@ -865,7 +842,6 @@ class DeploymentService {
         if (backendDomainResult.success) {
           const urlMatch = backendDomainResult.output.match(/(https:\/\/[^\s]+)/i)
           backendUrl = urlMatch?.[1]
-          console.log(`🔗 [RAILWAY] Backend URL: ${backendUrl}`)
         }
 
         // Set backend env vars (excluding frontend-specific ones)
@@ -913,9 +889,6 @@ class DeploymentService {
             const createResult = await createServiceResponse.json() as { data?: { serviceCreate?: { id: string } }, errors?: unknown[] }
             if (createResult.data?.serviceCreate?.id) {
               frontendServiceId = createResult.data.serviceCreate.id
-              console.log(`🔗 [RAILWAY] Frontend Service created via API: ${frontendServiceId}`)
-            } else {
-              console.log(`⚠️ [RAILWAY] Could not create frontend service via API:`, createResult.errors)
             }
           } catch (apiError) {
             console.error(`❌ [RAILWAY] API error creating frontend service:`, apiError)
@@ -948,7 +921,6 @@ class DeploymentService {
           const frontendServiceMatch = frontendDeployResult.output.match(/\/service\/([a-f0-9-]{36})/i)
           frontendServiceId = frontendServiceMatch?.[1] || null
         }
-        console.log(`🔗 [RAILWAY] Frontend Service ID: ${frontendServiceId}`)
 
         // Get frontend domain via Railway API (CLI doesn't work well with service ID)
         if (frontendServiceId && environmentId) {
@@ -980,7 +952,6 @@ class DeploymentService {
             const domainResult = await domainResponse.json() as { data?: { serviceDomainCreate?: { domain: string } }, errors?: unknown[] }
             if (domainResult.data?.serviceDomainCreate?.domain) {
               frontendUrl = `https://${domainResult.data.serviceDomainCreate.domain}`
-              console.log(`🔗 [RAILWAY] Frontend URL via API: ${frontendUrl}`)
             } else {
               // Fallback: try to get existing domain
               const getDomainResponse = await fetch('https://backboard.railway.app/graphql/v2', {
@@ -1018,7 +989,6 @@ class DeploymentService {
               const frontendService = services.find((s: any) => s.node.id === frontendServiceId)
               if (frontendService?.node?.serviceDomains?.[0]?.domain) {
                 frontendUrl = `https://${frontendService.node.serviceDomains[0].domain}`
-                console.log(`🔗 [RAILWAY] Frontend URL from query: ${frontendUrl}`)
               }
             }
           } catch (apiError) {
@@ -1118,7 +1088,6 @@ class DeploymentService {
         }
 
         onProgress(`✅ Full-stack deployed! Frontend: ${frontendUrl}`)
-        console.log(`✅ [RAILWAY] Deploy complete! Frontend: ${frontendUrl}, Backend: ${backendUrl}`)
 
         return {
           success: true,
@@ -1293,7 +1262,6 @@ class DeploymentService {
           if (prevStatus !== status) {
             const statusEmoji = status === 'SUCCESS' ? '✅' : status === 'BUILDING' ? '🔨' : status === 'DEPLOYING' ? '🚀' : status === 'FAILED' ? '❌' : '⏳'
             onProgress(`${statusEmoji} ${service.name}: ${status}`)
-            console.log(`🚂 [RAILWAY] Service ${service.name} (${service.id}): ${status}`)
           }
 
           if (!terminalStatuses.includes(status)) {

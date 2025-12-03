@@ -19,8 +19,6 @@ import {
 // Assets
 import AnthropicIcon from '../assets/images/anthropic.svg'
 import GitIcon from '../assets/images/git.svg'
-import bgImage from '../assets/images/bg.jpg'
-import noiseBgImage from '../assets/images/noise_bg.png'
 import successSound from '../assets/sounds/success.wav'
 
 function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, onApprovePlan, onRejectPlan, onXMLTagClick, onXMLTagDetected }: StatusSheetProps) {

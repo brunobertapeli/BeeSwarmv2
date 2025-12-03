@@ -435,6 +435,10 @@ class PreviewService extends EventEmitter {
       this.mainWindow.contentView.removeChildView(view);
     }
 
+    // Throttle the hidden WebContents to save CPU/GPU
+    view.webContents.setBackgroundThrottling(true);
+    view.webContents.setFrameRate(1); // Minimal frame rate when hidden
+
     // Transfer focus back to main window so keyboard events work
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.focus();
@@ -451,6 +455,10 @@ class PreviewService extends EventEmitter {
   show(projectId: string): void {
     const view = this.webContentsViews.get(projectId);
     if (!view) return;
+
+    // Restore normal frame rate before showing
+    view.webContents.setFrameRate(60); // Normal frame rate
+    view.webContents.setBackgroundThrottling(false);
 
     // Add view back to hierarchy (at index 0 to be behind other views like modals)
     // With WebContentsView, addChildView brings to top by default

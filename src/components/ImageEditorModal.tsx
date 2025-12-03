@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, ZoomIn, ZoomOut, RotateCcw, Maximize2, Crop, Palette, SlidersHorizontal, RotateCw, FlipHorizontal, FlipVertical, Sun, Contrast, Droplets, CircleDot, Link, Unlink, Check, Square, RectangleHorizontal, RectangleVertical, Smartphone, Move, Undo2, Scan, Trash2 } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
-import bgImage from '../assets/images/bg.jpg'
 import { ModalPortal } from './ModalPortal'
 import * as fabric from 'fabric'
 
@@ -1444,7 +1443,6 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
       const result = await window.electronAPI?.files?.saveBase64Image?.(imagePath, dataURL)
 
       if (result?.success) {
-        console.log('✅ Image saved successfully')
         onSave?.()
         handleClose()
       } else {
@@ -1475,17 +1473,8 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
         <div className="absolute inset-0 bg-black/90 backdrop-blur-sm" />
 
         <div className="relative w-[95vw] h-[95vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
-          <div
-            className="absolute inset-0 opacity-5 pointer-events-none"
-            style={{
-              backgroundImage: `url(${bgImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            }}
-          />
-
           {/* Header */}
-          <div className="relative z-10 px-4 py-3 border-b border-dark-border bg-dark-bg/50 flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-dark-border bg-dark-bg/50 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold text-white">Image Editor</h2>
               {/* Breadcrumb when tool is selected */}

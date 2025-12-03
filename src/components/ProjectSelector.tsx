@@ -14,8 +14,6 @@ import {
 } from 'lucide-react'
 import TechIcon from './TechIcon'
 import { Project, Template } from '../types/electron'
-import bgImage from '../assets/images/bg.jpg'
-import noiseBgImage from '../assets/images/noise_bg.png'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
@@ -270,29 +268,8 @@ function ProjectSelector({
         <div
           className="relative w-[520px] max-h-[70vh] bg-dark-card border border-dark-border rounded-lg shadow-2xl animate-scaleIn overflow-hidden"
         >
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 opacity-10 pointer-events-none z-0"
-          style={{
-            backgroundImage: `url(${bgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-
-        {/* Noise texture overlay */}
-        <div
-          className="absolute inset-0 opacity-50 pointer-events-none z-[1]"
-          style={{
-            backgroundImage: `url(${noiseBgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            mixBlendMode: 'soft-light',
-          }}
-        />
-
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-dark-border relative z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-dark-border">
           <div>
             <h2 className="text-lg font-bold text-white" style={{ fontFamily: 'var(--tg-heading-font-family)' }}>Projects</h2>
             <p className="text-sm text-white/60 mt-1" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
@@ -308,7 +285,7 @@ function ProjectSelector({
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(70vh-140px)] overflow-x-visible relative z-10">
+        <div className="overflow-y-auto max-h-[calc(70vh-140px)] overflow-x-visible">
           {/* Loading State */}
           {loading && (
             <div className="flex flex-col items-center justify-center py-12">
@@ -412,7 +389,7 @@ function ProjectSelector({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-dark-border relative z-10">
+        <div className="px-6 py-4 border-t border-dark-border">
           <button
             onClick={onCreateProject}
             className="w-full px-4 py-2.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all flex items-center justify-center gap-2"

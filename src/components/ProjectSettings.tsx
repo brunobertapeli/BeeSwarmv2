@@ -21,7 +21,6 @@ import type { TechConfig } from './TemplateSelector'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
-import bgImage from '../assets/images/bg.jpg'
 import { ModalPortal } from './ModalPortal'
 
 interface ProjectSettingsProps {
@@ -147,18 +146,14 @@ function ProjectSettings({
   useEffect(() => {
     const loadEnvFiles = async () => {
       if (!isOpen || isSetupMode || activeTab !== 'environment') {
-        console.log('🔍 Skipping env files load:', { isOpen, isSetupMode, activeTab })
         return
       }
 
-      console.log('🔍 Loading env files for project:', projectId)
       setLoadingEnvFiles(true)
       try {
         const result = await window.electronAPI?.projects.readEnvFiles(projectId)
-        console.log('🔍 Env files result:', result)
 
         if (result?.success && result.envFiles) {
-          console.log('🔍 Env files loaded:', result.envFiles)
           setEnvFiles(result.envFiles)
           // Initialize changes object and saved values
           const initialChanges: Record<string, Record<string, string>> = {}
@@ -167,9 +162,6 @@ function ProjectSettings({
           })
           setEnvFileChanges(initialChanges)
           setSavedEnvFileValues(initialChanges) // Track what was saved
-          console.log('🔍 Initial changes:', initialChanges)
-        } else {
-          console.log('⚠️ No env files in result or not successful')
         }
       } catch (error) {
         console.error('❌ Failed to load env files:', error)
@@ -456,19 +448,9 @@ function ProjectSettings({
         />
 
         {/* Modal */}
-        <div className="relative w-[700px] max-h-[80vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden flex flex-col">
-          {/* Background Image */}
-          <div
-            className="absolute inset-0 opacity-10 pointer-events-none"
-            style={{
-              backgroundImage: `url(${bgImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            }}
-          />
-
+        <div className="relative w-[700px] max-h-[80vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden flex-col">
           {/* Header */}
-          <div className="border-b border-dark-border/50 relative z-10">
+          <div className="border-b border-dark-border/50">
             <div className="flex items-center justify-between px-5 py-4">
               <div className="flex-1">
                 <h2 className="text-base font-semibold text-white">
@@ -1294,17 +1276,7 @@ function ProjectSettings({
             }}
           />
           <div className="relative w-[450px] bg-dark-card border border-red-500/30 rounded-xl shadow-2xl p-5 overflow-hidden">
-            {/* Background Image */}
-            <div
-              className="absolute inset-0 opacity-10 pointer-events-none"
-              style={{
-                backgroundImage: `url(${bgImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }}
-            />
-
-            <div className="flex items-start gap-3 mb-4 relative z-10">
+            <div className="flex items-start gap-3 mb-4">
               <div className="p-2 bg-red-500/10 rounded-lg">
                 <AlertTriangle size={20} className="text-red-400" />
               </div>

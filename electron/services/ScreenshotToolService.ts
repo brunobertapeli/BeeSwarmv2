@@ -44,7 +44,6 @@ class ScreenshotToolService extends EventEmitter {
 
       // Validate project path
       const validatedPath = pathValidator.validateProjectPath(project.path, project.userId);
-      console.log(`[ScreenshotTool] Project path: ${validatedPath}`);
 
       // Get dev server port
       const port = processManager.getPort(projectId);
@@ -56,8 +55,6 @@ class ScreenshotToolService extends EventEmitter {
       // Ensure route starts with /
       const normalizedRoute = route.startsWith('/') ? route : `/${route}`;
       const url = `http://localhost:${port}${normalizedRoute}`;
-
-      console.log(`[ScreenshotTool] Capturing ${url}`);
 
       // Create hidden browser window
       hiddenWindow = new BrowserWindow({
@@ -72,31 +69,22 @@ class ScreenshotToolService extends EventEmitter {
       });
 
       // Navigate to the URL
-      console.log(`[ScreenshotTool] Loading URL...`);
       await hiddenWindow.loadURL(url);
-      console.log(`[ScreenshotTool] URL loaded`);
 
       // Wait for page to fully render (give React/Vue time to hydrate)
-      console.log(`[ScreenshotTool] Waiting for page ready...`);
       await this.waitForPageReady(hiddenWindow);
-      console.log(`[ScreenshotTool] Page ready`);
 
       // Capture screenshot using CDP
-      console.log(`[ScreenshotTool] Capturing with CDP (fullPage: ${fullPage})...`);
       const screenshot = await this.captureScreenshot(hiddenWindow, fullPage);
-      console.log(`[ScreenshotTool] CDP capture done`);
 
       if (!screenshot) {
         console.error(`[ScreenshotTool] Failed to capture screenshot`);
         return null;
       }
 
-      console.log(`[ScreenshotTool] Screenshot captured, size: ${screenshot.length} bytes`);
-
       // Save to .codedeck/<route>.png
       const screenshotPath = await this.saveScreenshot(validatedPath, screenshot, normalizedRoute);
 
-      console.log(`[ScreenshotTool] Screenshot saved: ${screenshotPath}`);
       this.emit('screenshot-captured', { projectId, path: screenshotPath, route });
 
       return screenshotPath;
@@ -130,18 +118,14 @@ class ScreenshotToolService extends EventEmitter {
       const webContents = window.webContents;
 
       // Attach debugger to use CDP
-      console.log(`[ScreenshotTool] Attaching debugger...`);
       webContents.debugger.attach('1.3');
-      console.log(`[ScreenshotTool] Debugger attached`);
 
       try {
         if (fullPage) {
           // Full page mode: get page dimensions and expand viewport
-          console.log(`[ScreenshotTool] Getting layout metrics for full page...`);
           const layoutResult = await webContents.debugger.sendCommand(
             'Page.getLayoutMetrics'
           );
-          console.log(`[ScreenshotTool] Layout metrics:`, JSON.stringify(layoutResult));
 
           const contentSize = (layoutResult as any).contentSize || (layoutResult as any).cssContentSize;
           if (!contentSize) {
@@ -217,17 +201,13 @@ class ScreenshotToolService extends EventEmitter {
     const filename = this.routeToFilename(route);
     const screenshotPath = path.join(codedeckDir, filename);
 
-    console.log(`[ScreenshotTool] Saving to: ${screenshotPath}`);
-
     // Ensure .codedeck directory exists
     if (!fs.existsSync(codedeckDir)) {
-      console.log(`[ScreenshotTool] Creating directory: ${codedeckDir}`);
       fs.mkdirSync(codedeckDir, { recursive: true });
     }
 
     // Write screenshot (overwrites existing)
     fs.writeFileSync(screenshotPath, screenshot);
-    console.log(`[ScreenshotTool] File written successfully`);
 
     return screenshotPath;
   }

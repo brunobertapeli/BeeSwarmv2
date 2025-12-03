@@ -4,7 +4,6 @@ import { Trash2, Database, Info, X, AlertTriangle, FileText, ExternalLink } from
 import type { ClaudeContext } from '../types/electron'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
-import bgImage from '../assets/images/bg.jpg'
 
 interface ContextBarProps {
   context?: ClaudeContext | null
@@ -229,18 +228,8 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
         <div
           className="absolute bottom-full left-0 mb-2 bg-dark-card border border-dark-border rounded-lg shadow-2xl p-3 min-w-[260px] z-[70] animate-fadeIn overflow-hidden"
         >
-            {/* Background Image */}
-            <div
-              className="absolute inset-0 opacity-10 pointer-events-none"
-              style={{
-                backgroundImage: `url(${bgImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }}
-            />
-
             {/* Header with Action Buttons */}
-            <div className="mb-2 pb-2 border-b border-dark-border flex items-center justify-between gap-3 relative z-10">
+            <div className="mb-2 pb-2 border-b border-dark-border flex items-center justify-between gap-3">
               <p className="text-[11px] font-semibold text-gray-300">
                 {formatTokens(totalTokens)}/{formatTokens(contextWindow)} ({percentage}%)
               </p>
@@ -263,7 +252,7 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
             </div>
 
             {/* Baseline System Usage */}
-            <div className="space-y-1.5 mb-2 pb-2 border-b border-dark-border/50 relative z-10">
+            <div className="space-y-1.5 mb-2 pb-2 border-b border-dark-border/50">
               <div className="text-[9px] text-gray-500 font-semibold uppercase tracking-wide mb-1">
                 System Baseline
               </div>
@@ -302,7 +291,7 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
 
             {/* Custom Addendum - only show if addendum exists */}
             {addendumText && (
-              <div className="space-y-1.5 mb-2 pb-2 border-b border-dark-border/50 relative z-10">
+              <div className="space-y-1.5 mb-2 pb-2 border-b border-dark-border/50">
                 <div className="text-[9px] text-gray-500 font-semibold uppercase tracking-wide mb-1">
                   Custom
                 </div>
@@ -317,7 +306,7 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
             )}
 
             {/* Conversation Stats */}
-            <div className="space-y-1.5 relative z-10">
+            <div className="space-y-1.5">
               <div className="text-[9px] text-gray-500 font-semibold uppercase tracking-wide mb-1">
                 Conversation
               </div>
@@ -406,18 +395,8 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
               className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[420px] overflow-hidden relative"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Background Image */}
-              <div
-                className="absolute inset-0 opacity-10 pointer-events-none"
-                style={{
-                  backgroundImage: `url(${bgImage})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                }}
-              />
-
               {/* Header */}
-              <div className="flex items-start gap-3 mb-4 relative z-10">
+              <div className="flex items-start gap-3 mb-4">
                 <div className="p-2 bg-red-500/10 rounded-lg">
                   <AlertTriangle size={20} className="text-red-400" />
                 </div>
@@ -438,7 +417,7 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
               </div>
 
               {/* Info Box */}
-              <div className="bg-dark-bg/50 border border-dark-border/50 rounded-lg p-3 mb-4 relative z-10">
+              <div className="bg-dark-bg/50 border border-dark-border/50 rounded-lg p-3 mb-4">
                 <div className="flex items-start gap-2">
                   <Info size={14} className="text-primary mt-0.5 flex-shrink-0" />
                   <p className="text-[11px] text-gray-400 leading-relaxed">
@@ -448,7 +427,7 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2 relative z-10">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={cancelClearContext}
                   className="flex-1 px-4 py-2 bg-dark-bg hover:bg-dark-bg/80 border border-dark-border rounded-lg text-[12px] font-medium text-gray-300 transition-colors"
@@ -481,18 +460,8 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
             <div
               className="bg-dark-card border border-dark-border rounded-xl shadow-2xl p-6 animate-scaleIn w-full max-w-[500px] overflow-hidden relative"
             >
-              {/* Background Image */}
-              <div
-                className="absolute inset-0 opacity-10 pointer-events-none"
-                style={{
-                  backgroundImage: `url(${bgImage})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                }}
-              />
-
               {/* Header */}
-              <div className="flex items-start gap-3 mb-4 relative z-10">
+              <div className="flex items-start gap-3 mb-4">
                 <div className="p-2 bg-primary/10 rounded-lg">
                   <FileText size={20} className="text-primary" />
                 </div>
@@ -513,7 +482,7 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
               </div>
 
               {/* Info Box */}
-              <div className="bg-dark-bg/50 border border-dark-border/50 rounded-lg p-3 mb-4 relative z-10">
+              <div className="bg-dark-bg/50 border border-dark-border/50 rounded-lg p-3 mb-4">
                 <div className="flex items-start gap-2">
                   <Info size={14} className="text-primary mt-0.5 flex-shrink-0" />
                   <p className="text-[11px] text-gray-400 leading-relaxed">
@@ -523,7 +492,7 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
               </div>
 
               {/* Textarea */}
-              <div className="mb-4 relative z-10">
+              <div className="mb-4">
                 <textarea
                   value={addendumText}
                   onChange={(e) => setAddendumText(e.target.value)}
@@ -534,7 +503,7 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
               </div>
 
               {/* Actions */}
-              <div className="flex items-center gap-2 relative z-10">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={handleCancelAddendum}
                   disabled={isSavingAddendum}

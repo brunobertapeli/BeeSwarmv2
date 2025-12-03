@@ -2,8 +2,6 @@ import { Mail, Loader2 } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
 import { useState, useEffect } from 'react'
 import type { User } from '../types/auth'
-import mainShapeImage from '../assets/images/main_shape.png'
-import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface LoginProps {
   onLoginSuccess: (user: User, session?: any) => void
@@ -101,27 +99,6 @@ function Login({ onLoginSuccess }: LoginProps) {
 
   return (
     <div className="w-full h-full bg-[#160042] flex items-center justify-center overflow-hidden relative">
-      {/* Fixed shape background */}
-      <div
-        className="fixed left-0 top-0 w-full h-full z-0 pointer-events-none"
-        style={{
-          backgroundImage: `url(${mainShapeImage})`,
-          backgroundPosition: 'center',
-          backgroundSize: 'cover',
-        }}
-      />
-
-      {/* Noise texture overlay */}
-      <div
-        className="fixed left-0 top-0 w-full h-full z-[1] opacity-70 pointer-events-none"
-        style={{
-          backgroundImage: `url(${noiseBgImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          mixBlendMode: 'soft-light',
-        }}
-      />
-
       {/* SVG Gradient Shape */}
       <div className="fixed left-0 top-0 w-full h-full z-[2] overflow-hidden pointer-events-none opacity-40">
         <svg

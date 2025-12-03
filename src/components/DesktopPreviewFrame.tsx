@@ -5,8 +5,6 @@ import HealthStatusModal from './HealthStatusModal'
 import ImageEditModal from './ImageEditModal'
 import PreviewLoader from './PreviewLoader'
 import { HealthCheckStatus } from '../types/electron'
-import bgImage from '../assets/images/bg.jpg'
-import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface DesktopPreviewFrameProps {
   children: React.ReactNode
@@ -418,13 +416,11 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
             document.addEventListener('click', clickHandler, true);
 
             // === TEXT EDITING ===
-            console.log('[Edit Mode] TEXT EDITING SCRIPT STARTED');
             window.__editModeTextScriptLoaded = true;
 
             // Wrap all text elements with edit mode wrapper
             const textSelectors = 'h1, h2, h3, h4, h5, h6, p, span, a, button, li, td, th, label, div';
             const textElements = document.querySelectorAll(textSelectors);
-            console.log('[Edit Mode] Found', textElements.length, 'text elements to wrap');
             const textWrappers = [];
 
             textElements.forEach(el => {
@@ -543,13 +539,8 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
                     const newContent = textEl.textContent;
                     const originalContent = textEl.dataset.originalContent;
 
-                    console.log('[Edit Mode] saveChanges called');
-                    console.log('  Original:', originalContent);
-                    console.log('  New:', newContent);
-
                     // Only save if content actually changed
                     if (newContent !== originalContent) {
-                      console.log('[Edit Mode] Content changed, sending to backend...');
                       // Get comprehensive element information
                       const elementInfo = {
                         tag: textEl.tagName.toLowerCase(),
@@ -574,16 +565,11 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
                       };
                       window.__textEditRequested = true;
 
-                      console.log('[Edit Mode] Data sent to polling mechanism');
-                      console.log('  Selector:', elementInfo.selector);
-
                       // Update the original content to the new value
                       textEl.dataset.originalContent = newContent;
 
                       // Show brief "Saved" indicator
                       showSavedIndicator(wrapper);
-                    } else {
-                      console.log('[Edit Mode] No changes detected, skipping save');
                     }
                   };
 
@@ -599,20 +585,12 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
 
                   // Handle keydown for Enter and Escape
                   const keyDownHandler = function(e) {
-                    console.log('[Edit Mode] keyDownHandler called, key:', e.key, 'shiftKey:', e.shiftKey);
-
                     // Enter key without Shift: save and exit editing (like clicking outside)
                     if (e.key === 'Enter' && !e.shiftKey) {
-                      console.log('[Edit Mode] Enter detected (no shift), saving and exiting...');
                       e.preventDefault();
                       e.stopPropagation();
                       e.stopImmediatePropagation();
-
-                      console.log('[Edit Mode] Calling saveChanges...');
                       saveChanges();
-
-                      // Exit editing mode (blur)
-                      console.log('[Edit Mode] Blurring element to exit edit mode...');
                       textEl.blur();
                       return false;
                     }
@@ -621,7 +599,6 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
 
                     // Escape key (cancel)
                     if (e.key === 'Escape') {
-                      console.log('[Edit Mode] Escape pressed, cancelling...');
                       e.preventDefault();
                       e.stopPropagation();
                       textEl.textContent = textEl.dataset.originalContent;
@@ -660,15 +637,9 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
                     }, 1500);
                   }
 
-                  console.log('[Edit Mode] Attaching event listeners to element:', textEl.tagName, textEl.className);
-
-                  // Test with alert to ensure this code runs
-                  // alert('Event listeners being attached to: ' + textEl.tagName);
-
                   textEl.addEventListener('blur', blurHandler);
                   textEl.addEventListener('keydown', keyDownHandler, true); // Capture phase
                   textEl.addEventListener('keypress', keyPressHandler, true); // Backup prevention
-                  console.log('[Edit Mode] Event listeners attached successfully');
                 }
               }
             };
@@ -837,11 +808,7 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
               newContent
             )
 
-            if (updateResult?.success) {
-              console.log('✅ Text updated successfully in', updateResult.filesModified, 'file(s)')
-              console.log('   Selector:', elementInfo.selector)
-              console.log('   ', originalContent, '→', newContent)
-            } else {
+            if (!updateResult?.success) {
               console.warn('⚠️ Failed to update text:', updateResult?.error)
             }
           } catch (error) {
@@ -955,24 +922,14 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
         {/* Container */}
         <div className="flex flex-col w-full h-full overflow-hidden shadow-2xl" style={{ boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)' }}>
         {/* Minimal top bar with controls */}
-        <div className="h-10 bg-dark-card/95 backdrop-blur-xl border-t border-l border-r border-dark-border/80 flex items-center px-3 gap-2 flex-shrink-0 relative">
-          {/* Noise texture overlay */}
-          <div
-            className="absolute inset-0 opacity-25 pointer-events-none"
-            style={{
-              backgroundImage: `url(${noiseBgImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              mixBlendMode: 'soft-light',
-            }}
-          />
+        <div className="h-10 bg-dark-card border-t border-l border-r border-dark-border/80 flex items-center px-3 gap-2 flex-shrink-0 relative">
           {/* Browser label */}
           <div className="text-[12px] text-gray-500 font-medium px-2">
             CodeDeck Browser
           </div>
 
           {/* URL indicator */}
-          <div className="flex-1 bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 rounded px-3 py-1.5 flex items-center gap-2">
+          <div className="flex-1 bg-dark-card border border-dark-border/80 rounded px-3 py-1.5 flex items-center gap-2">
             <svg className="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
@@ -1040,18 +997,8 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
         {/* Content Area - With padding for frame */}
         <div
           ref={contentAreaRef}
-          className="flex-1 bg-dark-card/95 border border-dark-border/80 overflow-hidden relative p-1.5"
+          className="flex-1 bg-dark-card border border-dark-border/80 overflow-hidden relative p-1.5"
         >
-          {/* Noise texture overlay */}
-          <div
-            className="absolute inset-0 opacity-25 pointer-events-none"
-            style={{
-              backgroundImage: `url(${noiseBgImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              mixBlendMode: 'soft-light',
-            }}
-          />
           {/* Inner area for BrowserView positioning */}
           <div
             ref={browserViewRef}

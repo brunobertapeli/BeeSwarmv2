@@ -88,7 +88,7 @@ class ProcessManager extends EventEmitter {
   private readonly MAX_OUTPUT_LINES = 500;
   private readonly MAX_CRASHES = 3;
   private readonly CRASH_WINDOW_MS = 5 * 60 * 1000;
-  private readonly HEALTH_CHECK_INTERVAL = 30000;
+  private readonly HEALTH_CHECK_INTERVAL = 60000; // 60s - reduced for performance
   private readonly HEALTH_CHECK_TIMEOUT = 5000;
   private readonly MAX_HEALTH_FAILURES = 3;
 
@@ -241,7 +241,6 @@ class ProcessManager extends EventEmitter {
       const netlifyToken = this.getNetlifyToken();
       if (netlifyToken) {
         processEnv.NETLIFY_AUTH_TOKEN = netlifyToken;
-        console.log('🔑 Injected Netlify auth token for dev server');
       }
     }
 

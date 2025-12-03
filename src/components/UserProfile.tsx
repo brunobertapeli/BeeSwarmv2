@@ -3,8 +3,6 @@ import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { LogOut, Settings, CreditCard, User as UserIcon, MessageCircle } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
-import bgImage from '../assets/images/bg.jpg'
-import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface UserProfileProps {
   onClose?: () => void
@@ -111,29 +109,8 @@ function UserProfile({ onClose = () => {}, excludeElement, onOpenHelp }: UserPro
       <div
         className="w-72 bg-dark-card border border-dark-border rounded-lg shadow-2xl mt-2 relative overflow-hidden"
       >
-          {/* Background Image */}
-          <div
-            className="absolute inset-0 opacity-10 pointer-events-none z-0"
-            style={{
-              backgroundImage: `url(${bgImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            }}
-          />
-
-          {/* Noise texture overlay */}
-          <div
-            className="absolute inset-0 opacity-50 pointer-events-none z-[1]"
-            style={{
-              backgroundImage: `url(${noiseBgImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              mixBlendMode: 'soft-light',
-            }}
-          />
-
           {/* User Info Header */}
-          <div className="px-6 py-4 border-b border-dark-border relative z-10">
+          <div className="px-6 py-4 border-b border-dark-border">
             <div className="flex items-center gap-3">
               {user.photoUrl ? (
                 <img
@@ -167,7 +144,7 @@ function UserProfile({ onClose = () => {}, excludeElement, onOpenHelp }: UserPro
           </div>
 
           {/* Menu Items */}
-          <div className="py-2 px-2 relative z-10">
+          <div className="py-2 px-2">
             <button
               onClick={() => {
                 onOpenHelp?.()

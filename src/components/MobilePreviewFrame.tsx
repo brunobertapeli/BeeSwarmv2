@@ -3,7 +3,6 @@ import { RotateCw, Code2 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
 import PreviewLoader from './PreviewLoader'
-import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface MobilePreviewFrameProps {
   port?: number
@@ -298,7 +297,6 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
                 if (img) {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('Image clicked:', img.src);
                   alert('Image clicked: ' + img.src + '\\n\\nMenu will be implemented here.');
                 }
               }
@@ -647,9 +645,7 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
             )
 
             if (updateResult?.success) {
-              console.log('✅ Text updated successfully in', updateResult.filesModified, 'file(s)')
-              console.log('   Selector:', elementInfo.selector)
-              console.log('   ', originalContent, '→', newContent)
+              // Text updated successfully
             } else {
               console.warn('⚠️ Failed to update text:', updateResult?.error)
             }
@@ -707,17 +703,7 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
         }}
       >
         {/* Minimal top bar with controls */}
-        <div className="h-[37px] bg-dark-card/95 backdrop-blur-xl border-t border-l border-r border-b border-dark-border/80 rounded-t-3xl flex items-center px-2 gap-2 flex-shrink-0 relative">
-          {/* Noise texture overlay */}
-          <div
-            className="absolute inset-0 opacity-25 pointer-events-none rounded-t-3xl"
-            style={{
-              backgroundImage: `url(${noiseBgImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              mixBlendMode: 'soft-light',
-            }}
-          />
+        <div className="h-[37px] bg-dark-card border-t border-l border-r border-b border-dark-border/80 rounded-t-3xl flex items-center px-2 gap-2 flex-shrink-0 relative">
           {/* Device name indicator */}
           <div className="flex-1 text-[10px] text-gray-400 font-medium px-2">
             {selectedDevice?.name || 'Mobile'}
@@ -754,16 +740,6 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
           ref={contentAreaRef}
           className="flex-1 bg-dark-card/95 border-l border-r border-b border-dark-border/80 rounded-b-3xl overflow-hidden relative px-1.5 py-3.5"
         >
-          {/* Noise texture overlay */}
-          <div
-            className="absolute inset-0 opacity-25 pointer-events-none rounded-b-3xl"
-            style={{
-              backgroundImage: `url(${noiseBgImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              mixBlendMode: 'soft-light',
-            }}
-          />
           {/* Inner area for BrowserView positioning */}
           <div
             ref={browserViewRef}

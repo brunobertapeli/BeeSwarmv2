@@ -3,7 +3,6 @@ import { X, Sparkles, ExternalLink, Crown } from 'lucide-react'
 import TechIcon from './TechIcon'
 import { useAppStore } from '../store/appStore'
 import { Template } from '../types/electron'
-import bgImage from '../assets/images/bg.jpg'
 
 interface TemplateSelectorProps {
   isOpen: boolean
@@ -301,18 +300,8 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
 
       {/* Modal */}
       <div className="relative w-[800px] max-h-[70vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden flex flex-col">
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 opacity-10 pointer-events-none"
-          style={{
-            backgroundImage: `url(${bgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-
         {/* Header - Spans Both Columns */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border/50 relative z-10">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-dark-border/50">
           <div>
             <h2 className="text-sm font-semibold text-white">Create New Project</h2>
             <p className="text-[11px] text-gray-500 mt-0.5">
@@ -328,7 +317,7 @@ function TemplateSelector({ isOpen, onClose, onCreateProject }: TemplateSelector
         </div>
 
         {/* Content - Two Columns */}
-        <div className="flex flex-1 overflow-hidden relative z-10">
+        <div className="flex flex-1 overflow-hidden">
           {/* Loading State */}
           {loading && (
             <div className="flex-1 flex items-center justify-center">

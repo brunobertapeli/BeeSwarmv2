@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { MessageCircle, X, Send, ChevronDown, ArrowLeft, RotateCcw, Check } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
-import bgImage from '../assets/images/bg.jpg'
 import { ModalPortal } from './ModalPortal'
 import { supportApi } from '../services/supportApi'
 
@@ -625,18 +624,8 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
             {/* Modal */}
             <div className="relative w-[400px] h-[600px] animate-fadeIn">
             <div className="bg-dark-card/95 backdrop-blur-xl border border-dark-border rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full relative">
-            {/* Background Image */}
-            <div
-              className="absolute inset-0 opacity-10 pointer-events-none"
-              style={{
-                backgroundImage: `url(${bgImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }}
-            />
-
             {/* Header */}
-            <div className="px-4 py-3 border-b border-dark-border flex items-center justify-between relative z-10">
+            <div className="px-4 py-3 border-b border-dark-border flex items-center justify-between">
               <div className="flex items-center gap-2">
                 {viewMode !== 'chat' && (
                   <button
@@ -706,7 +695,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
             </div>
 
             {/* Content Area */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 relative z-10 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 custom-scrollbar">
               {viewMode === 'bug-report' ? (
                 // Bug Report Form
                 <div className="space-y-4">
@@ -1026,7 +1015,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
 
             {/* Input Area - Only show in chat view */}
             {viewMode === 'chat' && (
-              <div className="px-3 pb-3 pt-2 border-t border-dark-border relative z-10">
+              <div className="px-3 pb-3 pt-2 border-t border-dark-border">
                 <div className="relative flex items-end gap-2">
                   <textarea
                     ref={textareaRef}

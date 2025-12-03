@@ -4,7 +4,6 @@ import { X, FolderOpen, ChevronRight, ChevronDown, Folder, FileImage, Music, Fil
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
 import { motion, AnimatePresence } from 'framer-motion'
-import bgImage from '../assets/images/bg.jpg'
 import ImageEditorModal from './ImageEditorModal'
 
 interface FileNode {
@@ -126,7 +125,6 @@ function ProjectAssetsWidget() {
 
       if (result?.success && result.assets) {
         if (result.assets.length > 0) {
-          console.log('Assets loaded:', result.assets)
           setAssets(result.assets)
         } else {
           // Keep mock data if no real assets found
@@ -215,8 +213,6 @@ function ProjectAssetsWidget() {
     e.preventDefault()
     e.stopPropagation()
 
-    console.log('Right click at:', { clientX: e.clientX, clientY: e.clientY, pageX: e.pageX, pageY: e.pageY })
-
     setContextMenu({
       visible: true,
       x: e.clientX, // Use clientX for viewport-relative position
@@ -294,8 +290,6 @@ function ProjectAssetsWidget() {
             const displayPath = contextMenu.file.relativePath || contextMenu.filePath
             const message = `[Image Path: '${displayPath}' Dimensions: ${contextMenu.file.dimensions || 'Unknown'}]`
             setPrefilledMessage(message)
-
-            console.log('Added to context:', contextMenu.file.name)
           }
         } catch (error) {
           console.error('Failed to add to context:', error)
@@ -483,16 +477,6 @@ function ProjectAssetsWidget() {
       }}
       onMouseDown={(e) => { bringWidgetToFront('projectAssets'); handleMouseDown(e); }}
     >
-      {/* Background image */}
-      <div
-        className="absolute inset-0 opacity-5 pointer-events-none"
-        style={{
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-
       {/* Header */}
       <div
         ref={headerRef}

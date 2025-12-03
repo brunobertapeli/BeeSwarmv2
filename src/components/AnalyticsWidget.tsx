@@ -3,7 +3,6 @@ import { X, TrendingUp, Users, Eye, Clock, Globe, Smartphone, Monitor, Tablet, S
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
-import bgImage from '../assets/images/bg.jpg'
 
 // Mock data - will be replaced with real GA data
 const MOCK_DATA = {
@@ -257,16 +256,6 @@ function AnalyticsWidget() {
       }}
       onMouseDown={(e) => { bringWidgetToFront('analytics'); handleMouseDown(e); }}
     >
-      {/* Background image */}
-      <div
-        className="absolute inset-0 opacity-5 pointer-events-none"
-        style={{
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-
       {/* Header */}
       <div
         ref={headerRef}
@@ -523,18 +512,8 @@ function AnalyticsWidget() {
 
           {/* Modal */}
           <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[301] bg-dark-card border border-dark-border rounded-xl shadow-2xl w-[400px] overflow-hidden">
-            {/* Background image */}
-            <div
-              className="absolute inset-0 opacity-5 pointer-events-none"
-              style={{
-                backgroundImage: `url(${bgImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }}
-            />
-
             {/* Header */}
-            <div className="relative px-4 py-3 border-b border-dark-border/50 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-dark-border/50 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-200">Google Analytics Configuration</h3>
               <button
                 onClick={() => setShowGAModal(false)}
@@ -545,7 +524,7 @@ function AnalyticsWidget() {
             </div>
 
             {/* Content */}
-            <div className="relative p-4 space-y-3">
+            <div className="p-4 space-y-3">
               <div>
                 <label className="block text-[10px] font-medium text-gray-400 mb-2">
                   Google Analytics Property ID

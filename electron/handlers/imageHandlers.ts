@@ -16,7 +16,6 @@ export function registerImageHandlers(): void {
    */
   ipcMain.handle('image:replace', async (_event, projectId: string, imagePath: string, imageData: string) => {
     try {
-      console.log('📸 [ImageHandlers] Replacing image:', imagePath, 'for project:', projectId);
 
       // Validate inputs
       if (!projectId || typeof projectId !== 'string') {
@@ -65,7 +64,6 @@ export function registerImageHandlers(): void {
           // Check if file exists
           await fs.access(candidatePath);
           absoluteImagePath = candidatePath;
-          console.log('✅ [ImageHandlers] Found image at:', absoluteImagePath);
           break;
         } catch {
           // File doesn't exist in this location, continue searching
@@ -75,7 +73,6 @@ export function registerImageHandlers(): void {
       // If not found in common dirs, try direct path as fallback
       if (!absoluteImagePath) {
         absoluteImagePath = path.join(project.path, urlPath);
-        console.log('⚠️ [ImageHandlers] Image not found in common directories, using direct path:', absoluteImagePath);
       }
 
       // Extract base64 data
@@ -94,7 +91,6 @@ export function registerImageHandlers(): void {
       // Write file (replace existing)
       await fs.writeFile(absoluteImagePath, buffer);
 
-      console.log('✅ [ImageHandlers] Image replaced successfully');
       return { success: true, path: absoluteImagePath };
     } catch (error) {
       console.error('❌ [ImageHandlers] Failed to replace image:', error);
@@ -124,7 +120,6 @@ export function registerImageHandlers(): void {
     }
   ) => {
     try {
-      console.log('📸 [ImageHandlers] Cropping image with Sharp:', imagePath, 'for project:', projectId);
 
       // Validate inputs
       if (!projectId || typeof projectId !== 'string') {
@@ -175,7 +170,6 @@ export function registerImageHandlers(): void {
         try {
           await fs.access(candidatePath);
           absoluteImagePath = candidatePath;
-          console.log('✅ [ImageHandlers] Found image at:', absoluteImagePath);
           break;
         } catch {
           // File doesn't exist in this location, continue searching
@@ -185,7 +179,6 @@ export function registerImageHandlers(): void {
       // If not found in common dirs, try direct path as fallback
       if (!absoluteImagePath) {
         absoluteImagePath = path.join(project.path, urlPath);
-        console.log('⚠️ [ImageHandlers] Image not found in common directories, using direct path:', absoluteImagePath);
       }
 
       // Extract base64 data from data URL
@@ -209,12 +202,6 @@ export function registerImageHandlers(): void {
       const retinaMultiplier = 2;
       const outputWidth = cropData.targetWidth * retinaMultiplier;
       const outputHeight = cropData.targetHeight * retinaMultiplier;
-
-      console.log('📐 [ImageHandlers] Crop params:', {
-        extract: { left: extractLeft, top: extractTop, width: extractWidth, height: extractHeight },
-        resize: { width: outputWidth, height: outputHeight },
-        retinaMultiplier
-      });
 
       // Process with Sharp using Lanczos3 for high-quality resampling
       // Output at 2x size - browser will downscale for crisp retina display
@@ -249,7 +236,6 @@ export function registerImageHandlers(): void {
       // Write the processed image to disk
       await fs.writeFile(absoluteImagePath, outputBuffer);
 
-      console.log('✅ [ImageHandlers] Image cropped and replaced successfully with Sharp');
       return { success: true, path: absoluteImagePath };
     } catch (error) {
       console.error('❌ [ImageHandlers] Failed to crop and replace image:', error);

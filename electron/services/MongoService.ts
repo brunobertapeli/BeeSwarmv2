@@ -112,7 +112,6 @@ class MongoService {
 
         await this.client.connect()
         this.db = this.client.db(this.dbName)
-        console.log('✓ MongoDB connected successfully')
         return
       } catch (error) {
         lastError = error as Error

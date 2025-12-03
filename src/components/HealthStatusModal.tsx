@@ -1,6 +1,5 @@
 import { CheckCircle2, XCircle, RotateCw } from 'lucide-react'
 import { HealthCheckStatus } from '../types/electron'
-import bgImage from '../assets/images/bg.jpg'
 
 interface HealthStatusModalProps {
   isOpen: boolean
@@ -75,18 +74,8 @@ function HealthStatusModal({ isOpen, onClose, healthStatus, projectId, onRestart
         transform: 'translateX(-100%)',
       }}
     >
-      {/* Background Image */}
-      <div
-        className="absolute inset-0 opacity-10 pointer-events-none"
-        style={{
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-
       {/* Header */}
-      <div className="mb-2 pb-2 border-b border-dark-border flex items-center justify-between relative z-10">
+      <div className="mb-2 pb-2 border-b border-dark-border flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <div className={`w-1.5 h-1.5 rounded-full ${isHealthy ? 'bg-green-500' : 'bg-red-500'}`} />
           <p className="text-[11px] font-semibold text-gray-300">
@@ -101,7 +90,7 @@ function HealthStatusModal({ isOpen, onClose, healthStatus, projectId, onRestart
       </div>
 
       {/* Content */}
-      <div className="relative z-10">
+      <div>
         {healthStatus ? (
           <>
             <div className="space-y-0">

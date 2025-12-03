@@ -86,7 +86,6 @@ export function registerDeploymentHandlers() {
       tokens[serviceId] = { encrypted, isFallback }
       writeTokensFile(tokens)
 
-      console.log(`✅ Deployment token saved for ${serviceId}`)
       return { success: true }
     } catch (error: any) {
       console.error(`Error saving deployment token for ${serviceId}:`, error)
@@ -155,7 +154,6 @@ export function registerDeploymentHandlers() {
       const tokens = readTokensFile()
       delete tokens[serviceId]
       writeTokensFile(tokens)
-      console.log(`✅ Deployment token removed for ${serviceId}`)
       return { success: true }
     } catch (error: any) {
       console.error(`Error disconnecting ${serviceId}:`, error)
@@ -188,11 +186,8 @@ export function registerDeploymentHandlers() {
   // Deploy project to a provider
   ipcMain.handle('deployment:deploy', async (_event, projectId: string, provider: DeploymentProvider) => {
     try {
-      console.log(`🚀 [DEPLOY] Starting deployment for project ${projectId} to ${provider}`)
-
       // Send progress event helper
       const sendProgress = (message: string) => {
-        console.log(`📤 [DEPLOY] Progress: ${message}`)
         if (mainWindowContents && !mainWindowContents.isDestroyed()) {
           mainWindowContents.send('deployment:progress', projectId, message)
         }
@@ -302,27 +297,8 @@ export function registerDeploymentHandlers() {
     }
   })
 
-  // Initialize deployment service and log CLI status on startup
-  console.log('🚀 Initializing Deployment Service...')
-  deploymentService.init().then(status => {
-    console.log('='.repeat(50))
-    console.log('DEPLOYMENT CLI STATUS')
-    console.log('='.repeat(50))
-
-    if (status.railway.available) {
-      console.log(`✅ Railway CLI ready: ${status.railway.version}`)
-    } else {
-      console.log(`❌ Railway CLI not available: ${status.railway.error}`)
-    }
-
-    if (status.netlify.available) {
-      console.log(`✅ Netlify CLI ready: ${status.netlify.version}`)
-    } else {
-      console.log(`❌ Netlify CLI not available: ${status.netlify.error}`)
-    }
-
-    console.log('='.repeat(50))
-  }).catch(err => {
+  // Initialize deployment service on startup
+  deploymentService.init().catch(err => {
     console.error('❌ Deployment service initialization failed:', err)
   })
 }

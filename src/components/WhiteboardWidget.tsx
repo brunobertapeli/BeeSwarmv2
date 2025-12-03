@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { X, GitBranch, Trash2 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
-import bgImage from '../assets/images/bg.jpg'
 import { Excalidraw, WelcomeScreen } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
@@ -232,16 +231,6 @@ function WhiteboardWidget() {
       }}
       onMouseDown={(e) => { bringWidgetToFront('whiteboard'); handleMouseDown(e); }}
     >
-      {/* Background image */}
-      <div
-        className="absolute inset-0 opacity-5 pointer-events-none"
-        style={{
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-
       {/* Header */}
       <div
         ref={headerRef}

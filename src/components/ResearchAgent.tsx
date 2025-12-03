@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, forwardRef } from 'react'
 import { ChevronDown, ChevronUp, Send, Bug, Shield, Globe, FileCode, Lightbulb, Search, Loader, CheckCircle2, Archive } from 'lucide-react'
-import bgImage from '../assets/images/bg.jpg'
-import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface ResearchAgentProps {
   projectId?: string
@@ -213,17 +211,7 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
         }`}
         style={{ left: '5px', right: '5px', bottom: '5px', height: '150px' }}
       >
-        <div className="bg-dark-card/95 backdrop-blur-xl border border-dark-border/80 shadow-2xl overflow-visible w-full h-full relative flex flex-col rounded-bl-[10px]">
-          {/* Noise texture overlay */}
-          <div
-            className="absolute inset-0 opacity-50 pointer-events-none rounded-bl-[10px]"
-            style={{
-              backgroundImage: `url(${noiseBgImage})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              mixBlendMode: 'soft-light',
-            }}
-          />
+        <div className="bg-dark-card border border-dark-border/80 shadow-2xl overflow-visible w-full h-full relative flex flex-col rounded-bl-[10px]">
           {/* Top Row - Textarea with Send Icon Inside */}
           <div className="px-3 pt-3 pb-2 flex-shrink-0">
             <div className="relative flex items-start">
@@ -283,17 +271,7 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
 
                     {/* Menu */}
                     <div className="absolute bottom-full left-0 mb-1 w-40 bg-dark-card border border-dark-border rounded-lg shadow-xl z-[201] overflow-hidden">
-                      {/* Background Image */}
-                      <div
-                        className="absolute inset-0 opacity-10 pointer-events-none"
-                        style={{
-                          backgroundImage: `url(${bgImage})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }}
-                      />
-
-                      <div className="p-1 relative z-10">
+                      <div className="p-1">
                         {(availableModels.length > 0 ? availableModels : [
                           { value: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5' },
                           { value: 'claude-opus-4-1-20250805', displayName: 'Opus 4.1' },
@@ -340,17 +318,7 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
 
                     {/* Menu */}
                     <div className="absolute bottom-full left-0 mb-1 w-44 bg-dark-card border border-dark-border rounded-lg shadow-xl z-[201] overflow-hidden">
-                      {/* Background Image */}
-                      <div
-                        className="absolute inset-0 opacity-10 pointer-events-none"
-                        style={{
-                          backgroundImage: `url(${bgImage})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center',
-                        }}
-                      />
-
-                      <div className="p-1 relative z-10 overflow-y-auto scrollbar-thin" style={{ height: '132px' }}>
+                      <div className="p-1 overflow-y-auto scrollbar-thin" style={{ height: '132px' }}>
                         {AGENT_TYPES.map((agent) => {
                           const IconComponent = agent.icon
                           return (

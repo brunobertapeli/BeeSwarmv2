@@ -15,12 +15,6 @@ export function registerFileHandlers(): void {
    */
   ipcMain.handle('files:replace-text-by-selector', async (_event, projectId: string, elementInfo: any, originalText: string, newText: string) => {
     try {
-      console.log('📝 [FileHandlers] Replacing text by selector in project:', projectId);
-      console.log('   Selector:', elementInfo.selector);
-      console.log('   Tag:', elementInfo.tag);
-      console.log('   Original:', originalText.substring(0, 100));
-      console.log('   New:', newText.substring(0, 100));
-
       // Validate inputs
       if (!projectId || typeof projectId !== 'string') {
         throw new Error('Invalid project ID');
@@ -49,7 +43,6 @@ export function registerFileHandlers(): void {
         return { success: false, error: 'Text not found in any project files' };
       }
 
-      console.log(`✅ [FileHandlers] Found ${candidateFiles.length} candidate file(s)`);
 
       // Now search for the specific element in those files
       let replacedCount = 0;
@@ -72,7 +65,6 @@ export function registerFileHandlers(): void {
             await fs.writeFile(absolutePath, replaced.content, 'utf-8');
             replacedCount++;
             modifiedFiles.push(filePath);
-            console.log(`✅ [FileHandlers] Replaced text in: ${filePath}`);
           }
         } catch (error) {
           console.error(`❌ [FileHandlers] Failed to replace text in ${filePath}:`, error);
@@ -83,7 +75,6 @@ export function registerFileHandlers(): void {
         return { success: false, error: 'Could not find matching element in source files' };
       }
 
-      console.log(`✅ [FileHandlers] Successfully replaced text in ${replacedCount} file(s)`);
       return { success: true, filesModified: replacedCount, modifiedFiles };
     } catch (error) {
       console.error('❌ [FileHandlers] Failed to replace text by selector:', error);
@@ -99,10 +90,6 @@ export function registerFileHandlers(): void {
    */
   ipcMain.handle('files:replace-text-in-project', async (_event, projectId: string, originalText: string, newText: string) => {
     try {
-      console.log('📝 [FileHandlers] Replacing text in project:', projectId);
-      console.log('   Original:', originalText.substring(0, 100) + (originalText.length > 100 ? '...' : ''));
-      console.log('   New:', newText.substring(0, 100) + (newText.length > 100 ? '...' : ''));
-
       // Validate inputs
       if (!projectId || typeof projectId !== 'string') {
         throw new Error('Invalid project ID');
@@ -138,7 +125,6 @@ export function registerFileHandlers(): void {
       // Use first 50 chars as search key to find the file
       // (The full text might be too long and span multiple lines)
       const searchKey = originalText.substring(0, 50);
-      console.log('   Search key:', searchKey);
 
       // Find files containing the search key
       const filesContainingText = await findFilesWithText(project.path, searchKey, searchDirs);
@@ -151,7 +137,6 @@ export function registerFileHandlers(): void {
         };
       }
 
-      console.log(`✅ [FileHandlers] Found ${filesContainingText.length} file(s) containing the text`);
 
       // Replace text in all matching files
       let replacedCount = 0;
@@ -171,7 +156,6 @@ export function registerFileHandlers(): void {
             await fs.writeFile(absolutePath, newContent, 'utf-8');
             replacedCount++;
             modifiedFiles.push(filePath);
-            console.log(`✅ [FileHandlers] Replaced text in: ${filePath} (exact match)`);
             continue;
           }
 
@@ -191,7 +175,6 @@ export function registerFileHandlers(): void {
               await fs.writeFile(absolutePath, newContent, 'utf-8');
               replacedCount++;
               modifiedFiles.push(filePath);
-              console.log(`✅ [FileHandlers] Replaced text in: ${filePath} (normalized whitespace)`);
             }
           }
         } catch (error) {
@@ -207,7 +190,6 @@ export function registerFileHandlers(): void {
         };
       }
 
-      console.log(`✅ [FileHandlers] Successfully replaced text in ${replacedCount} file(s)`);
       return {
         success: true,
         filesModified: replacedCount,
@@ -382,7 +364,6 @@ ipcMain.handle('files:read-as-base64', async (_event, filePath: string) => {
  */
 ipcMain.handle('files:save-base64-image', async (_event, filePath: string, base64Data: string) => {
   try {
-    console.log('💾 [FileHandlers] Saving image to:', filePath);
 
     // Ensure directory exists
     const dir = path.dirname(filePath);
@@ -395,7 +376,6 @@ ipcMain.handle('files:save-base64-image', async (_event, filePath: string, base6
     const buffer = Buffer.from(base64Content, 'base64');
     await fs.writeFile(filePath, buffer);
 
-    console.log('✅ [FileHandlers] Image saved successfully');
     return { success: true };
   } catch (error) {
     console.error('❌ [FileHandlers] Error saving image:', error);

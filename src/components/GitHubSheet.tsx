@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Github, X, Send, MoreVertical, Copy, ExternalLink, RotateCcw, Loader2, Lock, Globe, AlertTriangle, GitBranch, Clock, User } from 'lucide-react'
 import { useToast } from '../hooks/useToast'
-import noiseBgImage from '../assets/images/noise_bg.png'
 
 interface GitHubSheetProps {
   isOpen: boolean
@@ -272,19 +271,6 @@ function GitHubSheet({ isOpen, onClose, projectId }: GitHubSheetProps) {
           className="fixed bottom-0 left-0 right-0 h-[200px] z-[260] border-t border-white/10"
         >
           <div className="w-full h-full bg-dark-bg/80 backdrop-blur-xl relative">
-            {/* Noise texture overlay - clipped to container */}
-            <div className="absolute inset-0 overflow-hidden rounded-t-xl">
-              <div
-                className="absolute inset-0 opacity-30 pointer-events-none"
-                style={{
-                  backgroundImage: `url(${noiseBgImage})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  mixBlendMode: 'soft-light',
-                }}
-              />
-            </div>
-
             {/* Close button */}
             <button
               onClick={(e) => {

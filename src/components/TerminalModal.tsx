@@ -5,7 +5,6 @@ import { FitAddon } from '@xterm/addon-fit'
 import 'xterm/css/xterm.css'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
-import bgImage from '../assets/images/bg.jpg'
 import { ModalPortal } from './ModalPortal'
 
 interface TerminalLine {
@@ -443,6 +442,8 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
           fitAddon.fit()
 
           // Wait for cols to be properly set before loading history
+          let retryCount = 0
+          const maxRetries = 10 // Max 500ms of retrying
           const checkAndLoad = () => {
             const currentCols = terminal.cols || 0
 
@@ -452,10 +453,16 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
               terminal.clear()
               drawBanner()
               loadTerminalHistory()
-            } else {
-              // Not ready yet - fit again and retry
+            } else if (retryCount < maxRetries) {
+              // Not ready yet - fit again and retry (with limit)
+              retryCount++
               fitAddon.fit()
               setTimeout(checkAndLoad, 50)
+            } else {
+              // Give up and load anyway after max retries
+              terminal.clear()
+              drawBanner()
+              loadTerminalHistory()
             }
           }
 
@@ -716,18 +723,8 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
       <div
         className="relative bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden flex flex-col w-[85vw] max-w-[1400px] h-[75vh]"
       >
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 opacity-10 pointer-events-none"
-          style={{
-            backgroundImage: `url(${bgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-
         {/* Terminal Header */}
-        <div className="bg-dark-bg/50 relative z-10 border-b border-dark-border">
+        <div className="bg-dark-bg/50 border-b border-dark-border">
           {/* Header row with tabs and controls */}
           <div className="flex items-center justify-between px-4 py-2.5">
             {/* Left: Icon + Tabs */}

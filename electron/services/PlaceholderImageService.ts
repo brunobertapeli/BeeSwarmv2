@@ -27,7 +27,6 @@ class PlaceholderImageService {
    */
   async generatePlaceholders(projectPath: string, imagesPath?: string): Promise<number> {
     try {
-      console.log('📸 [PlaceholderImageService] Scanning for manifest.json in:', projectPath);
 
       let manifestPath: string | null = null;
       let manifestDir: string | null = null;
@@ -39,13 +38,10 @@ class PlaceholderImageService {
           await fs.access(candidatePath);
           manifestPath = candidatePath;
           manifestDir = path.dirname(candidatePath);
-          console.log('✅ [PlaceholderImageService] Found manifest at:', manifestPath);
         } catch {
-          console.log('ℹ️ [PlaceholderImageService] No manifest.json found at template path, skipping placeholder generation');
           return 0;
         }
       } else {
-        console.log('⚠️ [PlaceholderImageService] No imagesPath provided, skipping placeholder generation');
         return 0;
       }
 
@@ -54,7 +50,6 @@ class PlaceholderImageService {
 
       // Handle empty or whitespace-only files
       if (!manifestContent || manifestContent.trim().length === 0) {
-        console.log('ℹ️ [PlaceholderImageService] Manifest file is empty, skipping');
         return 0;
       }
 
@@ -68,11 +63,8 @@ class PlaceholderImageService {
       }
 
       if (!Array.isArray(manifest) || manifest.length === 0) {
-        console.log('ℹ️ [PlaceholderImageService] Manifest is empty, skipping');
         return 0;
       }
-
-      console.log(`📋 [PlaceholderImageService] Found ${manifest.length} images in manifest`);
 
       let generatedCount = 0;
 
@@ -96,7 +88,6 @@ class PlaceholderImageService {
             // Check if image already exists
             try {
               await fs.access(imagePath);
-              console.log(`✓ [PlaceholderImageService] Image already exists, skipping: ${entry.name}`);
               continue;
             } catch {
               // Image doesn't exist, generate it
@@ -129,7 +120,6 @@ class PlaceholderImageService {
             }
 
             generatedCount++;
-            console.log(`✅ [PlaceholderImageService] Generated: ${entry.name}`);
           } catch (error) {
             console.error(`❌ [PlaceholderImageService] Failed to generate ${entry.name}:`, error);
           }
@@ -138,13 +128,11 @@ class PlaceholderImageService {
 
       // Clear the manifest after processing (ready for next cycle)
       await fs.writeFile(manifestPath, '[]', 'utf-8');
-      console.log('🧹 [PlaceholderImageService] Cleared manifest.json for next cycle');
 
       // Add a small safety delay to ensure all filesystem operations are complete
       // This prevents race conditions where dev server restarts before files are fully flushed
       if (generatedCount > 0) {
         await new Promise(resolve => setTimeout(resolve, 200)); // Wait 200ms
-        console.log(`✅ [PlaceholderImageService] Generated ${generatedCount} placeholder(s) and verified`);
       }
 
       return generatedCount;

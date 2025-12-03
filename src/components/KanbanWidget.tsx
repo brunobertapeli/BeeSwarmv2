@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { X, Plus, Trash2, AlignLeft } from 'lucide-react'
 import { useLayoutStore, Priority } from '../store/layoutStore'
-import bgImage from '../assets/images/bg.jpg'
 
 interface KanbanCard {
   id: string
@@ -38,6 +37,7 @@ function KanbanWidget() {
   const [modalContent, setModalContent] = useState('')
   const [draggingCard, setDraggingCard] = useState<{ columnId: string; cardId: string } | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ columnId: string; cardId: string | null; position: 'before' | 'after' } | null>(null)
   const widgetRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const editInputRef = useRef<HTMLTextAreaElement>(null)
@@ -177,6 +177,7 @@ function KanbanWidget() {
   const handleCardDragEnd = () => {
     setDraggingCard(null)
     setDragOverColumn(null)
+    setDropTarget(null)
   }
 
   const handleColumnDragOver = (e: React.DragEvent, columnId: string) => {
@@ -185,51 +186,93 @@ function KanbanWidget() {
     setDragOverColumn(columnId)
   }
 
-  const handleColumnDragLeave = () => {
-    setDragOverColumn(null)
+  const handleColumnDragLeave = (e: React.DragEvent) => {
+    // Only clear if we're leaving the column entirely
+    const relatedTarget = e.relatedTarget as HTMLElement
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+      setDragOverColumn(null)
+      setDropTarget(null)
+    }
+  }
+
+  const handleCardDragOver = (e: React.DragEvent, columnId: string, cardId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!draggingCard || draggingCard.cardId === cardId) return
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const midY = rect.top + rect.height / 2
+    const position = e.clientY < midY ? 'before' : 'after'
+
+    setDropTarget({ columnId, cardId, position })
+    setDragOverColumn(columnId)
   }
 
   const handleColumnDrop = (e: React.DragEvent, targetColumnId: string) => {
     e.preventDefault()
-    setDragOverColumn(null)
 
-    if (!draggingCard) return
+    if (!draggingCard) {
+      setDragOverColumn(null)
+      setDropTarget(null)
+      return
+    }
 
     const { columnId: sourceColumnId, cardId } = draggingCard
 
-    // Find the card being moved
-    let cardToMove: KanbanCard | null = null
+    // Find the card being moved from current columns
+    const currentColumns = Array.isArray(kanbanColumns) ? kanbanColumns : columns
+    const sourceCol = currentColumns.find(col => col.id === sourceColumnId)
+    const cardToMove = sourceCol?.cards.find(card => card.id === cardId)
+
+    if (!cardToMove) {
+      setDraggingCard(null)
+      setDragOverColumn(null)
+      setDropTarget(null)
+      return
+    }
+
     setKanbanColumns((cols = []) => {
-      const sourceCol = cols.find(col => col.id === sourceColumnId)
-      if (sourceCol) {
-        cardToMove = sourceCol.cards.find(card => card.id === cardId) || null
-      }
-      return cols
-    })
-
-    if (!cardToMove) return
-
-    // Move the card to the new column
-    setKanbanColumns((cols = []) =>
-      cols.map(col => {
-        if (col.id === sourceColumnId) {
-          // Remove card from source column
+      return cols.map(col => {
+        // Handle source column - remove the card
+        if (col.id === sourceColumnId && col.id !== targetColumnId) {
           return {
             ...col,
             cards: col.cards.filter(card => card.id !== cardId)
           }
-        } else if (col.id === targetColumnId) {
-          // Add card to target column
+        }
+
+        // Handle target column - add card at correct position
+        if (col.id === targetColumnId) {
+          // Remove the card first if it's in the same column
+          const cardsWithoutDragged = col.cards.filter(card => card.id !== cardId)
+
+          // Determine insert position
+          let insertIndex = cardsWithoutDragged.length // Default: end of list
+
+          if (dropTarget && dropTarget.columnId === targetColumnId && dropTarget.cardId) {
+            const targetCardIndex = cardsWithoutDragged.findIndex(c => c.id === dropTarget.cardId)
+            if (targetCardIndex !== -1) {
+              insertIndex = dropTarget.position === 'before' ? targetCardIndex : targetCardIndex + 1
+            }
+          }
+
+          // Insert card at position
+          const newCards = [...cardsWithoutDragged]
+          newCards.splice(insertIndex, 0, cardToMove)
+
           return {
             ...col,
-            cards: [...col.cards, cardToMove!]
+            cards: newCards
           }
         }
+
         return col
       })
-    )
+    })
 
     setDraggingCard(null)
+    setDragOverColumn(null)
+    setDropTarget(null)
   }
 
   // Focus input when editing starts
@@ -352,16 +395,6 @@ function KanbanWidget() {
         handleMouseDown(e);
       }}
     >
-      {/* Background image */}
-      <div
-        className="absolute inset-0 opacity-5 pointer-events-none"
-        style={{
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-
       {/* Header */}
       <div
         ref={headerRef}
@@ -482,22 +515,29 @@ function KanbanWidget() {
             <div className="space-y-2 overflow-y-auto pr-1 scrollbar-thin" style={{ maxHeight: `calc(${kanbanSize.height}px - 140px)` }}>
               {column.cards.map(card => {
                 const isEditing = editingCard?.columnId === column.id && editingCard?.cardId === card.id
+                const isDropBefore = dropTarget?.columnId === column.id && dropTarget?.cardId === card.id && dropTarget?.position === 'before'
+                const isDropAfter = dropTarget?.columnId === column.id && dropTarget?.cardId === card.id && dropTarget?.position === 'after'
 
                 return (
-                  <div
-                    key={card.id}
-                    draggable={!isEditing}
-                    onDragStart={(e) => handleCardDragStart(e, column.id, card.id)}
-                    onDragEnd={handleCardDragEnd}
-                    onClick={() => !isEditing && openCardModal(column.id, card)}
-                    className={`bg-dark-card/80 border rounded-lg p-3 transition-all group ${
-                      draggingCard?.cardId === card.id
-                        ? 'opacity-50 cursor-grabbing'
-                        : 'cursor-grab hover:border-primary/30 cursor-pointer'
-                    } ${
-                      isEditing ? 'border-primary/50' : 'border-dark-border/50'
-                    }`}
-                  >
+                  <div key={card.id} className="relative">
+                    {/* Drop indicator - before */}
+                    {isDropBefore && (
+                      <div className="absolute -top-1 left-0 right-0 h-0.5 bg-primary rounded-full z-10" />
+                    )}
+                    <div
+                      draggable={!isEditing}
+                      onDragStart={(e) => handleCardDragStart(e, column.id, card.id)}
+                      onDragEnd={handleCardDragEnd}
+                      onDragOver={(e) => handleCardDragOver(e, column.id, card.id)}
+                      onClick={() => !isEditing && openCardModal(column.id, card)}
+                      className={`bg-dark-card/80 border rounded-lg p-3 transition-all group ${
+                        draggingCard?.cardId === card.id
+                          ? 'opacity-50 cursor-grabbing'
+                          : 'cursor-grab hover:border-primary/30 cursor-pointer'
+                      } ${
+                        isEditing ? 'border-primary/50' : 'border-dark-border/50'
+                      }`}
+                    >
                     {isEditing ? (
                       <textarea
                         ref={editInputRef}
@@ -556,6 +596,11 @@ function KanbanWidget() {
                         <Trash2 size={12} className="text-gray-500 hover:text-red-400" />
                       </button>
                     </div>
+                    </div>
+                    {/* Drop indicator - after */}
+                    {isDropAfter && (
+                      <div className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary rounded-full z-10" />
+                    )}
                   </div>
                 )
               })}
@@ -595,18 +640,8 @@ function KanbanWidget() {
 
           {/* Modal */}
           <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[201] bg-dark-card border border-dark-border rounded-xl shadow-2xl w-[500px] overflow-hidden">
-            {/* Background image */}
-            <div
-              className="absolute inset-0 opacity-5 pointer-events-none"
-              style={{
-                backgroundImage: `url(${bgImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }}
-            />
-
             {/* Header */}
-            <div className="relative px-4 py-3 border-b border-dark-border/50 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-dark-border/50 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-200">Card Details</h3>
               <button
                 onClick={closeCardModal}
@@ -617,7 +652,7 @@ function KanbanWidget() {
             </div>
 
             {/* Content */}
-            <div className="relative p-4 space-y-3">
+            <div className="p-4 space-y-3">
               {/* Title */}
               <div>
                 <label className="block text-[10px] font-medium text-gray-400 mb-1">Title</label>

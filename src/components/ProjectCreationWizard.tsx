@@ -2,8 +2,6 @@ import { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, RefreshCw, Code, Server, Rocket, X, AlertCircle } from 'lucide-react'
 import { Template } from '../types/electron'
-import bgImage from '../assets/images/bg.jpg'
-import noiseBgImage from '../assets/images/noise_bg.png'
 import { ModalPortal } from './ModalPortal'
 
 type WizardStep = 'cloning' | 'env-config' | 'installing' | 'initializing' | 'complete' | 'error'
@@ -215,29 +213,8 @@ export function ProjectCreationWizard({
         exit={{ opacity: 0, scale: 0.95 }}
         className="relative w-full max-w-lg bg-dark-card border border-dark-border rounded-lg shadow-2xl mx-4 overflow-hidden"
       >
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 opacity-10 pointer-events-none z-0"
-          style={{
-            backgroundImage: `url(${bgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-
-        {/* Noise texture overlay */}
-        <div
-          className="absolute inset-0 opacity-50 pointer-events-none z-[1]"
-          style={{
-            backgroundImage: `url(${noiseBgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            mixBlendMode: 'soft-light',
-          }}
-        />
-
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-border relative z-10">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-dark-border">
           <div>
             <h2 className="text-sm font-semibold text-white">Creating {projectName}</h2>
             <p className="text-[11px] text-gray-500 mt-0.5">
@@ -255,7 +232,7 @@ export function ProjectCreationWizard({
         </div>
 
         {/* Content */}
-        <div className="p-8 relative z-10">
+        <div className="p-8">
           <AnimatePresence mode="wait">
             {/* Cloning Step */}
             {currentStep === 'cloning' && (
@@ -429,7 +406,7 @@ export function ProjectCreationWizard({
 
         {/* Progress Steps Indicator */}
         {currentStep !== 'complete' && currentStep !== 'error' && (
-          <div className="border-t border-dark-border px-8 py-4 relative z-10">
+          <div className="border-t border-dark-border px-8 py-4">
             <div className="flex items-center justify-center gap-2">
               <ProgressDot active={currentStep === 'cloning'} completed={['env-config', 'installing', 'initializing'].includes(currentStep)} />
               <ProgressLine completed={['env-config', 'installing', 'initializing'].includes(currentStep)} />

@@ -276,7 +276,6 @@ class ResearchAgentService extends EventEmitter {
     } catch (error: any) {
       // Check if aborted
       if (error.name === 'AbortError') {
-        console.log(`⏹️ Research agent ${agentId} stopped by user`);
         this.updateAgentStatus(agentId, 'stopped');
       } else {
         console.error(`❌ Research agent ${agentId} error:`, error);
@@ -376,8 +375,6 @@ class ResearchAgentService extends EventEmitter {
     let findings: string | null = null;
     let fullTextParts: string[] = [];
 
-    console.log('🔍 Extracting results from', messages.length, 'messages');
-
     // Iterate through messages and extract text
     for (const msg of messages) {
       if (msg.type === 'assistant' && msg.message?.content) {
@@ -389,14 +386,12 @@ class ResearchAgentService extends EventEmitter {
             const briefMatch = block.text.match(/<BRIEF_DESCRIPTION>([\s\S]*?)<\/BRIEF_DESCRIPTION>/);
             if (briefMatch) {
               briefDescription = briefMatch[1].trim();
-              console.log('✅ Extracted BRIEF_DESCRIPTION:', briefDescription);
             }
 
             // Try to extract <SUMMARY> tag
             const summaryMatch = block.text.match(/<SUMMARY>([\s\S]*?)<\/SUMMARY>/);
             if (summaryMatch) {
               summary = summaryMatch[1].trim();
-              console.log('✅ Extracted SUMMARY:', summary?.substring(0, 100) + '...');
             }
 
             // Try to extract <ACTIONS> tag (JSON array)
@@ -404,7 +399,6 @@ class ResearchAgentService extends EventEmitter {
             if (actionsMatch) {
               try {
                 actions = JSON.parse(actionsMatch[1].trim());
-                console.log('✅ Extracted ACTIONS:', actions?.length, 'actions');
               } catch (e) {
                 console.warn('❌ Failed to parse <ACTIONS> JSON:', e);
               }
@@ -414,12 +408,6 @@ class ResearchAgentService extends EventEmitter {
             const findingsMatch = block.text.match(/<FINDINGS>([\s\S]*?)<\/FINDINGS>/);
             if (findingsMatch) {
               findings = findingsMatch[1].trim();
-              console.log('✅ Extracted FINDINGS:', findings?.substring(0, 100) + '...');
-            }
-
-            // Debug: Log full text block if it contains key tags
-            if (block.text.includes('FINDINGS') || block.text.includes('BRIEF_DESCRIPTION') || block.text.includes('SUMMARY')) {
-              console.log('📝 Agent response text block:', block.text.substring(0, 500) + (block.text.length > 500 ? '...' : ''));
             }
           }
         }
@@ -428,18 +416,8 @@ class ResearchAgentService extends EventEmitter {
 
     const fullText = fullTextParts.join('\n');
 
-    // Log extraction summary
-    console.log('📊 Extraction complete:', {
-      hasBriefDescription: !!briefDescription,
-      hasSummary: !!summary,
-      hasActions: !!actions,
-      hasFindings: !!findings,
-      fullTextLength: fullText.length,
-    });
-
     // If no findings but we expected them (no actions), use fullText as fallback
     if (!findings && !actions && fullText.length > 0) {
-      console.log('⚠️ No FINDINGS or ACTIONS tags found, using full text as findings fallback');
       findings = fullText;
     }
 

@@ -4,7 +4,6 @@ import { Icon } from '@iconify/react'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
 import { useToast } from '../hooks/useToast'
-import bgImage from '../assets/images/bg.jpg'
 
 type ResizeDirection = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null
 
@@ -420,16 +419,6 @@ function IconsWidget() {
       }}
       onMouseDown={(e) => { bringWidgetToFront('icons'); handleMouseDown(e); }}
     >
-      {/* Background image */}
-      <div
-        className="absolute inset-0 opacity-5 pointer-events-none"
-        style={{
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-
       {/* Header */}
       <div
         ref={headerRef}

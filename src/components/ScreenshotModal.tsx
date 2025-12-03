@@ -3,7 +3,6 @@ import { X, Send, Pencil, Eraser } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
-import bgImage from '../assets/images/bg.jpg'
 
 interface ScreenshotModalProps {
   isOpen: boolean
@@ -180,8 +179,6 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
     // Close modal and disable edit mode if active
     handleClose()
     setEditModeEnabled(false)
-
-    console.log('Screenshot sent to ActionBar')
   }
 
   if (!isOpen) return null
@@ -193,18 +190,8 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
 
       {/* Modal */}
       <div className="relative w-[700px] bg-dark-bg/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 opacity-5 pointer-events-none"
-          style={{
-            backgroundImage: `url(${bgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-
         {/* Header */}
-        <div className="relative z-10 px-6 py-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-white tracking-tight">Send Screenshot to Claude</h2>
             <p className="text-xs text-gray-400 mt-0.5 font-medium">Add a description to help Claude understand what you need. You can also paint/point what you want changed using the pencil.</p>
@@ -218,7 +205,7 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
         </div>
 
         {/* Content */}
-        <div className="relative z-10 p-5 space-y-4 flex flex-col h-full">
+        <div className="p-5 space-y-4 flex flex-col h-full">
           {/* Screenshot Preview */}
           <div className="relative bg-black/20 rounded-xl border border-white/10 overflow-hidden flex-1 flex flex-col items-center justify-center p-4 min-h-0">
             <div className="relative inline-block shadow-2xl rounded-lg overflow-hidden max-h-full">

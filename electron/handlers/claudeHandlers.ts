@@ -69,7 +69,6 @@ async function handlePrintscreenTool(projectId: string, text: string): Promise<v
 
   for (const { route, fullPage } of requests) {
     const modeLabel = fullPage ? ' (full page)' : '';
-    console.log(`[ClaudeHandlers] Detected <printscreen_tool route="${route}"${fullPage ? ' fullpage="true"' : ''} />`);
 
     // Log to terminal
     terminalAggregator.addSystemLine(

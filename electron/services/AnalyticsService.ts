@@ -26,7 +26,6 @@ class AnalyticsService {
       const credentialsJson = process.env.GA4_SERVICE_ACCOUNT_JSON
 
       if (!credentialsJson) {
-        console.log('⚠️  Analytics: GA4_SERVICE_ACCOUNT_JSON not set, using mock data')
         return
       }
 
@@ -38,7 +37,6 @@ class AnalyticsService {
       this.propertyId = process.env.GA4_PROPERTY_ID || ''
 
       if (!this.propertyId) {
-        console.log('⚠️  Analytics: GA4_PROPERTY_ID not set, using mock data')
         return
       }
 
@@ -46,10 +44,8 @@ class AnalyticsService {
       await this.refreshAccessToken()
 
       this.initialized = true
-      console.log('✅ Analytics Service initialized')
     } catch (error) {
       console.error('❌ Failed to initialize Analytics Service:', error)
-      console.log('Analytics widget will use mock data')
     }
   }
 

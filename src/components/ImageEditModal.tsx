@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react'
 import { X, Wand2, Upload, Link2, ChevronDown, ChevronUp, Loader2, CheckCircle2, ZoomIn, ZoomOut, RotateCcw, FolderOpen, Image as ImageIcon } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
-import bgImage from '../assets/images/bg.jpg'
 import { ModalPortal } from './ModalPortal'
 import * as fabric from 'fabric'
 
@@ -229,14 +228,11 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
     // Close modal and disable edit mode
     handleClose()
     setEditModeEnabled(false)
-
-    console.log('Image referenced in ActionBar')
   }
 
   const handleSubmitAI = () => {
     if (aiPrompt.trim()) {
       setIsGenerating(true)
-      console.log('Generating AI image with prompt:', aiPrompt)
 
       // TODO: Implement AI generation
       // This will:
@@ -559,17 +555,6 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
       const clampedSourceWidth = Math.min(sourceWidth, srcWidth - clampedSourceX)
       const clampedSourceHeight = Math.min(sourceHeight, srcHeight - clampedSourceY)
 
-      console.log('Crop calculation (sending to Sharp):', {
-        targetSize: { imageWidth, imageHeight },
-        sourceRegion: {
-          x: clampedSourceX,
-          y: clampedSourceY,
-          w: clampedSourceWidth,
-          h: clampedSourceHeight
-        },
-        scales: { totalScaleX, totalScaleY, imgScaleX, imgScaleY, canvasZoom }
-      })
-
       // Get current project ID
       if (!currentProjectId) {
         throw new Error('No project is currently open')
@@ -591,8 +576,6 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
       )
 
       if (result?.success) {
-        console.log('✅ Image cropped and replaced successfully with Sharp')
-
         // Disable edit mode
         setEditModeEnabled(false)
 
@@ -676,18 +659,8 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
 
           {/* Crop Tool Modal */}
           <div className="relative w-[95vw] h-[85vh] max-w-[1200px] max-h-[800px] bg-dark-card border border-dark-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
-            {/* Background */}
-            <div
-              className="absolute inset-0 opacity-5 pointer-events-none"
-              style={{
-                backgroundImage: `url(${bgImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }}
-            />
-
             {/* Header */}
-            <div className="relative z-10 px-4 py-3 border-b border-dark-border bg-dark-bg/50 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-dark-border bg-dark-bg/50 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h2 className="text-base font-semibold text-white">Crop to Fit</h2>
                 <div className="flex items-center gap-2">
@@ -824,7 +797,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
             </div>
 
             {/* Footer */}
-            <div className="relative z-10 px-4 py-3 border-t border-dark-border bg-dark-bg/50 flex items-center justify-between">
+            <div className="px-4 py-3 border-t border-dark-border bg-dark-bg/50 flex items-center justify-between">
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs text-gray-500">
                   Scroll to zoom • Drag to reposition
@@ -871,18 +844,8 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
 
       {/* Modal */}
       <div className="relative w-[800px] max-h-[600px] bg-dark-card border border-dark-border rounded-xl shadow-2xl overflow-hidden">
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 opacity-5 pointer-events-none"
-          style={{
-            backgroundImage: `url(${bgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-
         {/* Header */}
-        <div className="relative z-10 px-6 py-4 border-b border-dark-border bg-dark-bg/50 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-dark-border bg-dark-bg/50 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-white">Edit Image</h2>
             <p className="text-xs text-gray-400 mt-0.5">Replace or modify this image</p>
@@ -896,7 +859,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
         </div>
 
         {/* Content */}
-        <div className="relative z-10 p-6">
+        <div className="p-6">
           <div className="grid grid-cols-2 gap-6">
             {/* LEFT COLUMN - Image Preview & Info */}
             <div className="space-y-4">

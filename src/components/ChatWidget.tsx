@@ -3,8 +3,6 @@ import { X, Send, ChevronDown, Plus, Sparkles, User, Bot, Clock, Trash2, Message
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
-import bgImage from '../assets/images/bg.jpg'
-import noiseBgImage from '../assets/images/noise_bg.png'
 
 type ResizeDirection = 's' | 'n' | 'e' | 'w' | null
 
@@ -229,7 +227,6 @@ function ChatWidget() {
                       }
                     } catch (err) {
                       // Image file might have been deleted - that's ok
-                      console.log('Image file not found:', m.imageLocalPath)
                     }
                   }
 
@@ -599,24 +596,6 @@ function ChatWidget() {
         handleMouseDown(e)
       }}
     >
-      {/* Background layers */}
-      <div
-        className="absolute inset-0 opacity-5 pointer-events-none"
-        style={{
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      />
-      <div
-        className="absolute inset-0 opacity-30 pointer-events-none"
-        style={{
-          backgroundImage: `url(${noiseBgImage})`,
-          backgroundSize: 'cover',
-          mixBlendMode: 'soft-light',
-        }}
-      />
-
       {/* History Sidebar - Slides in on hover */}
       <div
         className="absolute left-0 top-0 bottom-0 z-20"
@@ -1072,17 +1051,8 @@ function ChatWidget() {
                     transition={{ duration: 0.15 }}
                     className="absolute bottom-full left-0 mb-1 w-52 bg-dark-card border border-dark-border rounded-xl shadow-2xl overflow-hidden z-50"
                   >
-                    <div
-                      className="absolute inset-0 opacity-10 pointer-events-none"
-                      style={{
-                        backgroundImage: `url(${bgImage})`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                      }}
-                    />
-
                     {/* Category Tabs */}
-                    <div className="relative flex border-b border-dark-border/50">
+                    <div className="flex border-b border-dark-border/50">
                       <button
                         onClick={() => setModelCategory('chat')}
                         className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-medium transition-all ${

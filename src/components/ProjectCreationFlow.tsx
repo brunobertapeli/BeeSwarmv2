@@ -22,8 +22,6 @@ import {
   Info
 } from 'lucide-react'
 import { Template } from '../types/electron'
-import bgImage from '../assets/images/bg.jpg'
-import noiseBgImage from '../assets/images/noise_bg.png'
 import TechIcon from './TechIcon'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
@@ -934,29 +932,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
         exit={{ opacity: 0, scale: 0.95 }}
         className="relative w-full max-w-4xl h-[64vh] bg-dark-card border border-dark-border rounded-lg shadow-2xl mx-4 overflow-hidden flex flex-col"
       >
-        {/* Background Image */}
-        <div
-          className="absolute inset-0 opacity-10 pointer-events-none z-0"
-          style={{
-            backgroundImage: `url(${bgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-
-        {/* Noise texture overlay */}
-        <div
-          className="absolute inset-0 opacity-50 pointer-events-none z-[1]"
-          style={{
-            backgroundImage: `url(${noiseBgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            mixBlendMode: 'soft-light',
-          }}
-        />
-
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-dark-border relative z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-dark-border">
           <div>
             <h2 className="text-lg font-bold text-white" style={{ fontFamily: 'var(--tg-heading-font-family)' }}>
               {currentStep === 'category' && 'Create New Project'}

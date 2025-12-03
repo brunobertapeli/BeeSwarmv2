@@ -326,20 +326,12 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
   // Create Stripe portal session
   ipcMain.handle('auth:create-stripe-portal', async (_event, sessionData?: any) => {
     try {
-      console.log('🔍 Received session data:', {
-        hasSessionData: !!sessionData,
-        hasAccessToken: !!sessionData?.access_token
-      })
-
       if (!sessionData || !sessionData.access_token) {
-        console.error('❌ No session data or access token provided')
         return { success: false, error: 'No active session' }
       }
 
-      console.log('📞 Calling backend to create Stripe portal session...')
       const { url } = await backendService.createStripePortalSession(sessionData.access_token)
 
-      console.log('✅ Stripe portal URL received:', url.substring(0, 50) + '...')
       return { success: true, url }
     } catch (error: any) {
       console.error('❌ Error creating Stripe portal session:', error)

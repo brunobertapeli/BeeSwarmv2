@@ -25,9 +25,6 @@ import ChatWidget from './ChatWidget'
 import GitHubSheet from './GitHubSheet'
 import { ModalPortal } from './ModalPortal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
-import bgImage from '../assets/images/bg.jpg'
-import mainShapeImage from '../assets/images/main_shape.png'
-import noiseBgImage from '../assets/images/noise_bg.png'
 
 function ProjectView() {
   const {
@@ -536,45 +533,13 @@ Please read the manifest to understand what my website is about, then create an 
 
   return (
     <div className="w-full h-screen relative flex flex-col bg-[#0A0020] overflow-hidden">
-      {/* Fixed shape background - Behind all content */}
-      <div
-        className="fixed left-0 top-0 w-full h-full pointer-events-none opacity-60"
-        style={{
-          backgroundImage: `url(${mainShapeImage})`,
-          backgroundPosition: 'center',
-          backgroundSize: 'cover',
-          zIndex: 0
-        }}
-      />
-
-      {/* Noise texture overlay - Behind all content */}
-      <div
-        className="fixed left-0 top-0 w-full h-full opacity-70 pointer-events-none"
-        style={{
-          backgroundImage: `url(${noiseBgImage})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          mixBlendMode: 'soft-light',
-          zIndex: 1
-        }}
-      />
-
       {/* Top Header Bar */}
-      <div className="fixed top-0 left-0 right-0 h-[40px] z-[99] border-b border-gray-700/50 bg-gray-800/50 flex items-center justify-center relative overflow-hidden" style={{ WebkitAppRegion: 'drag' } as any}>
-        {/* Background image with low opacity */}
-        <div
-          className="absolute inset-0 opacity-10 pointer-events-none"
-          style={{
-            backgroundImage: `url(${bgImage})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
+      <div className="fixed top-0 left-0 right-0 h-[40px] z-[99] border-b border-gray-700/50 bg-gray-800/80 flex items-center justify-center relative overflow-hidden" style={{ WebkitAppRegion: 'drag' } as any}>
 
         {/* Unified Control - Project Name + View Switcher */}
         {projects.length > 0 && (
           <div
-            className="flex items-center bg-dark-card/95 backdrop-blur-xl border border-gray-700/60 rounded-lg relative z-10 mt-[3px] overflow-hidden"
+            className="flex items-center bg-dark-card border border-gray-700/60 rounded-lg relative z-10 mt-[3px] overflow-hidden"
             style={{ WebkitAppRegion: 'no-drag' } as any}
           >
             {/* Project Name */}
