@@ -77,8 +77,8 @@ class PreviewService extends EventEmitter {
 
     // Intercept keyboard shortcuts in BrowserView
     view.webContents.on('before-input-event', async (event, input) => {
-      // Tab key - used for layout switching (cycle between Browser and Workspace)
-      if (input.key === 'Tab' && input.type === 'keyDown' && !input.meta && !input.control && !input.alt && !input.shift) {
+      // Shift+Tab - used for layout switching (cycle between Browser and Workspace)
+      if (input.key === 'Tab' && input.type === 'keyDown' && input.shift && !input.meta && !input.control && !input.alt) {
         event.preventDefault();
         this.mainWindow?.webContents.send('layout-cycle-requested');
       }
@@ -434,6 +434,11 @@ class PreviewService extends EventEmitter {
       width: currentBounds.width,
       height: currentBounds.height
     });
+
+    // Transfer focus back to main window so keyboard events work
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.focus();
+    }
 
     this.isHidden.set(projectId, true);
     this.emit('preview-hidden', projectId);

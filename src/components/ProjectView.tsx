@@ -421,7 +421,7 @@ Please read the manifest to understand what my website is about, then create an 
     }
   }, [currentProject?.id])
 
-  // Listen for Tab key for layout cycling (local keyboard handler)
+  // Listen for Shift+Tab for layout cycling (local keyboard handler)
   useEffect(() => {
     if (!currentProject?.id) return
 
@@ -431,10 +431,9 @@ Please read the manifest to understand what my website is about, then create an 
         return
       }
 
-      // Tab - Cycle layout state (ALWAYS prevent default to disable focus navigation)
-      if (e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      // Shift+Tab - Cycle layout state
+      if (e.key === 'Tab' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
-        e.stopPropagation()
         window.electronAPI?.layout.cycleState(currentProject.id)
       }
 
@@ -451,9 +450,8 @@ Please read the manifest to understand what my website is about, then create an 
       }
     }
 
-    // Use capture phase to intercept Tab before it reaches any element
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [currentProject?.id, iconsWidgetEnabled, setIconsWidgetEnabled])
 
   // Listen for hotkey events forwarded from BrowserView (when browser is focused)

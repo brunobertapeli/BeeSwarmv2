@@ -34,7 +34,7 @@ export function registerLayoutHandlers(): void {
     }
   );
 
-  // Cycle layout state (for Tab key)
+  // Cycle layout state (for Shift+Tab)
   ipcMain.handle('layout:cycle-state', async (_event, projectId: string) => {
     try {
       await layoutManager.cycleState(projectId);

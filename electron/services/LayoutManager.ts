@@ -108,12 +108,12 @@ class LayoutManager extends EventEmitter {
   }
 
   /**
-   * Cycle to next state (for Tab key)
+   * Cycle to next state (for Shift+Tab)
    * DEFAULT ↔ TOOLS (toggle between preview and tools view)
-   * Note: BROWSER_FULL is only accessible via fullscreen icon, not Tab cycling
+   * Note: BROWSER_FULL is only accessible via fullscreen icon, not Shift+Tab cycling
    */
   async cycleState(projectId: string): Promise<void> {
-    // Guard against rapid Tab presses (setState also has guard, this provides early exit)
+    // Guard against rapid Shift+Tab presses (setState also has guard, this provides early exit)
     if (this.isTransitioning) {
       return;
     }

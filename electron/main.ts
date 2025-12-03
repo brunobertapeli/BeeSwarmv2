@@ -543,8 +543,7 @@ User: ${currentUserId || 'not logged in'}
 
 // Log when app is ready
 app.on('ready', () => {
-  // Tab shortcut is now handled locally in renderer (see ProjectView.tsx)
-  // This prevents Tab from interfering with other apps when minimized
+  // Shift+Tab shortcut is handled locally in renderer (see ProjectView.tsx)
 })
 
 // Unregister shortcuts when app is quitting
