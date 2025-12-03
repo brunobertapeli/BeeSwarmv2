@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { MessageCircle, X, Send, Sparkles, ChevronDown, ArrowLeft, Bug, Mail } from 'lucide-react'
+import { MessageCircle, X, Send, ChevronDown, ArrowLeft, RotateCcw, Check } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import bgImage from '../assets/images/bg.jpg'
 import { ModalPortal } from './ModalPortal'
+import { supportApi } from '../services/supportApi'
 
 interface FAQItem {
   question: string
@@ -18,6 +19,7 @@ interface Message {
   timestamp: Date
   faqItems?: FAQItem[]
   isCommandList?: boolean
+  showBackButton?: boolean
 }
 
 interface HelpChatProps {
@@ -27,12 +29,16 @@ interface HelpChatProps {
 }
 
 function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
-  const { user } = useAppStore()
+  const { user, session } = useAppStore()
   const [viewMode, setViewMode] = useState<ViewMode>('chat')
   const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [expandedFAQs, setExpandedFAQs] = useState<Set<number>>(new Set())
+
+  // New chat confirmation state
+  const [showNewChatConfirm, setShowNewChatConfirm] = useState(false)
+  const [isResettingChat, setIsResettingChat] = useState(false)
 
   // Bug report form state
   const [bugType, setBugType] = useState<'ui' | 'functionality' | 'performance' | 'crash' | 'templates' | 'other'>('functionality')
@@ -72,11 +78,11 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
 
   // Poll for new support messages when in queue
   useEffect(() => {
-    if (!isInQueue || !user) return
+    if (!isInQueue || !user || !session?.access_token) return
 
     const checkForNewMessages = async () => {
       try {
-        const result = await window.electronAPI?.support.getSession(user.id)
+        const result = await supportApi.getSession(session.access_token)
 
         if (result?.success && result.session) {
           const supportMessages = result.session.messages.filter((msg: any) => msg.type === 'support')
@@ -123,7 +129,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
         clearInterval(pollingIntervalRef.current)
       }
     }
-  }, [isInQueue, user, isOpen, messages])
+  }, [isInQueue, user, session, isOpen, messages])
 
   // Reset unread count when chat is opened
   useEffect(() => {
@@ -176,6 +182,143 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
     }
   ]
 
+  // Execute a command directly (for clickable commands in welcome screen)
+  const executeCommand = (command: string) => {
+    setInputMessage(command)
+    // Use setTimeout to ensure state is updated before triggering send
+    setTimeout(() => {
+      const fakeEvent = { trim: () => command } as any
+      // Simulate the command being typed and sent
+      const userMessage: Message = {
+        id: `msg-${Date.now()}`,
+        type: 'user',
+        content: command,
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, userMessage])
+      setInputMessage('')
+      setIsTyping(true)
+
+      // Handle the command
+      if (command === '/bugreport') {
+        setViewMode('bug-report')
+        setIsTyping(false)
+        return
+      }
+
+      if (command === '/human') {
+        // Trigger the /human flow
+        (async () => {
+          try {
+            const availabilityResult = await supportApi.checkAvailability()
+            if (availabilityResult?.success && availabilityResult.available) {
+              if (user && session?.access_token) {
+                const queueResult = await supportApi.addToQueue(session.access_token, {
+                  projectId,
+                  lastMessage: command
+                })
+                if (queueResult?.success) {
+                  const assistantMessage: Message = {
+                    id: `msg-${Date.now()}-assistant`,
+                    type: 'assistant',
+                    content: 'You\'ve been added to the support queue! A human agent will connect with you shortly.\n\nYou can minimize this chat - the help button will notify you when support responds.',
+                    timestamp: new Date(),
+                    showBackButton: true
+                  }
+                  setMessages(prev => [...prev, assistantMessage])
+                  setIsInQueue(true)
+                }
+              }
+              setIsTyping(false)
+            } else {
+              setIsTyping(false)
+              setViewMode('offline-message')
+            }
+          } catch (error) {
+            console.error('Failed to check support availability:', error)
+            const assistantMessage: Message = {
+              id: `msg-${Date.now()}-assistant`,
+              type: 'assistant',
+              content: 'Sorry, we\'re having trouble connecting to support right now. Please try again later.',
+              timestamp: new Date(),
+              showBackButton: true
+            }
+            setMessages(prev => [...prev, assistantMessage])
+            setIsTyping(false)
+          }
+        })()
+        return
+      }
+
+      setTimeout(() => {
+        let assistantMessage: Message
+
+        if (command === '/faq') {
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            type: 'assistant',
+            content: 'Here are some frequently asked questions:',
+            timestamp: new Date(),
+            faqItems: FAQ_ITEMS,
+            showBackButton: true
+          }
+        } else if (command === '/discord') {
+          window.electronAPI?.shell.openExternal('https://discord.gg/zkfAAGqFwW')
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            type: 'assistant',
+            content: 'Opening Discord... Join our community for support and discussions!',
+            timestamp: new Date(),
+            showBackButton: true
+          }
+        } else if (command === '/commands') {
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            type: 'assistant',
+            content: 'Available commands:',
+            timestamp: new Date(),
+            isCommandList: true,
+            showBackButton: true
+          }
+        } else if (command === '/hotkeys') {
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            type: 'assistant',
+            content: 'Keyboard Shortcuts:\n\nSHIFT+TAB - Cycle between Browser View and Workspace\n\nBrowser View:\nE - Toggle Edit Mode\nP - Take a screenshot for context\n\nWorkspace:\nN - Add a Sticky Note\nK - Toggle Kanban Board\nA - Toggle Analytics\nF - Toggle Assets Folder\nW - Toggle Whiteboard\nC - Toggle Chat\n\nGlobal:\nG - Open GitHub Sheet',
+            timestamp: new Date(),
+            showBackButton: true
+          }
+        } else if (command.startsWith('/')) {
+          // Unrecognized command
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            type: 'assistant',
+            content: `Command "${command}" not recognized. Type /commands to see all available commands.`,
+            timestamp: new Date(),
+            showBackButton: true
+          }
+          setMessages(prev => [...prev, assistantMessage])
+          setIsTyping(false)
+          setExpandedFAQs(new Set())
+          return
+        } else {
+          // This shouldn't happen in executeCommand, but handle it anyway
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            type: 'assistant',
+            content: 'Please type a message or use a command.',
+            timestamp: new Date(),
+            showBackButton: true
+          }
+        }
+
+        setMessages(prev => [...prev, assistantMessage])
+        setIsTyping(false)
+        setExpandedFAQs(new Set())
+      }, 500)
+    }, 0)
+  }
+
   const handleSend = async () => {
     if (!inputMessage.trim()) return
 
@@ -197,15 +340,12 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
     if (message === '/human') {
       (async () => {
         try {
-          const availabilityResult = await window.electronAPI?.support.checkAvailability()
+          const availabilityResult = await supportApi.checkAvailability()
 
           if (availabilityResult?.success && availabilityResult.available) {
             // Support is online - add to queue
-            if (user) {
-              const queueResult = await window.electronAPI?.support.addToQueue({
-                userId: user.id,
-                userName: user.name,
-                userEmail: user.email,
+            if (user && session?.access_token) {
+              const queueResult = await supportApi.addToQueue(session.access_token, {
                 projectId,
                 lastMessage: inputMessage
               })
@@ -214,8 +354,9 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                 const assistantMessage: Message = {
                   id: `msg-${Date.now()}-assistant`,
                   type: 'assistant',
-                  content: '🎉 You\'ve been added to the support queue! A human agent will connect with you shortly.\n\nYou can minimize this chat - the help button will notify you when support responds.',
-                  timestamp: new Date()
+                  content: 'You\'ve been added to the support queue! A human agent will connect with you shortly.\n\nYou can minimize this chat - the help button will notify you when support responds.',
+                  timestamp: new Date(),
+                  showBackButton: true
                 }
                 setMessages(prev => [...prev, assistantMessage])
                 setIsInQueue(true) // Start polling for responses
@@ -233,7 +374,8 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
             id: `msg-${Date.now()}-assistant`,
             type: 'assistant',
             content: 'Sorry, we\'re having trouble connecting to support right now. Please try again later.',
-            timestamp: new Date()
+            timestamp: new Date(),
+            showBackButton: true
           }
           setMessages(prev => [...prev, assistantMessage])
           setIsTyping(false)
@@ -242,59 +384,130 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
       return
     }
 
-    setTimeout(() => {
-      let assistantMessage: Message
-
-      if (message === '/faq') {
-        assistantMessage = {
+    // Handle commands with a small delay for UX
+    if (message === '/faq') {
+      setTimeout(() => {
+        const assistantMessage: Message = {
           id: `msg-${Date.now()}-assistant`,
           type: 'assistant',
           content: 'Here are some frequently asked questions:',
           timestamp: new Date(),
-          faqItems: FAQ_ITEMS
+          faqItems: FAQ_ITEMS,
+          showBackButton: true
         }
-      } else if (message === '/discord') {
-        window.electronAPI?.shell.openExternal('https://discord.com')
-        assistantMessage = {
+        setMessages(prev => [...prev, assistantMessage])
+        setIsTyping(false)
+        setExpandedFAQs(new Set())
+      }, 500)
+    } else if (message === '/discord') {
+      window.electronAPI?.shell.openExternal('https://discord.gg/zkfAAGqFwW')
+      setTimeout(() => {
+        const assistantMessage: Message = {
           id: `msg-${Date.now()}-assistant`,
           type: 'assistant',
           content: 'Opening Discord... Join our community for support and discussions!',
-          timestamp: new Date()
+          timestamp: new Date(),
+          showBackButton: true
         }
-      } else if (message === '/bugreport') {
-        // Open bug report form
-        setViewMode('bug-report')
+        setMessages(prev => [...prev, assistantMessage])
         setIsTyping(false)
-        return
-      } else if (message === '/commands') {
-        assistantMessage = {
+        setExpandedFAQs(new Set())
+      }, 500)
+    } else if (message === '/bugreport') {
+      setViewMode('bug-report')
+      setIsTyping(false)
+    } else if (message === '/commands') {
+      setTimeout(() => {
+        const assistantMessage: Message = {
           id: `msg-${Date.now()}-assistant`,
           type: 'assistant',
           content: 'Available commands:',
           timestamp: new Date(),
-          isCommandList: true
+          isCommandList: true,
+          showBackButton: true
         }
-      } else if (message === '/hotkeys') {
-        assistantMessage = {
+        setMessages(prev => [...prev, assistantMessage])
+        setIsTyping(false)
+        setExpandedFAQs(new Set())
+      }, 500)
+    } else if (message === '/hotkeys') {
+      setTimeout(() => {
+        const assistantMessage: Message = {
           id: `msg-${Date.now()}-assistant`,
           type: 'assistant',
-          content: 'Keyboard Shortcuts:\n\nTAB - Cycle between views\nE - Toggle edit mode\nK - Toggle kanban board\nN - Create new sticky note',
-          timestamp: new Date()
+          content: 'Keyboard Shortcuts:\n\nSHIFT+TAB - Cycle between Browser View and Workspace\n\nBrowser View:\nE - Toggle Edit Mode\nP - Take a screenshot for context\n\nWorkspace:\nN - Add a Sticky Note\nK - Toggle Kanban Board\nA - Toggle Analytics\nF - Toggle Assets Folder\nW - Toggle Whiteboard\nC - Toggle Chat\n\nGlobal:\nG - Open GitHub Sheet',
+          timestamp: new Date(),
+          showBackButton: true
         }
-      } else {
-        // AI response placeholder
-        assistantMessage = {
+        setMessages(prev => [...prev, assistantMessage])
+        setIsTyping(false)
+        setExpandedFAQs(new Set())
+      }, 500)
+    } else if (message.startsWith('/')) {
+      // Unrecognized command
+      setTimeout(() => {
+        const assistantMessage: Message = {
           id: `msg-${Date.now()}-assistant`,
           type: 'assistant',
-          content: `I received your message: "${inputMessage}". Our AI assistant is being integrated. For now, try /commands to see available commands!`,
-          timestamp: new Date()
+          content: `Command "${message}" not recognized. Type /commands to see all available commands.`,
+          timestamp: new Date(),
+          showBackButton: true
         }
+        setMessages(prev => [...prev, assistantMessage])
+        setIsTyping(false)
+        setExpandedFAQs(new Set())
+      }, 500)
+    } else {
+      // AI Assistant chat
+      if (!session?.access_token) {
+        const assistantMessage: Message = {
+          id: `msg-${Date.now()}-assistant`,
+          type: 'assistant',
+          content: 'Please sign in to chat with our AI assistant.',
+          timestamp: new Date(),
+          showBackButton: true
+        }
+        setMessages(prev => [...prev, assistantMessage])
+        setIsTyping(false)
+        return
       }
 
-      setMessages(prev => [...prev, assistantMessage])
+      // Call AI Assistant API (async)
+      try {
+        const result = await supportApi.chat(session.access_token, inputMessage)
+        let assistantMessage: Message
+
+        if (result.success && result.response) {
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            type: 'assistant',
+            content: result.response,
+            timestamp: new Date()
+          }
+        } else {
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            type: 'assistant',
+            content: result.error || 'Sorry, I encountered an error. Please try again.',
+            timestamp: new Date()
+          }
+        }
+
+        setMessages(prev => [...prev, assistantMessage])
+      } catch (error) {
+        console.error('AI chat error:', error)
+        const assistantMessage: Message = {
+          id: `msg-${Date.now()}-assistant`,
+          type: 'assistant',
+          content: 'Sorry, I\'m having trouble connecting right now. Please try again later.',
+          timestamp: new Date()
+        }
+        setMessages(prev => [...prev, assistantMessage])
+      }
+
       setIsTyping(false)
-      setExpandedFAQs(new Set()) // Reset expanded FAQs when new message arrives
-    }, 1000)
+      setExpandedFAQs(new Set())
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -305,15 +518,12 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
   }
 
   const handleSubmitBugReport = async () => {
-    if (!bugTitle.trim() || !bugDescription.trim() || !user) return
+    if (!bugTitle.trim() || !bugDescription.trim() || !user || !session?.access_token) return
 
     setIsSubmittingBug(true)
 
     try {
-      const result = await window.electronAPI?.support.submitBugReport({
-        userId: user.id,
-        userName: user.name,
-        userEmail: user.email,
+      const result = await supportApi.submitBugReport(session.access_token, {
         projectId,
         bugType,
         title: bugTitle.trim(),
@@ -328,12 +538,13 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
         setBugSteps('')
         setBugType('functionality')
 
-        // Show success message in chat
+        // Show success message in chat with back button
         const successMessage: Message = {
           id: `msg-${Date.now()}-assistant`,
           type: 'assistant',
           content: 'Thank you for reporting this bug! Our team will review and fix it as soon as possible. We\'ll keep you updated via email.',
-          timestamp: new Date()
+          timestamp: new Date(),
+          showBackButton: true
         }
         setMessages(prev => [...prev, successMessage])
 
@@ -348,15 +559,12 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
   }
 
   const handleSubmitOfflineMessage = async () => {
-    if (!offlineSubject.trim() || !offlineMessage.trim() || !user) return
+    if (!offlineSubject.trim() || !offlineMessage.trim() || !user || !session?.access_token) return
 
     setIsSubmittingOffline(true)
 
     try {
-      const result = await window.electronAPI?.support.sendOfflineMessage({
-        userId: user.id,
-        userName: user.name,
-        userEmail: user.email,
+      const result = await supportApi.sendOfflineMessage(session.access_token, {
         projectId,
         subject: offlineSubject.trim(),
         message: offlineMessage.trim()
@@ -367,12 +575,13 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
         setOfflineSubject('')
         setOfflineMessage('')
 
-        // Show success message in chat
+        // Show success message in chat with back button
         const successMessage: Message = {
           id: `msg-${Date.now()}-assistant`,
           type: 'assistant',
-          content: 'Thank you for your message! Our support team is currently offline, but we\'ll get back to you via email as soon as possible.',
-          timestamp: new Date()
+          content: 'Thank you for your message! We\'ll get back to you via email as soon as possible. In the meantime, feel free to join our Discord community by typing /discord below.',
+          timestamp: new Date(),
+          showBackButton: true
         }
         setMessages(prev => [...prev, successMessage])
 
@@ -384,6 +593,23 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
     } finally {
       setIsSubmittingOffline(false)
     }
+  }
+
+  const handleNewChat = async () => {
+    setIsResettingChat(true)
+    try {
+      // Reset the OpenAI thread on the backend
+      if (session?.access_token) {
+        await supportApi.resetChat(session.access_token)
+      }
+    } catch (error) {
+      console.error('Failed to reset chat thread:', error)
+    }
+    // Clear local messages regardless
+    setMessages([])
+    setShowNewChatConfirm(false)
+    setIsResettingChat(false)
+    setIsInQueue(false)
   }
 
   return (
@@ -414,21 +640,21 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
               <div className="flex items-center gap-2">
                 {viewMode !== 'chat' && (
                   <button
-                    onClick={() => setViewMode('chat')}
+                    onClick={() => {
+                      // Remove the last user message if going back from a form view
+                      if (messages.length > 0) {
+                        const lastMessage = messages[messages.length - 1]
+                        if (lastMessage.type === 'user' && (lastMessage.content === '/bugreport' || lastMessage.content === '/human')) {
+                          setMessages(prev => prev.slice(0, -1))
+                        }
+                      }
+                      setViewMode('chat')
+                    }}
                     className="p-1 hover:bg-dark-bg/50 rounded transition-colors mr-1"
                   >
                     <ArrowLeft size={16} className="text-gray-400 hover:text-white transition-colors" />
                   </button>
                 )}
-                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                  {viewMode === 'bug-report' ? (
-                    <Bug size={16} className="text-primary" />
-                  ) : viewMode === 'offline-message' ? (
-                    <Mail size={16} className="text-primary" />
-                  ) : (
-                    <Sparkles size={16} className="text-primary" />
-                  )}
-                </div>
                 <div>
                   <h3 className="text-sm font-semibold text-white">
                     {viewMode === 'bug-report' ? 'Report a Bug' : viewMode === 'offline-message' ? 'Send Message' : 'Help & Support'}
@@ -438,12 +664,45 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="p-1 hover:bg-dark-bg/50 rounded transition-colors"
-              >
-                <X size={16} className="text-gray-400 hover:text-white transition-colors" />
-              </button>
+              <div className="flex items-center gap-1">
+                {/* New Chat Button - only show when there are messages in chat view */}
+                {viewMode === 'chat' && messages.length > 0 && (
+                  showNewChatConfirm ? (
+                    <div className="flex items-center gap-1 bg-dark-bg/50 rounded px-1.5 py-0.5">
+                      <span className="text-[10px] text-gray-400 mr-1">Clear chat?</span>
+                      <button
+                        onClick={handleNewChat}
+                        disabled={isResettingChat}
+                        className="p-0.5 hover:bg-green-500/20 rounded transition-colors"
+                        title="Confirm"
+                      >
+                        <Check size={14} className="text-green-400" />
+                      </button>
+                      <button
+                        onClick={() => setShowNewChatConfirm(false)}
+                        className="p-0.5 hover:bg-red-500/20 rounded transition-colors"
+                        title="Cancel"
+                      >
+                        <X size={14} className="text-red-400" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowNewChatConfirm(true)}
+                      className="p-1 hover:bg-dark-bg/50 rounded transition-colors"
+                      title="New Chat"
+                    >
+                      <RotateCcw size={16} className="text-gray-400 hover:text-white transition-colors" />
+                    </button>
+                  )
+                )}
+                <button
+                  onClick={onClose}
+                  className="p-1 hover:bg-dark-bg/50 rounded transition-colors"
+                >
+                  <X size={16} className="text-gray-400 hover:text-white transition-colors" />
+                </button>
+              </div>
             </div>
 
             {/* Content Area */}
@@ -518,11 +777,8 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                 // Offline Message Form
                 <div className="space-y-4">
                   <div className="text-center mb-4">
-                    <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-yellow-500/10 flex items-center justify-center">
-                      <Mail size={24} className="text-yellow-400" />
-                    </div>
-                    <h4 className="text-sm font-semibold text-white mb-1">Support Offline</h4>
-                    <p className="text-xs text-gray-400">Our support team will get back to you via email</p>
+                    <h4 className="text-sm font-semibold text-white mb-2">Send Us a Message</h4>
+                    <p className="text-xs text-gray-400 leading-relaxed">For real-time support, visit our Discord by typing /discord. Otherwise, send a message below and we'll respond via email as soon as possible.</p>
                   </div>
 
                   {/* Subject */}
@@ -561,9 +817,6 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                 // Welcome Tips
                 <div className="space-y-3">
                   <div className="text-center mb-4">
-                    <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Sparkles size={24} className="text-primary" />
-                    </div>
                     <h4 className="text-sm font-semibold text-white mb-1">Welcome to Support</h4>
                     <p className="text-xs text-gray-400">How can we help you today?</p>
                   </div>
@@ -571,7 +824,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                   <div className="space-y-2">
                     <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-3">
                       <p className="text-xs text-gray-300">
-                        <span className="font-mono text-primary">/faq</span>
+                        <button onClick={() => executeCommand('/faq')} className="font-mono text-primary hover:text-primary/80 transition-colors cursor-pointer">/faq</button>
                         <span className="text-gray-500"> - </span>
                         View frequently asked questions
                       </p>
@@ -579,15 +832,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
 
                     <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-3">
                       <p className="text-xs text-gray-300">
-                        <span className="font-mono text-primary">/commands</span>
-                        <span className="text-gray-500"> - </span>
-                        Show all available commands
-                      </p>
-                    </div>
-
-                    <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-3">
-                      <p className="text-xs text-gray-300">
-                        <span className="font-mono text-primary">/discord</span>
+                        <button onClick={() => executeCommand('/discord')} className="font-mono text-primary hover:text-primary/80 transition-colors cursor-pointer">/discord</button>
                         <span className="text-gray-500"> - </span>
                         Join our Discord community
                       </p>
@@ -595,7 +840,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
 
                     <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-3">
                       <p className="text-xs text-gray-300">
-                        <span className="font-mono text-primary">/human</span>
+                        <button onClick={() => executeCommand('/human')} className="font-mono text-primary hover:text-primary/80 transition-colors cursor-pointer">/human</button>
                         <span className="text-gray-500"> - </span>
                         Connect with a support agent
                       </p>
@@ -603,7 +848,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
 
                     <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-3">
                       <p className="text-xs text-gray-300">
-                        <span className="font-mono text-primary">/bugreport</span>
+                        <button onClick={() => executeCommand('/bugreport')} className="font-mono text-primary hover:text-primary/80 transition-colors cursor-pointer">/bugreport</button>
                         <span className="text-gray-500"> - </span>
                         Report a bug or issue
                       </p>
@@ -611,7 +856,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
 
                     <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-3">
                       <p className="text-xs text-gray-300">
-                        <span className="font-mono text-primary">/hotkeys</span>
+                        <button onClick={() => executeCommand('/hotkeys')} className="font-mono text-primary hover:text-primary/80 transition-colors cursor-pointer">/hotkeys</button>
                         <span className="text-gray-500"> - </span>
                         View keyboard shortcuts
                       </p>
@@ -740,6 +985,17 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
                                   </p>
                                 </div>
                               </div>
+                            )}
+
+                            {/* Back to Start Button */}
+                            {message.showBackButton && (
+                              <button
+                                onClick={() => setMessages([])}
+                                className="mt-3 flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors"
+                              >
+                                <ArrowLeft size={12} />
+                                Back to Start
+                              </button>
                             )}
 
                             <p className="text-[10px] mt-2 text-gray-500">

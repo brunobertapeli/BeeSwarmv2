@@ -18,7 +18,6 @@ import { registerTerminalHandlers, registerInteractiveTerminalHandlers, setTermi
 import { registerClaudeHandlers, setClaudeHandlersWindow } from './handlers/claudeHandlers.js'
 import { registerChatHandlers, setChatHandlersWindow } from './handlers/chatHandlers.js'
 import { registerResearchAgentHandlers, setResearchAgentHandlersWindow } from './handlers/researchAgentHandlers.js'
-import { registerSupportHandlers } from './handlers/supportHandlers.js'
 import { registerGitHandlers, setGitHandlersWindow } from './handlers/gitHandlers.js'
 import { registerSecureStorageHandlers } from './handlers/secureStorageHandlers.js'
 import { registerWebsiteImportHandlers} from './handlers/websiteImportHandlers.js'
@@ -403,7 +402,6 @@ async function initializeApp() {
     registerClaudeHandlers()
     registerChatHandlers()
     registerResearchAgentHandlers()
-    registerSupportHandlers()
     registerGitHandlers()
     registerWebsiteImportHandlers()
     registerChatWidgetHandlers()

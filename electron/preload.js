@@ -435,16 +435,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clearCrashLogs: () => ipcRenderer.invoke('app:clear-crash-logs')
   },
 
-  // Support methods
-  support: {
-    checkAvailability: () => ipcRenderer.invoke('support:checkAvailability'),
-    saveMessage: (message) => ipcRenderer.invoke('support:saveMessage', message),
-    getSession: (userId) => ipcRenderer.invoke('support:getSession', userId),
-    addToQueue: (data) => ipcRenderer.invoke('support:addToQueue', data),
-    sendOfflineMessage: (data) => ipcRenderer.invoke('support:sendOfflineMessage', data),
-    submitBugReport: (report) => ipcRenderer.invoke('support:submitBugReport', report)
-  },
-
   // Keywords for educational tooltips
   keywords: {
     getAll: () => ipcRenderer.invoke('keywords:get-all')
