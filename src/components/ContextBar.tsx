@@ -14,7 +14,7 @@ interface ContextBarProps {
 
 function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
   const { currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
+  const { layoutState, setPreviewHidden } = useLayoutStore()
   const [showTooltip, setShowTooltip] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [showAddendumModal, setShowAddendumModal] = useState(false)
@@ -22,6 +22,20 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
   const [isLoadingAddendum, setIsLoadingAddendum] = useState(false)
   const [isSavingAddendum, setIsSavingAddendum] = useState(false)
   const tooltipRef = useRef<HTMLDivElement>(null)
+
+  // Hide/show preview when tooltip or addendum modal is open
+  useEffect(() => {
+    const activeProjectId = projectId || currentProjectId
+    if (!activeProjectId || layoutState !== 'DEFAULT') return
+
+    if (showTooltip || showAddendumModal) {
+      window.electronAPI?.preview.hide(activeProjectId)
+      setPreviewHidden(true)
+    } else {
+      window.electronAPI?.preview.show(activeProjectId)
+      setPreviewHidden(false)
+    }
+  }, [showTooltip, showAddendumModal, projectId, currentProjectId, layoutState, setPreviewHidden])
 
   // Load addendum when project changes
   useEffect(() => {
@@ -60,34 +74,6 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showTooltip])
-
-  // Handle freeze frame when tooltip opens/closes
-  useEffect(() => {
-    const activeProjectId = projectId || currentProjectId
-
-    const handleFreezeFrame = async () => {
-      if (showTooltip && activeProjectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(activeProjectId)
-          }
-        }
-      } else if (!showAddendumModal) {
-        // Only deactivate freeze frame if addendum modal is also closed
-        setModalFreezeActive(false)
-        // Only show browser back if in DEFAULT state
-        if (activeProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(activeProjectId)
-        }
-      }
-    }
-
-    handleFreezeFrame()
-  }, [showTooltip, showAddendumModal, projectId, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   const handleToggleTooltip = () => {
     setShowTooltip(!showTooltip)

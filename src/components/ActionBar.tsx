@@ -86,7 +86,7 @@ function ActionBar({
   deployServices = []
 }: ActionBarProps) {
   const { viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, chatWidgetEnabled, setChatWidgetEnabled, modalFreezeActive, setStatusSheetExpanded, bringWidgetToFront } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, chatWidgetEnabled, setChatWidgetEnabled, setStatusSheetExpanded, bringWidgetToFront, setPreviewHidden } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
@@ -428,7 +428,7 @@ function ActionBar({
       }
 
       // E - Toggle Edit Mode (only in DEFAULT mode, and not when modal is open)
-      if (e.key.toLowerCase() === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+      if (e.key.toLowerCase() === 'e' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
         if (layoutState === 'DEFAULT') {
           e.preventDefault()
           toggleEditMode()
@@ -436,7 +436,7 @@ function ActionBar({
       }
 
       // P - Take Screenshot (only in DEFAULT mode, and not when modal is open)
-      if (e.key.toLowerCase() === 'p' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+      if (e.key.toLowerCase() === 'p' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
         if (layoutState === 'DEFAULT') {
           e.preventDefault()
           handleTakeScreenshot()
@@ -444,7 +444,7 @@ function ActionBar({
       }
 
       // N - Add Sticky Note (only in TOOLS mode, and not when modal is open)
-      if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+      if (e.key.toLowerCase() === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
         if (layoutState === 'TOOLS') {
           e.preventDefault()
           handleAddStickyNote()
@@ -452,7 +452,7 @@ function ActionBar({
       }
 
       // K - Toggle Kanban Board (only in TOOLS mode, and not when modal is open)
-      if (e.key.toLowerCase() === 'k' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+      if (e.key.toLowerCase() === 'k' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
         if (layoutState === 'TOOLS') {
           e.preventDefault()
           toggleKanban()
@@ -460,7 +460,7 @@ function ActionBar({
       }
 
       // A - Toggle Analytics Widget (only in TOOLS mode, and not when modal is open)
-      if (e.key.toLowerCase() === 'a' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+      if (e.key.toLowerCase() === 'a' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
         if (layoutState === 'TOOLS') {
           e.preventDefault()
           toggleAnalytics()
@@ -468,7 +468,7 @@ function ActionBar({
       }
 
       // F - Toggle Project Assets Widget (only in TOOLS mode, and not when modal is open)
-      if (e.key.toLowerCase() === 'f' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+      if (e.key.toLowerCase() === 'f' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
         if (layoutState === 'TOOLS') {
           e.preventDefault()
           toggleProjectAssets()
@@ -476,7 +476,7 @@ function ActionBar({
       }
 
       // W - Toggle Whiteboard Widget (only in TOOLS mode, and not when modal is open)
-      if (e.key.toLowerCase() === 'w' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+      if (e.key.toLowerCase() === 'w' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
         if (layoutState === 'TOOLS') {
           e.preventDefault()
           toggleWhiteboard()
@@ -484,7 +484,7 @@ function ActionBar({
       }
 
       // C - Toggle Chat Widget (only in TOOLS mode, and not when modal is open)
-      if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey && !modalFreezeActive) {
+      if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
         if (layoutState === 'TOOLS') {
           e.preventDefault()
           toggleChat()
@@ -494,7 +494,7 @@ function ActionBar({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, whiteboardWidgetEnabled, chatWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setWhiteboardWidgetEnabled, setChatWidgetEnabled, setEditModeEnabled, modalFreezeActive]) // Re-run when modal state changes
+  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, whiteboardWidgetEnabled, chatWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setWhiteboardWidgetEnabled, setChatWidgetEnabled, setEditModeEnabled])
 
   // Listen for global shortcuts from Electron main process
   useEffect(() => {
@@ -502,9 +502,6 @@ function ActionBar({
 
     // Listen for edit mode toggle (E key)
     const unsubEditMode = window.electronAPI.onEditModeToggleRequested?.(() => {
-      // Skip if modal is open
-      if (modalFreezeActive) return
-
       // Only trigger if not typing in an input/textarea
       const activeElement = document.activeElement
       if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
@@ -518,9 +515,6 @@ function ActionBar({
 
     // Listen for screenshot request (P key)
     const unsubScreenshot = window.electronAPI.onScreenshotRequested?.(() => {
-      // Skip if modal is open
-      if (modalFreezeActive) return
-
       // Only trigger if not typing in an input/textarea
       const activeElement = document.activeElement
       if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
@@ -536,7 +530,7 @@ function ActionBar({
       unsubEditMode?.()
       unsubScreenshot?.()
     }
-  }, [layoutState, editModeEnabled, setEditModeEnabled, modalFreezeActive])
+  }, [layoutState, editModeEnabled, setEditModeEnabled])
 
 
   // Auto-send message for website import
@@ -1982,6 +1976,11 @@ function ActionBar({
         <ScreenshotModal
           isOpen={showScreenshotModal}
           onClose={() => {
+            // Show preview before unmounting (must happen before setScreenshotData(null))
+            if (projectId && layoutState === 'DEFAULT') {
+              window.electronAPI?.preview.show(projectId)
+              setPreviewHidden(false)
+            }
             setShowScreenshotModal(false)
             setScreenshotData(null)
             // Clean up callback

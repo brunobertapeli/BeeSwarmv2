@@ -17,7 +17,21 @@ interface ImageEditModalProps {
 
 function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, imagePath }: ImageEditModalProps) {
   const { currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, setEditModeEnabled, addImageReference, setPrefilledMessage } = useLayoutStore()
+  const { layoutState, setEditModeEnabled, addImageReference, setPrefilledMessage, setPreviewHidden } = useLayoutStore()
+
+  // Hide/show preview when modal opens/closes
+  useEffect(() => {
+    if (!currentProjectId || layoutState !== 'DEFAULT') return
+
+    if (isOpen) {
+      window.electronAPI?.preview.hide(currentProjectId)
+      setPreviewHidden(true)
+    } else {
+      window.electronAPI?.preview.show(currentProjectId)
+      setPreviewHidden(false)
+    }
+  }, [isOpen, currentProjectId, layoutState, setPreviewHidden])
+
   const [selectedTool, setSelectedTool] = useState<'generate' | 'assets' | 'upload' | 'reference' | null>(null)
   const [hoveredTool, setHoveredTool] = useState<'generate' | 'assets' | 'upload' | 'reference' | null>(null)
   const [aiPrompt, setAiPrompt] = useState('')
@@ -45,33 +59,6 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null)
   const imageObjectRef = useRef<fabric.FabricImage | null>(null)
   const isDisposedRef = useRef(false)
-
-  // Handle modal freeze when modal opens/closes
-  useEffect(() => {
-    const handleFreeze = async () => {
-      if (isOpen && currentProjectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
-
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(currentProjectId)
-          }
-        }
-      } else {
-        // Unfreeze when modal closes
-        setModalFreezeActive(false)
-        // Only show browser back if in DEFAULT state
-        if (currentProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(currentProjectId)
-        }
-      }
-    }
-
-    handleFreeze()
-  }, [isOpen, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   const handleClose = () => {
     // Dispose canvas BEFORE changing state to avoid React reconciliation conflicts

@@ -26,7 +26,20 @@ interface TerminalModalProps {
 
 function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }: TerminalModalProps) {
   const { currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
+  const { layoutState } = useLayoutStore()
+
+  // Hide/show preview when modal opens/closes
+  useEffect(() => {
+    const activeProjectId = projectId || currentProjectId
+    if (!activeProjectId || layoutState !== 'DEFAULT') return
+
+    if (isOpen) {
+      window.electronAPI?.preview.hide(activeProjectId)
+    } else {
+      window.electronAPI?.preview.show(activeProjectId)
+    }
+  }, [isOpen, projectId, currentProjectId, layoutState])
+
   const [isCopied, setIsCopied] = useState(false)
   const [commandInput, setCommandInput] = useState('')
   const [lineCount, setLineCount] = useState(0)
@@ -343,34 +356,6 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
       prevProjectIdRef.current = projectId
     }
   }, [projectId, tabs])
-
-  // Handle freeze frame when terminal opens/closes
-  useEffect(() => {
-    const activeProjectId = projectId || currentProjectId
-
-    const handleFreezeFrame = async () => {
-      if (isOpen && activeProjectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(activeProjectId)
-          }
-        }
-      } else {
-        // Closing terminal - deactivate freeze frame
-        setModalFreezeActive(false)
-        // Only show browser back if in DEFAULT state
-        if (activeProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(activeProjectId)
-        }
-      }
-    }
-
-    handleFreezeFrame()
-  }, [isOpen, projectId, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   // Initialize unified terminal for current project
   useEffect(() => {

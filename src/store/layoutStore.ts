@@ -17,12 +17,6 @@ interface LayoutStoreState {
   actionBarHeight: number;
   setActionBarHeight: (height: number) => void;
 
-  // Modal freeze state (for overlay effects)
-  modalFreezeActive: boolean;
-  modalFreezeImage: string | null;
-  setModalFreezeActive: (active: boolean) => void;
-  setModalFreezeImage: (image: string | null) => void;
-
   // Edit mode state (for image editing)
   editModeEnabled: boolean;
   setEditModeEnabled: (enabled: boolean) => void;
@@ -183,6 +177,10 @@ interface LayoutStoreState {
 
   // Unified bring to front for all widgets and sticky notes
   bringWidgetToFront: (widgetType: 'kanban' | 'analytics' | 'projectAssets' | 'whiteboard' | 'icons' | 'chat' | 'stickyNote', stickyNoteId?: string) => void;
+
+  // Preview hidden state (when modals are open over browser)
+  previewHidden: boolean;
+  setPreviewHidden: (hidden: boolean) => void;
 
   // Helper to check if in specific state
   isState: (state: LayoutState) => boolean;
@@ -376,8 +374,6 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   layoutState: 'DEFAULT', // Start in DEFAULT state
   statusSheetExpanded: false,
   actionBarHeight: 110, // Default ActionBar height
-  modalFreezeActive: false,
-  modalFreezeImage: null,
   editModeEnabled: false,
   imageEditModalOpen: false,
   imageEditModalData: null,
@@ -435,8 +431,6 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
     // Notify Electron
     window.electronAPI?.layout.setActionBarHeight(height);
   },
-  setModalFreezeActive: (active) => set({ modalFreezeActive: active }),
-  setModalFreezeImage: (image) => set({ modalFreezeImage: image }),
   setEditModeEnabled: (enabled) => set({ editModeEnabled: enabled }),
   setImageEditModalOpen: (open) => set({ imageEditModalOpen: open }),
   setImageEditModalData: (data) => set({ imageEditModalData: data }),
@@ -1155,6 +1149,10 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       get().bringNoteToFront(stickyNoteId);
     }
   },
+
+  // Preview hidden state
+  previewHidden: false,
+  setPreviewHidden: (hidden) => set({ previewHidden: hidden }),
 
   // Helpers
   isState: (state) => get().layoutState === state,

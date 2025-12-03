@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { RotateCw, ExternalLink, Code2, Activity } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
-import FrozenBackground from './FrozenBackground'
 import HealthStatusModal from './HealthStatusModal'
 import ImageEditModal from './ImageEditModal'
 import PreviewLoader from './PreviewLoader'
@@ -31,7 +30,9 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
     imageEditModalOpen,
     imageEditModalData,
     setImageEditModalOpen,
-    setImageEditModalData
+    setImageEditModalData,
+    previewHidden,
+    setPreviewHidden
   } = useLayoutStore()
 
   // Create/Update BrowserView when using BrowserView mode
@@ -207,34 +208,6 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showHealthModal])
-
-  // Freeze browser when health modal opens
-  useEffect(() => {
-    const handleFreeze = async () => {
-      if (showHealthModal && projectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
-          if (result?.success && result.freezeImage) {
-            useLayoutStore.setState({
-              modalFreezeImage: result.freezeImage,
-              modalFreezeActive: true
-            })
-            await window.electronAPI?.preview.hide(projectId)
-          }
-        }
-      } else {
-        // Unfreeze when modal closes
-        useLayoutStore.setState({ modalFreezeActive: false })
-        // Only show browser back if in DEFAULT state
-        if (projectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(projectId)
-        }
-      }
-    }
-
-    handleFreeze()
-  }, [showHealthModal, projectId, layoutState])
 
   // Inject CSS for edit mode highlighting
   useEffect(() => {
@@ -907,7 +880,19 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
   }
 
   const handleHealthIndicatorClick = () => {
-    setShowHealthModal(!showHealthModal)
+    const newState = !showHealthModal
+    setShowHealthModal(newState)
+
+    // Hide/show preview when health modal opens/closes
+    if (projectId && layoutState === 'DEFAULT') {
+      if (newState) {
+        window.electronAPI?.preview.hide(projectId)
+        setPreviewHidden(true)
+      } else {
+        window.electronAPI?.preview.show(projectId)
+        setPreviewHidden(false)
+      }
+    }
   }
 
   const handleRestartServer = async () => {
@@ -1072,11 +1057,9 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
             ref={browserViewRef}
             className="w-full h-full bg-white relative"
           >
-            {/* Frozen background overlay - positioned exactly where BrowserView appears */}
-            <FrozenBackground />
-
-            {/* Loading animation */}
+            {/* Loading animation - also show when preview is hidden (modal open) */}
             {previewLoading && !previewFailed && <PreviewLoader />}
+            {previewHidden && !previewLoading && !previewFailed && <PreviewLoader showText={false} />}
 
             {/* Preview failed - show reload button */}
             {previewFailed && (
@@ -1105,7 +1088,14 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
       {/* Health Status Modal */}
       <HealthStatusModal
         isOpen={showHealthModal}
-        onClose={() => setShowHealthModal(false)}
+        onClose={() => {
+          setShowHealthModal(false)
+          // Show preview when closing modal
+          if (projectId && layoutState === 'DEFAULT') {
+            window.electronAPI?.preview.show(projectId)
+            setPreviewHidden(false)
+          }
+        }}
         healthStatus={healthStatus}
         projectId={projectId || ''}
         onRestart={handleRestartServer}

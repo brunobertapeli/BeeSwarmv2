@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react'
 import { RotateCw, Code2 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
-import FrozenBackground from './FrozenBackground'
 import PreviewLoader from './PreviewLoader'
 import noiseBgImage from '../assets/images/noise_bg.png'
 
@@ -16,7 +15,7 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
   const [previewLoading, setPreviewLoading] = useState(true)
   const contentAreaRef = useRef<HTMLDivElement>(null)
   const browserViewRef = useRef<HTMLDivElement>(null)
-  const { layoutState, editModeEnabled } = useLayoutStore()
+  const { layoutState, editModeEnabled, previewHidden } = useLayoutStore()
   const { selectedDevice } = useAppStore()
 
   // Create/Update BrowserView when using BrowserView mode
@@ -770,11 +769,9 @@ function MobilePreviewFrame({ port, projectId }: MobilePreviewFrameProps) {
             ref={browserViewRef}
             className="w-full h-full bg-white relative"
           >
-            {/* Frozen background overlay - positioned exactly where BrowserView appears */}
-            <FrozenBackground />
-
-            {/* Loading animation */}
+            {/* Loading animation - also show when preview is hidden (modal open) */}
             {previewLoading && <PreviewLoader />}
+            {previewHidden && !previewLoading && <PreviewLoader showText={false} />}
           </div>
         </div>
       </div>

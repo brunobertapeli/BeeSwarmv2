@@ -25,10 +25,9 @@ import successSound from '../assets/sounds/success.wav'
 
 function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, onApprovePlan, onRejectPlan, onXMLTagClick, onXMLTagDetected }: StatusSheetProps) {
   const { showStatusSheet, setShowStatusSheet, viewMode } = useAppStore()
-  const { layoutState, statusSheetExpanded, setStatusSheetExpanded, setModalFreezeActive, setModalFreezeImage } = useLayoutStore()
+  const { layoutState, statusSheetExpanded, setStatusSheetExpanded, setPreviewHidden } = useLayoutStore()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
-  const [isCapturingFreeze, setIsCapturingFreeze] = useState(false)
   const [allBlocks, setAllBlocks] = useState<ConversationBlock[]>([])
   const [expandedSummaries, setExpandedSummaries] = useState<Set<string>>(new Set())
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set())
@@ -672,61 +671,28 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     setIsExpanded(statusSheetExpanded)
   }, [statusSheetExpanded])
 
-  // Handle preview visibility based on layout state and StatusSheet expanded state
+  // Hide/show preview when StatusSheet expands/collapses
   useEffect(() => {
-    const handlePreviewVisibility = async () => {
-      if (!projectId) {
-        return
-      }
+    if (!projectId || layoutState !== 'DEFAULT') return
 
-      // DEFAULT state: Control preview visibility based on StatusSheet state
-      if (layoutState === 'DEFAULT') {
-        if (!statusSheetExpanded) {
-          // StatusSheet collapsed in DEFAULT → deactivate freeze, show preview
-          setModalFreezeActive(false)
-          await window.electronAPI?.preview.show(projectId)
-        }
-        // Note: Freeze capture when expanding is now handled in handleExpand() for better performance
-      }
-      // TOOLS state: Preview frame is hidden completely (no frozen background)
-      else if (layoutState === 'TOOLS') {
-        // No freeze effect in TOOLS state - just empty space
-        setModalFreezeActive(false)
-      }
+    if (statusSheetExpanded) {
+      window.electronAPI?.preview.hide(projectId)
+      setPreviewHidden(true)
+    } else {
+      window.electronAPI?.preview.show(projectId)
+      setPreviewHidden(false)
     }
-
-    handlePreviewVisibility()
-  }, [layoutState, statusSheetExpanded, projectId, setModalFreezeActive])
+  }, [statusSheetExpanded, projectId, layoutState, setPreviewHidden])
 
   // Handler for expanding StatusSheet
-  const handleExpand = useCallback(async () => {
-    // Show loading indicator
-    setIsCapturingFreeze(true)
-
-    // Capture freeze FIRST (blocking - must complete before showing sheet)
-    if (projectId && layoutState === 'DEFAULT') {
-      try {
-        const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
-        if (result?.success && result.freezeImage) {
-          setModalFreezeImage(result.freezeImage)
-          setModalFreezeActive(true)
-          await window.electronAPI?.preview.hide(projectId)
-        }
-      } catch (error) {
-        console.error('Failed to capture freeze on expand:', error)
-      }
-    }
-
-    // Now expand the sheet (freeze is ready)
-    setIsCapturingFreeze(false)
+  const handleExpand = useCallback(() => {
     setIsExpanded(true)
     setStatusSheetExpanded(true)
     setShowStatusSheet(true)
-  }, [setStatusSheetExpanded, setShowStatusSheet, layoutState, projectId, setModalFreezeActive, setModalFreezeImage])
+  }, [setStatusSheetExpanded, setShowStatusSheet])
 
   // Handler for collapsing StatusSheet
   const handleCollapse = useCallback(() => {
-    // Just update the state - the useEffect will handle freeze/preview logic
     setIsExpanded(false)
     setStatusSheetExpanded(false)
     setShowStatusSheet(false)
@@ -813,7 +779,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
               return (
                 <div
-                  className={`px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10 h-[40px] overflow-hidden ${isCapturingFreeze ? 'opacity-50 pointer-events-none' : ''}`}
+                  className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10 h-[40px] overflow-hidden"
                   onClick={handleExpand}
                 >
                   {currentBlock?.type === 'deployment' || currentBlock?.type === 'initialization' ? (

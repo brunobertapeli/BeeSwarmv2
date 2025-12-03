@@ -20,7 +20,8 @@ export interface PreviewBounds {
 /**
  * LayoutManager
  *
- * Manages the 3-state layout system for BrowserView coordination
+ * Manages the 3-state layout system for WebContentsView coordination
+ * Migrated from BrowserView (deprecated) to WebContentsView for proper z-index control.
  * States: DEFAULT (preview + ActionBar) | TOOLS (ActionBar only, no preview) | BROWSER_FULL (fullscreen)
  */
 class LayoutManager extends EventEmitter {
@@ -54,7 +55,7 @@ class LayoutManager extends EventEmitter {
   }
 
   /**
-   * Set layout state and update BrowserView bounds
+   * Set layout state and update WebContentsView bounds
    */
   async setState(state: LayoutState, projectId: string): Promise<void> {
     // Guard against overlapping transitions
@@ -87,7 +88,7 @@ class LayoutManager extends EventEmitter {
         // Wait for DOM to settle, then show with correct bounds
         await new Promise(resolve => setTimeout(resolve, 150));
 
-        // Show BrowserView - bounds will be set by DesktopPreviewFrame
+        // Show WebContentsView - bounds will be set by DesktopPreviewFrame
         previewService.show(projectId);
       } else if (state === 'DEFAULT') {
         // DEFAULT: Show preview (StatusSheet component may hide it temporarily if expanded)
@@ -98,7 +99,7 @@ class LayoutManager extends EventEmitter {
         // Wait for DOM to settle, then show preview
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        // Show BrowserView - ensures it's visible when switching back to DEFAULT
+        // Show WebContentsView - ensures it's visible when switching back to DEFAULT
         previewService.show(projectId);
       }
     } finally {
@@ -139,7 +140,7 @@ class LayoutManager extends EventEmitter {
   }
 
   /**
-   * Calculate bounds for BrowserView based on state
+   * Calculate bounds for WebContentsView based on state
    */
   private calculateBounds(state: LayoutState): PreviewBounds {
     if (!this.mainWindow) {

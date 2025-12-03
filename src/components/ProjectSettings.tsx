@@ -59,8 +59,20 @@ function ProjectSettings({
   deployServices
 }: ProjectSettingsProps) {
   const { currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
+  const { layoutState } = useLayoutStore()
   const toast = useToast()
+
+  // Hide/show preview when modal opens/closes
+  useEffect(() => {
+    const activeProjectId = projectId || currentProjectId
+    if (!activeProjectId || layoutState !== 'DEFAULT') return
+
+    if (isOpen) {
+      window.electronAPI?.preview.hide(activeProjectId)
+    } else {
+      window.electronAPI?.preview.show(activeProjectId)
+    }
+  }, [isOpen, projectId, currentProjectId, layoutState])
   const [editedName, setEditedName] = useState(projectName)
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -190,34 +202,6 @@ function ProjectSettings({
 
     loadConnectedServices()
   }, [isOpen])
-
-  // Handle freeze frame when settings opens/closes
-  useEffect(() => {
-    const activeProjectId = projectId || currentProjectId
-
-    const handleFreezeFrame = async () => {
-      if (isOpen && activeProjectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(activeProjectId)
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(activeProjectId)
-          }
-        }
-      } else {
-        // Closing settings - deactivate freeze frame
-        setModalFreezeActive(false)
-        // Only show browser back if in DEFAULT state
-        if (activeProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(activeProjectId)
-        }
-      }
-    }
-
-    handleFreezeFrame()
-  }, [isOpen, projectId, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   // Calculate setup progress based on required keys
   const totalRequiredKeys = requiredTechConfigs.reduce((sum, tech) => sum + tech.apiKeys.length, 0)

@@ -2,7 +2,11 @@ import './PreviewLoader.css'
 import bgImage from '../assets/images/bg.jpg'
 import noiseBgImage from '../assets/images/noise_bg.png'
 
-function PreviewLoader() {
+interface PreviewLoaderProps {
+  showText?: boolean
+}
+
+function PreviewLoader({ showText = true }: PreviewLoaderProps) {
   return (
     <div className="preview-loader">
       {/* Background Image */}
@@ -33,7 +37,7 @@ function PreviewLoader() {
         <div className="rect4" />
         <div className="rect5" />
       </div>
-      <div className="preview-loader-text">Loading your project...</div>
+      {showText && <div className="preview-loader-text">Loading your project...</div>}
     </div>
   )
 }

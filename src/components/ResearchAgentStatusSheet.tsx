@@ -21,47 +21,33 @@ const AGENT_TYPES = [
 ]
 
 function ResearchAgentStatusSheet({ projectId, researchAgentRef, isExpanded = false, onToggleExpand }: ResearchAgentStatusSheetProps) {
-  const { layoutState, setModalFreezeActive, setModalFreezeImage } = useLayoutStore()
+  const { layoutState, setPreviewHidden } = useLayoutStore()
   const [isVisible, setIsVisible] = useState(false)
   const [researchAgentHeight, setResearchAgentHeight] = useState(0)
   const [agents, setAgents] = useState<any[]>([])
   const [selectedAgent, setSelectedAgent] = useState<any | null>(null)
   const [copiedAll, setCopiedAll] = useState(false)
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
-  const [isCapturingFreeze, setIsCapturingFreeze] = useState(false)
   const statusSheetRef = useRef<HTMLDivElement>(null)
 
-  const handleToggleExpand = async () => {
-    // If collapsing, just toggle immediately
-    if (isExpanded) {
-      if (onToggleExpand) {
-        onToggleExpand()
-      }
-      return
-    }
-
-    // If expanding, show loading and capture freeze FIRST
-    setIsCapturingFreeze(true)
-
-    if (projectId && layoutState === 'DEFAULT') {
-      try {
-        const result = await window.electronAPI?.layout.captureModalFreeze(projectId)
-        if (result?.success && result.freezeImage) {
-          setModalFreezeImage(result.freezeImage)
-          setModalFreezeActive(true)
-          await window.electronAPI?.preview.hide(projectId)
-        }
-      } catch (error) {
-        console.error('Failed to capture freeze on expand:', error)
-      }
-    }
-
-    // Now toggle (freeze is ready)
-    setIsCapturingFreeze(false)
+  const handleToggleExpand = () => {
     if (onToggleExpand) {
       onToggleExpand()
     }
   }
+
+  // Hide/show preview when sheet expands/collapses
+  useEffect(() => {
+    if (!projectId || layoutState !== 'DEFAULT') return
+
+    if (isExpanded) {
+      window.electronAPI?.preview.hide(projectId)
+      setPreviewHidden(true)
+    } else {
+      window.electronAPI?.preview.show(projectId)
+      setPreviewHidden(false)
+    }
+  }, [isExpanded, projectId, layoutState, setPreviewHidden])
 
   const handleStopAgent = async (agentId: string) => {
     try {
@@ -265,28 +251,6 @@ function ResearchAgentStatusSheet({ projectId, researchAgentRef, isExpanded = fa
     return () => clearTimeout(timer)
   }, [])
 
-  // Handle preview freeze when expanding/collapsing
-  useEffect(() => {
-    const handlePreviewVisibility = async () => {
-      if (!projectId) {
-        return
-      }
-
-      // DEFAULT state: Control preview visibility based on expanded state
-      if (layoutState === 'DEFAULT') {
-        if (!isExpanded) {
-          // StatusSheet collapsed in DEFAULT → deactivate freeze, show preview
-          setModalFreezeActive(false)
-          await window.electronAPI?.preview.show(projectId)
-        }
-        // Note: Freeze capture when expanding is now handled in handleToggleExpand() for better performance
-      }
-    }
-
-    handlePreviewVisibility()
-  }, [layoutState, isExpanded, projectId, setModalFreezeActive])
-
-
   // Auto-collapse when clicking outside
   useEffect(() => {
     if (!isExpanded) return
@@ -350,7 +314,7 @@ function ResearchAgentStatusSheet({ projectId, researchAgentRef, isExpanded = fa
             {/* Collapsed State - Single Clickable Row */}
             {!isExpanded && (
               <div
-                className={`px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10 ${isCapturingFreeze ? 'opacity-50 pointer-events-none' : ''}`}
+                className="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 transition-colors relative z-10"
                 onClick={handleToggleExpand}
               >
                 <span className="text-xs text-gray-400 flex-1">AI Agents</span>

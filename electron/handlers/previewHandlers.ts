@@ -310,6 +310,40 @@ export function registerPreviewHandlers(): void {
     }
   });
 
+  // Bring preview to top of z-stack (WebContentsView z-index control)
+  ipcMain.handle('preview:bring-to-top', async (_event, projectId: string) => {
+    try {
+      previewService.bringToTop(projectId);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error bringing preview to top:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to bring preview to top',
+      };
+    }
+  });
+
+  // Send preview to back of z-stack (WebContentsView z-index control)
+  ipcMain.handle('preview:send-to-back', async (_event, projectId: string) => {
+    try {
+      previewService.sendToBack(projectId);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      console.error('❌ Error sending preview to back:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to send preview to back',
+      };
+    }
+  });
+
   // Setup event listeners to forward to renderer
   setupPreviewEventForwarding();
 }

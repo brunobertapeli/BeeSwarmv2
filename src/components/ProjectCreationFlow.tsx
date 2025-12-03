@@ -278,8 +278,21 @@ const getInitSteps = (
 
 export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCreationFlowProps) {
   const { user, currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
+  const { layoutState, setPreviewHidden } = useLayoutStore()
   const toast = useToast()
+
+  // Hide/show preview when modal opens/closes
+  useEffect(() => {
+    if (!currentProjectId || layoutState !== 'DEFAULT') return
+
+    if (isOpen) {
+      window.electronAPI?.preview.hide(currentProjectId)
+      setPreviewHidden(true)
+    } else {
+      window.electronAPI?.preview.show(currentProjectId)
+      setPreviewHidden(false)
+    }
+  }, [isOpen, currentProjectId, layoutState, setPreviewHidden])
   const [currentStep, setCurrentStep] = useState<WizardStep>('category')
   const [selectedCategory, setSelectedCategory] = useState<ProjectCategory | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
@@ -345,32 +358,6 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     if (!selectedTemplate || !user) return true
     return canAccessTemplate(user.plan, selectedTemplate.requiredPlan)
   }, [selectedTemplate, user])
-
-  // Handle freeze frame when project creation flow opens/closes
-  useEffect(() => {
-    const handleFreezeFrame = async () => {
-      if (isOpen && currentProjectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(currentProjectId)
-          }
-        }
-      } else {
-        // Closing project creation - deactivate freeze frame
-        setModalFreezeActive(false)
-        // Only show browser back if in DEFAULT state
-        if (currentProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(currentProjectId)
-        }
-      }
-    }
-
-    handleFreezeFrame()
-  }, [isOpen, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   // Refresh user session when modal opens
   useEffect(() => {

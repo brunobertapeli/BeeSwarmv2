@@ -177,6 +177,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     captureScreenshot: (projectId) => ipcRenderer.invoke('preview:capture-screenshot', projectId),
     hasPreview: (projectId) => ipcRenderer.invoke('preview:has-preview', projectId),
     waitForPreview: (projectId, timeoutMs) => ipcRenderer.invoke('preview:wait-for-preview', projectId, timeoutMs),
+    bringToTop: (projectId) => ipcRenderer.invoke('preview:bring-to-top', projectId),
+    sendToBack: (projectId) => ipcRenderer.invoke('preview:send-to-back', projectId),
 
     // Preview event listeners
     onCreated: (callback) => {

@@ -15,7 +15,18 @@ type PencilColor = 'blue' | 'red' | 'purple' | null
 
 function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProps) {
   const { currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, addImageReference, setPrefilledMessage, setEditModeEnabled } = useLayoutStore()
+  const { layoutState, addImageReference, setPrefilledMessage, setEditModeEnabled, setPreviewHidden } = useLayoutStore()
+
+  // Hide preview when modal opens (show is handled by parent's onClose before unmount)
+  useEffect(() => {
+    if (!currentProjectId || layoutState !== 'DEFAULT') return
+
+    if (isOpen) {
+      window.electronAPI?.preview.hide(currentProjectId)
+      setPreviewHidden(true)
+    }
+  }, [isOpen, currentProjectId, layoutState, setPreviewHidden])
+
   const [description, setDescription] = useState('')
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [selectedColor, setSelectedColor] = useState<PencilColor>(null)
@@ -23,33 +34,6 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imageRef = useRef<HTMLImageElement>(null)
   const [canvasReady, setCanvasReady] = useState(false)
-
-  // Handle modal freeze when modal opens/closes
-  useEffect(() => {
-    const handleFreeze = async () => {
-      if (isOpen && currentProjectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
-
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(currentProjectId)
-          }
-        }
-      } else {
-        // Unfreeze when modal closes
-        setModalFreezeActive(false)
-        // Only show browser back if in DEFAULT state
-        if (currentProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(currentProjectId)
-        }
-      }
-    }
-
-    handleFreeze()
-  }, [isOpen, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   // Initialize canvas when image loads
   useEffect(() => {
@@ -74,13 +58,7 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
     }
   }, [screenshotSrc])
 
-  const handleClose = async () => {
-    // Cleanup freeze effect before closing
-    if (currentProjectId && layoutState === 'DEFAULT') {
-      setModalFreezeActive(false)
-      await window.electronAPI?.preview.show(currentProjectId)
-    }
-
+  const handleClose = () => {
     setDescription('')
     setShowColorPicker(false)
     setSelectedColor(null)

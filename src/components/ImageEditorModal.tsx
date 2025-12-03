@@ -398,7 +398,21 @@ function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPr
 
 function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, imageHeight, imagePath, imageName }: ImageEditorModalProps) {
   const { currentProjectId } = useAppStore()
-  const { setModalFreezeActive, setModalFreezeImage, layoutState } = useLayoutStore()
+  const { layoutState, setPreviewHidden } = useLayoutStore()
+
+  // Hide/show preview when modal opens/closes
+  useEffect(() => {
+    if (!currentProjectId || layoutState !== 'DEFAULT') return
+
+    if (isOpen) {
+      window.electronAPI?.preview.hide(currentProjectId)
+      setPreviewHidden(true)
+    } else {
+      window.electronAPI?.preview.show(currentProjectId)
+      setPreviewHidden(false)
+    }
+  }, [isOpen, currentProjectId, layoutState, setPreviewHidden])
+
   const [selectedTool, setSelectedTool] = useState<EditorTool>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
@@ -714,28 +728,6 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
 
     fabricCanvasRef.current?.renderAll()
   }, [selectedTool, cropMode])
-
-  // Handle modal freeze when modal opens/closes
-  useEffect(() => {
-    const handleFreeze = async () => {
-      if (isOpen && currentProjectId) {
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(currentProjectId)
-          }
-        }
-      } else {
-        setModalFreezeActive(false)
-        if (currentProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(currentProjectId)
-        }
-      }
-    }
-    handleFreeze()
-  }, [isOpen, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
 
   const handleClose = () => {
     // Reset all state for clean reopen

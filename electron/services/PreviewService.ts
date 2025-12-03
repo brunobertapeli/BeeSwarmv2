@@ -1,4 +1,4 @@
-import { BrowserView, BrowserWindow, shell } from 'electron';
+import { WebContentsView, BrowserWindow, shell } from 'electron';
 import { EventEmitter } from 'events';
 
 /**
@@ -14,11 +14,12 @@ export interface PreviewBounds {
 /**
  * PreviewService
  *
- * Manages BrowserView instances for previewing user's applications.
+ * Manages WebContentsView instances for previewing user's applications.
+ * Migrated from BrowserView (deprecated) to WebContentsView for proper z-index control.
  * Handles creation, navigation, DevTools, and lifecycle management.
  */
 class PreviewService extends EventEmitter {
-  private browserViews: Map<string, BrowserView> = new Map();
+  private webContentsViews: Map<string, WebContentsView> = new Map();
   private devToolsOpen: Map<string, boolean> = new Map();
   private devToolsWindows: Map<string, BrowserWindow> = new Map(); // Track DevTools windows
   private mainWindow: BrowserWindow | null = null;
@@ -38,7 +39,7 @@ class PreviewService extends EventEmitter {
    * Create a new preview for a project
    * @param projectId - Unique project identifier
    * @param url - URL to load (e.g., http://localhost:8888)
-   * @param bounds - Initial bounds for the BrowserView
+   * @param bounds - Initial bounds for the WebContentsView
    */
   createPreview(projectId: string, url: string, bounds: PreviewBounds): void {
     if (!this.mainWindow) {
@@ -48,8 +49,8 @@ class PreviewService extends EventEmitter {
     // Destroy existing preview if any
     this.destroyPreview(projectId);
 
-    // Create BrowserView
-    const view = new BrowserView({
+    // Create WebContentsView (replaces deprecated BrowserView)
+    const view = new WebContentsView({
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -58,24 +59,26 @@ class PreviewService extends EventEmitter {
       },
     });
 
+    // WebContentsView has white background by default, set transparent if needed
+    view.setBackgroundColor('#FFFFFF');
+
     // Set bounds
     view.setBounds(bounds);
 
-    // Attach to main window
-    this.mainWindow.setBrowserView(view);
+    // Attach to main window using contentView (WebContentsView API)
+    this.mainWindow.contentView.addChildView(view);
 
     // Load URL
     view.webContents.loadURL(url);
 
     // Store reference
-    this.browserViews.set(projectId, view);
+    this.webContentsViews.set(projectId, view);
     this.devToolsOpen.set(projectId, false);
 
-    // CRITICAL FIX: Mark as NOT hidden when creating a new view
-    // The view is created on-screen with real bounds, so it's visible
+    // Mark as NOT hidden when creating a new view
     this.isHidden.set(projectId, false);
 
-    // Intercept keyboard shortcuts in BrowserView
+    // Intercept keyboard shortcuts in WebContentsView
     view.webContents.on('before-input-event', async (event, input) => {
       // Shift+Tab - used for layout switching (cycle between Browser and Workspace)
       if (input.key === 'Tab' && input.type === 'keyDown' && input.shift && !input.meta && !input.control && !input.alt) {
@@ -127,9 +130,9 @@ class PreviewService extends EventEmitter {
   }
 
   /**
-   * Setup event handlers for BrowserView
+   * Setup event handlers for WebContentsView
    */
-  private setupEventHandlers(projectId: string, view: BrowserView): void {
+  private setupEventHandlers(projectId: string, view: WebContentsView): void {
     const webContents = view.webContents;
 
     // Handle navigation
@@ -197,12 +200,12 @@ class PreviewService extends EventEmitter {
    * @param bounds - New bounds
    */
   updateBounds(projectId: string, bounds: PreviewBounds): void {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view) {
       return;
     }
 
-    // Don't update bounds if view is hidden (off-screen)
+    // Don't update bounds if view is hidden
     if (this.isHidden.get(projectId)) {
       return;
     }
@@ -216,7 +219,7 @@ class PreviewService extends EventEmitter {
    * @param projectId - Unique project identifier
    */
   refresh(projectId: string): void {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view) return;
 
     view.webContents.reload();
@@ -230,7 +233,7 @@ class PreviewService extends EventEmitter {
    * @param layoutState - Current layout state (DEFAULT, BROWSER_FULL, TOOLS)
    */
   toggleDevTools(projectId: string, isMobile?: boolean, layoutState?: string): void {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view) return;
 
     const isOpen = this.devToolsOpen.get(projectId) || false;
@@ -306,7 +309,7 @@ class PreviewService extends EventEmitter {
    * @param url - URL to navigate to
    */
   navigateTo(projectId: string, url: string): void {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view) return;
 
     view.webContents.loadURL(url);
@@ -317,7 +320,7 @@ class PreviewService extends EventEmitter {
    * @param projectId - Unique project identifier
    */
   destroyPreview(projectId: string): void {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view) return;
 
     // Close DevTools if open
@@ -331,17 +334,16 @@ class PreviewService extends EventEmitter {
       }
     }
 
-    // Remove from window
+    // Remove from window using WebContentsView API
     if (this.mainWindow) {
-      this.mainWindow.removeBrowserView(view);
+      this.mainWindow.contentView.removeChildView(view);
     }
 
-    // Destroy view
-    // @ts-ignore - destroy exists on BrowserView
+    // Destroy view's webContents
     view.webContents.destroy();
 
     // Clean up
-    this.browserViews.delete(projectId);
+    this.webContentsViews.delete(projectId);
     this.devToolsOpen.delete(projectId);
     this.devToolsWindows.delete(projectId);
     this.isHidden.delete(projectId);
@@ -354,7 +356,7 @@ class PreviewService extends EventEmitter {
    * Destroy all previews (on app quit)
    */
   destroyAll(): void {
-    const projectIds = Array.from(this.browserViews.keys());
+    const projectIds = Array.from(this.webContentsViews.keys());
     projectIds.forEach((projectId) => this.destroyPreview(projectId));
   }
 
@@ -362,8 +364,8 @@ class PreviewService extends EventEmitter {
    * Get the current preview for a project
    * @param projectId - Unique project identifier
    */
-  getPreview(projectId: string): BrowserView | undefined {
-    return this.browserViews.get(projectId);
+  getPreview(projectId: string): WebContentsView | undefined {
+    return this.webContentsViews.get(projectId);
   }
 
   /**
@@ -371,7 +373,7 @@ class PreviewService extends EventEmitter {
    * @param projectId - Unique project identifier
    */
   hasPreview(projectId: string): boolean {
-    return this.browserViews.has(projectId);
+    return this.webContentsViews.has(projectId);
   }
 
   /**
@@ -389,7 +391,7 @@ class PreviewService extends EventEmitter {
    */
   repositionDevTools(projectId: string, layoutState: string): void {
     const devToolsWindow = this.devToolsWindows.get(projectId);
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
 
     if (!devToolsWindow || devToolsWindow.isDestroyed() || !view || !this.mainWindow) {
       return;
@@ -416,24 +418,22 @@ class PreviewService extends EventEmitter {
   }
 
   /**
-   * Hide a preview (move off-screen to avoid z-index issues with modals)
+   * Hide a preview by removing from view hierarchy
+   * With WebContentsView we can properly remove/add views for z-index control
    * @param projectId - Unique project identifier
    */
   hide(projectId: string): void {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view || this.isHidden.get(projectId)) return;
 
-    // Store current bounds
+    // Store current bounds for restoration
     const currentBounds = view.getBounds();
     this.hiddenBounds.set(projectId, currentBounds);
 
-    // Move off-screen (far to the right)
-    view.setBounds({
-      x: 99999,
-      y: 99999,
-      width: currentBounds.width,
-      height: currentBounds.height
-    });
+    // Remove from view hierarchy (proper z-index control with WebContentsView!)
+    if (this.mainWindow) {
+      this.mainWindow.contentView.removeChildView(view);
+    }
 
     // Transfer focus back to main window so keyboard events work
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
@@ -445,23 +445,18 @@ class PreviewService extends EventEmitter {
   }
 
   /**
-   * Show a previously hidden preview
+   * Show a previously hidden preview by adding back to view hierarchy
    * @param projectId - Unique project identifier
    */
   show(projectId: string): void {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view) return;
 
-    // CRITICAL FIX: Always set as active BrowserView when showing
-    // Even if not hidden, we need to ensure this view is the active one
+    // Add view back to hierarchy (at index 0 to be behind other views like modals)
+    // With WebContentsView, addChildView brings to top by default
     if (this.mainWindow) {
-      this.mainWindow.setBrowserView(view);
-    }
-
-    // If already visible, we're done
-    if (!this.isHidden.get(projectId)) {
-      this.emit('preview-shown', projectId);
-      return;
+      // Add at index 0 so it's at the bottom of the z-stack
+      this.mainWindow.contentView.addChildView(view, 0);
     }
 
     // Restore previous bounds if available
@@ -492,7 +487,7 @@ class PreviewService extends EventEmitter {
    * @param deviceName - Device name (matches display names from frontend)
    */
   enableDeviceEmulation(projectId: string, deviceName: string): void {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view) return;
 
     // Map device names to metrics (supports various device names)
@@ -536,19 +531,19 @@ class PreviewService extends EventEmitter {
    * @param projectId - Unique project identifier
    */
   disableDeviceEmulation(projectId: string): void {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view) return;
 
     view.webContents.disableDeviceEmulation();
   }
 
   /**
-   * Inject CSS into the preview BrowserView
+   * Inject CSS into the preview WebContentsView
    * @param projectId - Unique project identifier
    * @param css - CSS string to inject
    */
   async injectCSS(projectId: string, css: string): Promise<void> {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view) {
       throw new Error(`Preview not found for project: ${projectId}`);
     }
@@ -567,11 +562,11 @@ class PreviewService extends EventEmitter {
   }
 
   /**
-   * Remove injected CSS from the preview BrowserView
+   * Remove injected CSS from the preview WebContentsView
    * @param projectId - Unique project identifier
    */
   async removeCSS(projectId: string): Promise<void> {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     const cssKey = this.injectedCSSKeys.get(projectId);
 
     if (!view || !cssKey) {
@@ -607,12 +602,12 @@ class PreviewService extends EventEmitter {
   }
 
   /**
-   * Execute JavaScript in the preview BrowserView
+   * Execute JavaScript in the preview WebContentsView
    * @param projectId - Unique project identifier
    * @param code - JavaScript code to execute
    */
   async executeJavaScript(projectId: string, code: string): Promise<any> {
-    const view = this.browserViews.get(projectId);
+    const view = this.webContentsViews.get(projectId);
     if (!view) {
       throw new Error(`Preview not found for project: ${projectId}`);
     }
@@ -624,6 +619,30 @@ class PreviewService extends EventEmitter {
       console.error(`❌ [PreviewService] Failed to execute JavaScript:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Bring a preview to top of z-stack (for proper layering)
+   * @param projectId - Unique project identifier
+   */
+  bringToTop(projectId: string): void {
+    const view = this.webContentsViews.get(projectId);
+    if (!view || !this.mainWindow) return;
+
+    // Re-adding the view moves it to the top of the z-stack
+    this.mainWindow.contentView.addChildView(view);
+  }
+
+  /**
+   * Send preview to back of z-stack (behind other views)
+   * @param projectId - Unique project identifier
+   */
+  sendToBack(projectId: string): void {
+    const view = this.webContentsViews.get(projectId);
+    if (!view || !this.mainWindow) return;
+
+    // Add at index 0 to put at bottom of z-stack
+    this.mainWindow.contentView.addChildView(view, 0);
   }
 }
 

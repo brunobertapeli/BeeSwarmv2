@@ -53,7 +53,7 @@ function ProjectView() {
     setSelectedDevice,
   } = useAppStore()
 
-  const { setModalFreezeActive, setModalFreezeImage, layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState, whiteboardWidgetEnabled, loadWhiteboardWidgetState, iconsWidgetEnabled, setIconsWidgetEnabled, loadIconsWidgetState, chatWidgetEnabled, loadChatWidgetState } = useLayoutStore()
+  const { layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState, whiteboardWidgetEnabled, loadWhiteboardWidgetState, iconsWidgetEnabled, setIconsWidgetEnabled, loadIconsWidgetState, chatWidgetEnabled, loadChatWidgetState, setPreviewHidden } = useLayoutStore()
   const toast = useToast()
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'environment' | 'deployment'>('general')
   const [projects, setProjects] = useState<Project[]>([])
@@ -154,80 +154,36 @@ function ProjectView() {
     }
   }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState, loadProjectAssetsWidgetState, loadWhiteboardWidgetState, loadIconsWidgetState, loadChatWidgetState])
 
-  // Handle freeze frame when UserProfile opens/closes
+  // Sync helpChatFreezeReady with showHelpChat state
   useEffect(() => {
-    let isCancelled = false
+    setHelpChatFreezeReady(showHelpChat)
+  }, [showHelpChat])
 
-    const handleFreezeFrame = async () => {
-      if (showUserProfileModal && currentProjectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
-
-          if (isCancelled) return
-
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(currentProjectId)
-          }
-        }
-      } else {
-        // Closing UserProfile - deactivate freeze frame
-        setModalFreezeActive(false)
-        // Only show browser back if in DEFAULT state
-        if (currentProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(currentProjectId)
-        }
-      }
-    }
-
-    handleFreezeFrame()
-
-    return () => {
-      isCancelled = true
-    }
-  }, [showUserProfileModal, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
-
-  // Handle freeze frame when HelpChat opens/closes
+  // Hide/show preview when UserProfile modal opens/closes
   useEffect(() => {
-    let isCancelled = false
+    if (!currentProjectId || layoutState !== 'DEFAULT') return
 
-    const handleFreezeFrame = async () => {
-      if (showHelpChat && currentProjectId) {
-        // Only freeze if in DEFAULT state (browser is visible)
-        if (layoutState === 'DEFAULT') {
-          const result = await window.electronAPI?.layout.captureModalFreeze(currentProjectId)
-
-          if (isCancelled) return
-
-          if (result?.success && result.freezeImage) {
-            setModalFreezeImage(result.freezeImage)
-            setModalFreezeActive(true)
-            await window.electronAPI?.preview.hide(currentProjectId)
-            setHelpChatFreezeReady(true)
-          }
-        } else {
-          // Not in DEFAULT state, show immediately
-          setHelpChatFreezeReady(true)
-        }
-      } else {
-        // Closing HelpChat - deactivate freeze frame
-        setHelpChatFreezeReady(false)
-        setModalFreezeActive(false)
-        // Only show browser back if in DEFAULT state
-        if (currentProjectId && layoutState === 'DEFAULT') {
-          await window.electronAPI?.preview.show(currentProjectId)
-        }
-      }
+    if (showUserProfileModal) {
+      window.electronAPI?.preview.hide(currentProjectId)
+      setPreviewHidden(true)
+    } else {
+      window.electronAPI?.preview.show(currentProjectId)
+      setPreviewHidden(false)
     }
+  }, [showUserProfileModal, currentProjectId, layoutState, setPreviewHidden])
 
-    handleFreezeFrame()
+  // Hide/show preview when HelpChat opens/closes
+  useEffect(() => {
+    if (!currentProjectId || layoutState !== 'DEFAULT') return
 
-    return () => {
-      isCancelled = true
+    if (showHelpChat) {
+      window.electronAPI?.preview.hide(currentProjectId)
+      setPreviewHidden(true)
+    } else {
+      window.electronAPI?.preview.show(currentProjectId)
+      setPreviewHidden(false)
     }
-  }, [showHelpChat, currentProjectId, layoutState, setModalFreezeActive, setModalFreezeImage])
+  }, [showHelpChat, currentProjectId, layoutState, setPreviewHidden])
 
   // Handle website import - auto-send prompt
   useEffect(() => {

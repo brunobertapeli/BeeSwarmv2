@@ -614,6 +614,14 @@ export interface ElectronAPI {
       exists: boolean
       error?: string
     }>
+    bringToTop: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    sendToBack: (projectId: string) => Promise<{
+      success: boolean
+      error?: string
+    }>
     onCreated: (callback: (projectId: string) => void) => () => void
     onLoaded: (callback: (projectId: string) => void) => () => void
     onError: (callback: (projectId: string, error: any) => void) => () => void
@@ -1094,20 +1102,6 @@ export interface ElectronAPI {
       error?: string
     }>
     setViewMode: (viewMode: 'desktop' | 'mobile') => Promise<{
-      success: boolean
-      error?: string
-    }>
-    captureModalFreeze: (projectId: string) => Promise<{
-      success: boolean
-      freezeImage?: string
-      error?: string
-    }>
-    getCachedModalFreeze: (projectId: string) => Promise<{
-      success: boolean
-      freezeImage?: string
-      error?: string
-    }>
-    clearModalFreezeCache: (projectId: string) => Promise<{
       success: boolean
       error?: string
     }>
