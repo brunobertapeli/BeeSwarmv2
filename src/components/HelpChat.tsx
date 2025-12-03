@@ -284,7 +284,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
           assistantMessage = {
             id: `msg-${Date.now()}-assistant`,
             type: 'assistant',
-            content: 'Keyboard Shortcuts:\n\nSHIFT+TAB - Cycle between Browser View and Workspace\n\nBrowser View:\nE - Toggle Edit Mode\nP - Take a screenshot for context\n\nWorkspace:\nN - Add a Sticky Note\nK - Toggle Kanban Board\nA - Toggle Analytics\nF - Toggle Assets Folder\nW - Toggle Whiteboard\nC - Toggle Chat\n\nGlobal:\nG - Open GitHub Sheet',
+            content: 'Keyboard Shortcuts:\n\nSHIFT+TAB - Cycle between Browser View and Workspace\n\nBrowser View:\nE - Toggle Edit Mode\nP - Take a screenshot for context\n\nWorkspace:\nN - Add a Sticky Note\nK - Toggle Kanban Board\nA - Toggle Analytics\nF - Toggle Assets Folder\nW - Toggle Whiteboard\nI - Toggle Icons Widget\nC - Toggle Chat\n\nGlobal:\nG - Open GitHub Sheet',
             timestamp: new Date(),
             showBackButton: true
           }
@@ -435,7 +435,7 @@ function HelpChat({ projectId, isOpen, onClose }: HelpChatProps) {
         const assistantMessage: Message = {
           id: `msg-${Date.now()}-assistant`,
           type: 'assistant',
-          content: 'Keyboard Shortcuts:\n\nSHIFT+TAB - Cycle between Browser View and Workspace\n\nBrowser View:\nE - Toggle Edit Mode\nP - Take a screenshot for context\n\nWorkspace:\nN - Add a Sticky Note\nK - Toggle Kanban Board\nA - Toggle Analytics\nF - Toggle Assets Folder\nW - Toggle Whiteboard\nC - Toggle Chat\n\nGlobal:\nG - Open GitHub Sheet',
+          content: 'Keyboard Shortcuts:\n\nSHIFT+TAB - Cycle between Browser View and Workspace\n\nBrowser View:\nE - Toggle Edit Mode\nP - Take a screenshot for context\n\nWorkspace:\nN - Add a Sticky Note\nK - Toggle Kanban Board\nA - Toggle Analytics\nF - Toggle Assets Folder\nW - Toggle Whiteboard\nI - Toggle Icons Widget\nC - Toggle Chat\n\nGlobal:\nG - Open GitHub Sheet',
           timestamp: new Date(),
           showBackButton: true
         }
