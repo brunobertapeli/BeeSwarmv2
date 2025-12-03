@@ -1105,6 +1105,13 @@ async function gitCommitChanges(projectId: string, projectPath: string): Promise
             // Also update old commit info for backward compatibility
             chatHistoryManager.updateCommitInfo(projectId, commitHash, changedFiles);
 
+            // Emit event to notify frontend of new commit (for deployment status updates)
+            if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+              // Get full commit hash for comparison
+              const fullCommitHash = revParseOutput.trim();
+              mainWindowContents.send('git:committed', projectId, fullCommitHash);
+            }
+
             resolve();
           });
         });

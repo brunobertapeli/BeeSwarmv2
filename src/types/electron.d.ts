@@ -44,6 +44,8 @@ export interface Project {
   dependenciesInstalled: boolean
   envFiles?: string | null // JSON array of { path, label, description }
   deployServices?: string | null // JSON array of deployment services
+  liveUrl?: string | null // Last deployed live URL
+  deployedCommit?: string | null // Git commit hash of last deployment
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -842,8 +844,18 @@ export interface ElectronAPI {
       ahead?: number
       error?: string
     }>
+    getHeadCommit: (projectId: string) => Promise<{
+      success: boolean
+      commitHash?: string | null
+      error?: string
+    }>
     push: (projectId: string) => Promise<{
       success: boolean
+      error?: string
+    }>
+    initialCommit: (projectId: string, message: string) => Promise<{
+      success: boolean
+      commitHash?: string
       error?: string
     }>
     commitAndPush: (projectId: string, message: string) => Promise<{
@@ -863,6 +875,8 @@ export interface ElectronAPI {
       commitHash?: string
       error?: string
     }>
+    // Event listener for when a commit is made (for deployment status updates)
+    onCommitted: (callback: (projectId: string, commitHash: string) => void) => () => void
   }
 
   researchAgent: {
@@ -948,7 +962,7 @@ export interface ElectronAPI {
       blockId?: string
       error?: string
     }>
-    updateInitializationBlock: (projectId: string, stages: Array<{ label: string; isComplete: boolean }>, isComplete: boolean) => Promise<{
+    updateInitializationBlock: (projectId: string, stages: Array<{ label: string; isComplete: boolean }>, isComplete: boolean, commitHash?: string) => Promise<{
       success: boolean
       error?: string
     }>
@@ -1371,6 +1385,14 @@ export interface ElectronAPI {
       available?: boolean
       error?: string
     }>
+    deploy: (projectId: string, provider: string) => Promise<{
+      success: boolean
+      url?: string
+      error?: string
+    }>
+    onStarted: (callback: (projectId: string, provider: string, projectName: string) => void) => () => void
+    onProgress: (callback: (projectId: string, message: string) => void) => () => void
+    onComplete: (callback: (projectId: string, result: { success: boolean; url?: string; error?: string }) => void) => () => void
   }
 
 }

@@ -513,7 +513,24 @@ class DeploymentService {
 
       let siteId = existingSiteId
 
-      // Step 2: Create site if needed
+      // Step 2: Check for existing siteId in .netlify/state.json (if not in database)
+      if (!siteId) {
+        const stateJsonPath = path.join(projectPath, '.netlify', 'state.json')
+        if (fs.existsSync(stateJsonPath)) {
+          try {
+            const stateContent = JSON.parse(fs.readFileSync(stateJsonPath, 'utf-8'))
+            if (stateContent.siteId) {
+              siteId = stateContent.siteId
+              onProgress(`📎 Found existing Netlify site: ${siteId.substring(0, 8)}...`)
+              console.log(`📎 [NETLIFY] Found existing siteId in state.json: ${siteId}`)
+            }
+          } catch (e) {
+            console.warn('⚠️ [NETLIFY] Could not read state.json:', e)
+          }
+        }
+      }
+
+      // Step 3: Create site if still no siteId
       if (!siteId) {
         onProgress('🌐 Creating Netlify site...')
         console.log('🌐 [NETLIFY] Creating site...')
@@ -552,21 +569,11 @@ class DeploymentService {
 
         if (siteId) {
           onProgress(`✅ Site created with ID: ${siteId}`)
-
-          // Create .netlify/state.json for future deploys
-          const netlifyDir = path.join(projectPath, '.netlify')
-          if (!fs.existsSync(netlifyDir)) {
-            fs.mkdirSync(netlifyDir, { recursive: true })
-          }
-          fs.writeFileSync(
-            path.join(netlifyDir, 'state.json'),
-            JSON.stringify({ siteId }, null, 2)
-          )
         }
       }
 
-      // Step 3: Set environment variables
-      if (Object.keys(envVars).length > 0) {
+      // Step 4: Set environment variables
+      if (Object.keys(envVars).length > 0 && siteId) {
         onProgress('🔐 Setting environment variables...')
         console.log('🔐 [NETLIFY] Setting env vars...')
 
@@ -574,7 +581,7 @@ class DeploymentService {
           if (value && value.trim()) {
             await this.runCommand(
               cmd,
-              [...baseArgs, 'env:set', key, value],
+              [...baseArgs, 'env:set', key, value, '--site', siteId],
               { cwd: projectPath, env },
               onProgress
             )
@@ -582,14 +589,19 @@ class DeploymentService {
         }
       }
 
-      // Step 4: Deploy
+      // Step 5: Deploy
       onProgress('🚀 Deploying to Netlify...')
       console.log('🚀 [NETLIFY] Deploying...')
 
-      // Use --build=false to skip Netlify's build since we already built locally
+      // Build deploy args - use --site flag if we have a siteId
+      const deployArgs = [...baseArgs, 'deploy', '--prod', '--dir', buildDir, '--no-build']
+      if (siteId) {
+        deployArgs.push('--site', siteId)
+      }
+
       const deployResult = await this.runCommand(
         cmd,
-        [...baseArgs, 'deploy', '--prod', '--dir', buildDir, '--no-build'],
+        deployArgs,
         { cwd: projectPath, env },
         onProgress
       )
@@ -606,6 +618,11 @@ class DeploymentService {
 
       onProgress(`✅ Deployed successfully!${url ? ` Live at: ${url}` : ''}`)
       console.log(`✅ [NETLIFY] Deploy complete! URL: ${url}`)
+
+      // NOTE: We no longer delete .netlify/state.json after deployment
+      // The ProcessManager now injects NETLIFY_AUTH_TOKEN when running `netlify dev`,
+      // which allows it to authenticate with linked sites without issues.
+      // This means redeployments will work correctly because the state.json contains the siteId.
 
       return {
         success: true,
@@ -721,42 +738,94 @@ class DeploymentService {
         // Deploy each subdirectory using PATH argument: `railway up ./backend`
         // This uploads ONLY the subdirectory contents, not the whole project
 
-        // Step 2a: Create backend service via API first with proper name
-        onProgress('🔧 Creating backend service...')
-
         const backendPath = path.join(projectPath, 'backend')
         let backendServiceId: string | null = null
+        let frontendServiceId: string | null = null
 
-        try {
-          const createBackendResponse = await fetch('https://backboard.railway.app/graphql/v2', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              query: `
-                mutation ServiceCreate($projectId: String!, $name: String!) {
-                  serviceCreate(input: { projectId: $projectId, name: $name }) {
-                    id
-                    name
+        // For redeployment: Query existing services first
+        if (existingProjectId) {
+          onProgress('🔍 Checking existing services...')
+          try {
+            const servicesResponse = await fetch('https://backboard.railway.app/graphql/v2', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                query: `
+                  query GetProjectServices($projectId: String!) {
+                    project(id: $projectId) {
+                      services {
+                        edges {
+                          node {
+                            id
+                            name
+                          }
+                        }
+                      }
+                    }
                   }
-                }
-              `,
-              variables: {
-                projectId: projectId,
-                name: `${projectName} - Backend`
-              }
+                `,
+                variables: { projectId: projectId }
+              })
             })
-          })
 
-          const backendResult = await createBackendResponse.json() as { data?: { serviceCreate?: { id: string } }, errors?: unknown[] }
-          if (backendResult.data?.serviceCreate?.id) {
-            backendServiceId = backendResult.data.serviceCreate.id
-            console.log(`🔗 [RAILWAY] Backend Service created via API: ${backendServiceId}`)
+            const servicesResult = await servicesResponse.json() as any
+            const services = servicesResult.data?.project?.services?.edges || []
+
+            // Find existing backend and frontend services by name
+            for (const edge of services) {
+              const service = edge.node
+              if (service.name.toLowerCase().includes('backend')) {
+                backendServiceId = service.id
+                console.log(`🔗 [RAILWAY] Found existing Backend Service: ${backendServiceId}`)
+              } else if (service.name.toLowerCase().includes('frontend')) {
+                frontendServiceId = service.id
+                console.log(`🔗 [RAILWAY] Found existing Frontend Service: ${frontendServiceId}`)
+              }
+            }
+          } catch (apiError) {
+            console.error(`❌ [RAILWAY] API error querying services:`, apiError)
           }
-        } catch (apiError) {
-          console.error(`❌ [RAILWAY] API error creating backend service:`, apiError)
+        }
+
+        // Step 2a: Create backend service if it doesn't exist
+        if (!backendServiceId) {
+          onProgress('🔧 Creating backend service...')
+          try {
+            const createBackendResponse = await fetch('https://backboard.railway.app/graphql/v2', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                query: `
+                  mutation ServiceCreate($projectId: String!, $name: String!) {
+                    serviceCreate(input: { projectId: $projectId, name: $name }) {
+                      id
+                      name
+                    }
+                  }
+                `,
+                variables: {
+                  projectId: projectId,
+                  name: `${projectName} - Backend`
+                }
+              })
+            })
+
+            const backendResult = await createBackendResponse.json() as { data?: { serviceCreate?: { id: string } }, errors?: unknown[] }
+            if (backendResult.data?.serviceCreate?.id) {
+              backendServiceId = backendResult.data.serviceCreate.id
+              console.log(`🔗 [RAILWAY] Backend Service created via API: ${backendServiceId}`)
+            }
+          } catch (apiError) {
+            console.error(`❌ [RAILWAY] API error creating backend service:`, apiError)
+          }
+        } else {
+          onProgress('🔧 Redeploying backend service...')
         }
 
         // Deploy backend
@@ -815,44 +884,44 @@ class DeploymentService {
           }
         }
 
-        // Step 2b: Create frontend service via Railway API (since backend service already exists)
-        onProgress('🎨 Creating frontend service...')
-
-        let frontendServiceId: string | null = null
-
-        // Use Railway GraphQL API to create a new service for frontend
-        try {
-          const createServiceResponse = await fetch('https://backboard.railway.app/graphql/v2', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              query: `
-                mutation ServiceCreate($projectId: String!, $name: String!) {
-                  serviceCreate(input: { projectId: $projectId, name: $name }) {
-                    id
-                    name
+        // Step 2b: Create frontend service if it doesn't exist
+        if (!frontendServiceId) {
+          onProgress('🎨 Creating frontend service...')
+          try {
+            const createServiceResponse = await fetch('https://backboard.railway.app/graphql/v2', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({
+                query: `
+                  mutation ServiceCreate($projectId: String!, $name: String!) {
+                    serviceCreate(input: { projectId: $projectId, name: $name }) {
+                      id
+                      name
+                    }
                   }
+                `,
+                variables: {
+                  projectId: projectId,
+                  name: `${projectName} - Frontend`
                 }
-              `,
-              variables: {
-                projectId: projectId,
-                name: `${projectName} - Frontend`
-              }
+              })
             })
-          })
 
-          const createResult = await createServiceResponse.json() as { data?: { serviceCreate?: { id: string } }, errors?: unknown[] }
-          if (createResult.data?.serviceCreate?.id) {
-            frontendServiceId = createResult.data.serviceCreate.id
-            console.log(`🔗 [RAILWAY] Frontend Service created via API: ${frontendServiceId}`)
-          } else {
-            console.log(`⚠️ [RAILWAY] Could not create frontend service via API:`, createResult.errors)
+            const createResult = await createServiceResponse.json() as { data?: { serviceCreate?: { id: string } }, errors?: unknown[] }
+            if (createResult.data?.serviceCreate?.id) {
+              frontendServiceId = createResult.data.serviceCreate.id
+              console.log(`🔗 [RAILWAY] Frontend Service created via API: ${frontendServiceId}`)
+            } else {
+              console.log(`⚠️ [RAILWAY] Could not create frontend service via API:`, createResult.errors)
+            }
+          } catch (apiError) {
+            console.error(`❌ [RAILWAY] API error creating frontend service:`, apiError)
           }
-        } catch (apiError) {
-          console.error(`❌ [RAILWAY] API error creating frontend service:`, apiError)
+        } else {
+          onProgress('🎨 Redeploying frontend service...')
         }
 
         // Deploy frontend to the created service (use PATH argument to upload only frontend folder)
@@ -1016,6 +1085,38 @@ class DeploymentService {
           )
         }
 
+        // Poll for deployment completion
+        const servicesToPoll: Array<{ id: string; name: string }> = []
+        if (backendServiceId) servicesToPoll.push({ id: backendServiceId, name: 'Backend' })
+        if (frontendServiceId) servicesToPoll.push({ id: frontendServiceId, name: 'Frontend' })
+
+        if (servicesToPoll.length > 0 && projectId && environmentId) {
+          onProgress('⏳ Waiting for Railway to build and deploy...')
+
+          const pollResult = await this.pollRailwayDeploymentStatus(
+            token,
+            projectId,
+            servicesToPoll,
+            environmentId,
+            onProgress
+          )
+
+          if (!pollResult.success) {
+            // Check which services failed
+            const failedServices = servicesToPoll
+              .filter(s => pollResult.statuses[s.id] === 'FAILED' || pollResult.statuses[s.id] === 'CRASHED')
+              .map(s => `${s.name}: ${pollResult.statuses[s.id]}`)
+
+            if (failedServices.length > 0) {
+              return {
+                success: false,
+                error: `Build failed: ${failedServices.join(', ')}`,
+                projectId: projectId || undefined
+              }
+            }
+          }
+        }
+
         onProgress(`✅ Full-stack deployed! Frontend: ${frontendUrl}`)
         console.log(`✅ [RAILWAY] Deploy complete! Frontend: ${frontendUrl}, Backend: ${backendUrl}`)
 
@@ -1068,6 +1169,30 @@ class DeploymentService {
           )
         }
 
+        // Poll for deployment completion
+        if (serviceId && projectId && environmentId) {
+          onProgress('⏳ Waiting for Railway to build and deploy...')
+
+          const pollResult = await this.pollRailwayDeploymentStatus(
+            token,
+            projectId,
+            [{ id: serviceId, name: 'Service' }],
+            environmentId,
+            onProgress
+          )
+
+          if (!pollResult.success) {
+            const status = pollResult.statuses[serviceId]
+            if (status === 'FAILED' || status === 'CRASHED') {
+              return {
+                success: false,
+                error: `Build failed: ${status}`,
+                projectId: projectId || undefined
+              }
+            }
+          }
+        }
+
         // Get domain
         onProgress('⏳ Getting deployment URL...')
         const domainResult = await this.runCommand(
@@ -1091,6 +1216,111 @@ class DeploymentService {
       console.error('❌ [RAILWAY] Deploy error:', error)
       return { success: false, error: errMsg }
     }
+  }
+
+  /**
+   * Poll Railway deployment status until it reaches a terminal state (SUCCESS, FAILED, CRASHED)
+   * Returns the final status for all services
+   */
+  private async pollRailwayDeploymentStatus(
+    token: string,
+    projectId: string,
+    services: Array<{ id: string; name: string }>,
+    environmentId: string,
+    onProgress: (message: string) => void,
+    maxWaitMs: number = 300000 // 5 minutes max
+  ): Promise<{ success: boolean; statuses: Record<string, string> }> {
+    const startTime = Date.now()
+    const pollIntervalMs = 5000 // Poll every 5 seconds
+    const statuses: Record<string, string> = {}
+
+    // Create a map of serviceId -> name for easy lookup
+    const serviceNames = new Map(services.map(s => [s.id, s.name]))
+
+    // Terminal statuses that indicate completion
+    const terminalStatuses = ['SUCCESS', 'FAILED', 'CRASHED', 'REMOVED']
+
+    while (Date.now() - startTime < maxWaitMs) {
+      try {
+        // Query deployment status for each service
+        const response = await fetch('https://backboard.railway.app/graphql/v2', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            query: `
+              query GetDeployments($projectId: String!, $environmentId: String!) {
+                deployments(
+                  first: 10
+                  input: {
+                    projectId: $projectId
+                    environmentId: $environmentId
+                  }
+                ) {
+                  edges {
+                    node {
+                      id
+                      status
+                      serviceId
+                      staticUrl
+                    }
+                  }
+                }
+              }
+            `,
+            variables: { projectId, environmentId }
+          })
+        })
+
+        const result = await response.json() as any
+        const deployments = result.data?.deployments?.edges || []
+
+        // Update statuses for our services
+        let allTerminal = true
+        let anyFailed = false
+
+        for (const service of services) {
+          // Find the most recent deployment for this service
+          const serviceDeployment = deployments.find((d: any) => d.node.serviceId === service.id)
+          const status = serviceDeployment?.node?.status || 'UNKNOWN'
+          const prevStatus = statuses[service.id]
+
+          statuses[service.id] = status
+
+          // Log status changes
+          if (prevStatus !== status) {
+            const statusEmoji = status === 'SUCCESS' ? '✅' : status === 'BUILDING' ? '🔨' : status === 'DEPLOYING' ? '🚀' : status === 'FAILED' ? '❌' : '⏳'
+            onProgress(`${statusEmoji} ${service.name}: ${status}`)
+            console.log(`🚂 [RAILWAY] Service ${service.name} (${service.id}): ${status}`)
+          }
+
+          if (!terminalStatuses.includes(status)) {
+            allTerminal = false
+          }
+          if (status === 'FAILED' || status === 'CRASHED') {
+            anyFailed = true
+          }
+        }
+
+        // If all services have reached terminal status, we're done
+        if (allTerminal && services.length > 0) {
+          return { success: !anyFailed, statuses }
+        }
+
+      } catch (error) {
+        console.error('❌ [RAILWAY] Error polling deployment status:', error)
+        // Continue polling despite errors
+      }
+
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
+    }
+
+    // Timeout reached
+    onProgress('⚠️ Build status polling timed out')
+    return { success: false, statuses }
   }
 
   /**

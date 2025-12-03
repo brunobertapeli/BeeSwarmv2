@@ -25,6 +25,7 @@ export interface Project {
   netlifyId: string | null // Netlify site ID for redeployment
   railwayId: string | null // Railway project ID for redeployment
   liveUrl: string | null // Last deployed live URL
+  deployedCommit: string | null // Git commit hash of last deployment
   kanbanState: string | null // JSON string with { enabled, position, size }
   stickyNotesState: string | null // JSON string with sticky notes array
   analyticsWidgetState: string | null // JSON string with { enabled, position, size }
@@ -495,6 +496,12 @@ class DatabaseService {
       const hasLiveUrl = tableInfo.some(col => col.name === 'liveUrl')
       if (!hasLiveUrl) {
         this.db.exec('ALTER TABLE projects ADD COLUMN liveUrl TEXT')
+      }
+
+      // Migration 28: Add deployedCommit column if it doesn't exist
+      const hasDeployedCommit = tableInfo.some(col => col.name === 'deployedCommit')
+      if (!hasDeployedCommit) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN deployedCommit TEXT')
       }
 
       // Future migrations can be added here
@@ -1182,6 +1189,37 @@ class DatabaseService {
 
     const project = this.getProjectById(projectId)
     return project?.liveUrl || null
+  }
+
+  /**
+   * Save deployed commit hash for a project
+   */
+  saveDeployedCommit(projectId: string, commitHash: string): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save deployed commit after database closed - ignoring')
+      return
+    }
+
+    const sql = 'UPDATE projects SET deployedCommit = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(commitHash, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save deployed commit:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get deployed commit hash for a project
+   */
+  getDeployedCommit(projectId: string): string | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    return project?.deployedCommit || null
   }
 
   /**

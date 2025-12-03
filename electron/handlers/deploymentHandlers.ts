@@ -2,9 +2,25 @@ import { ipcMain, safeStorage, WebContents } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
+import { execSync } from 'child_process'
 import { deploymentService, DeploymentProvider } from '../services/DeploymentService.js'
 import { databaseService } from '../services/DatabaseService.js'
 import { envService } from '../services/EnvService.js'
+
+// Helper to get current git HEAD commit hash
+const getHeadCommit = (projectPath: string): string | null => {
+  try {
+    const result = execSync('git rev-parse HEAD', {
+      cwd: projectPath,
+      encoding: 'utf-8',
+      timeout: 5000
+    }).trim()
+    return result || null
+  } catch (error) {
+    console.warn('Failed to get HEAD commit:', error)
+    return null
+  }
+}
 
 // Store reference to main window for sending events
 let mainWindowContents: WebContents | null = null
@@ -190,6 +206,11 @@ export function registerDeploymentHandlers() {
 
       sendProgress(`Starting deployment to ${provider}...`)
 
+      // 2a. Emit deployment:started event for StatusSheet
+      if (mainWindowContents && !mainWindowContents.isDestroyed()) {
+        mainWindowContents.send('deployment:started', projectId, provider, project.name)
+      }
+
       // 2. Get token for provider
       const tokens = readTokensFile()
       const tokenData = tokens[provider]
@@ -259,6 +280,13 @@ export function registerDeploymentHandlers() {
         // Save live URL
         if (result.url) {
           databaseService.saveLiveUrl(projectId, result.url)
+        }
+
+        // 6a. Save deployed commit hash
+        const commitHash = getHeadCommit(project.path)
+        if (commitHash) {
+          databaseService.saveDeployedCommit(projectId, commitHash)
+          sendProgress(`📌 Deployed commit: ${commitHash.substring(0, 7)}`)
         }
       }
 

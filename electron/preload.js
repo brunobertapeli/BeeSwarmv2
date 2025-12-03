@@ -319,7 +319,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getBlock: (blockId) => ipcRenderer.invoke('chat:get-block', blockId),
     deleteHistory: (projectId) => ipcRenderer.invoke('chat:delete-history', projectId),
     createInitializationBlock: (projectId, templateName, stages) => ipcRenderer.invoke('chat:create-initialization-block', projectId, templateName, stages),
-    updateInitializationBlock: (projectId, stages, isComplete) => ipcRenderer.invoke('chat:update-initialization-block', projectId, stages, isComplete),
+    updateInitializationBlock: (projectId, stages, isComplete, commitHash) => ipcRenderer.invoke('chat:update-initialization-block', projectId, stages, isComplete, commitHash),
 
     // Chat event listeners
     onBlockCreated: (callback) => {
@@ -387,11 +387,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getRemote: (projectId) => ipcRenderer.invoke('git:get-remote', projectId),
     getLog: (projectId) => ipcRenderer.invoke('git:get-log', projectId),
     getUnpushed: (projectId) => ipcRenderer.invoke('git:get-unpushed', projectId),
+    getHeadCommit: (projectId) => ipcRenderer.invoke('git:get-head-commit', projectId),
     push: (projectId) => ipcRenderer.invoke('git:push', projectId),
+    initialCommit: (projectId, message) => ipcRenderer.invoke('git:initial-commit', projectId, message),
     commitAndPush: (projectId, message) => ipcRenderer.invoke('git:commit-and-push', projectId, message),
     createRepo: (projectId, repoName, description, isPrivate) => ipcRenderer.invoke('git:create-repo', projectId, repoName, description, isPrivate),
     revertAndPush: (projectId, commitHash) => ipcRenderer.invoke('git:revert-and-push', projectId, commitHash),
-    restoreCheckpoint: (projectId, commitHash) => ipcRenderer.invoke('git:restore-checkpoint', projectId, commitHash)
+    restoreCheckpoint: (projectId, commitHash) => ipcRenderer.invoke('git:restore-checkpoint', projectId, commitHash),
+    // Event listener for when a commit is made (for deployment status updates)
+    onCommitted: (callback) => {
+      const listener = (_event, projectId, commitHash) => callback(projectId, commitHash)
+      ipcRenderer.on('git:committed', listener)
+      return () => ipcRenderer.removeListener('git:committed', listener)
+    }
   },
 
   // Research Agent methods
@@ -520,6 +528,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deploy: (projectId, provider) => ipcRenderer.invoke('deployment:deploy', projectId, provider),
 
     // Deployment event listeners
+    onStarted: (callback) => {
+      const listener = (_event, projectId, provider, projectName) => callback(projectId, provider, projectName)
+      ipcRenderer.on('deployment:started', listener)
+      return () => ipcRenderer.removeListener('deployment:started', listener)
+    },
     onProgress: (callback) => {
       const listener = (_event, projectId, message) => callback(projectId, message)
       ipcRenderer.on('deployment:progress', listener)

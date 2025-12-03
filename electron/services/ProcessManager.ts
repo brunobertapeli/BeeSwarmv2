@@ -4,6 +4,8 @@ import stripAnsi from 'strip-ansi';
 import { processPersistence } from './ProcessPersistence';
 import path from 'path';
 import os from 'os';
+import fs from 'fs';
+import { app, safeStorage } from 'electron';
 import {
   DeploymentStrategy,
   DeploymentStrategyFactory,
@@ -89,6 +91,41 @@ class ProcessManager extends EventEmitter {
   private readonly HEALTH_CHECK_INTERVAL = 30000;
   private readonly HEALTH_CHECK_TIMEOUT = 5000;
   private readonly MAX_HEALTH_FAILURES = 3;
+
+  /**
+   * Get decrypted Netlify token for authenticating netlify dev
+   * This allows netlify dev to work with linked sites
+   */
+  private getNetlifyToken(): string | null {
+    try {
+      const tokensFilePath = path.join(app.getPath('userData'), 'deployment-tokens.json');
+      if (!fs.existsSync(tokensFilePath)) {
+        return null;
+      }
+
+      const tokens = JSON.parse(fs.readFileSync(tokensFilePath, 'utf-8'));
+      const tokenData = tokens['netlify'];
+      if (!tokenData) {
+        return null;
+      }
+
+      // Decrypt the token
+      if (tokenData.isFallback) {
+        return Buffer.from(tokenData.encrypted, 'base64').toString('utf-8');
+      } else {
+        try {
+          const buffer = Buffer.from(tokenData.encrypted, 'base64');
+          return safeStorage.decryptString(buffer);
+        } catch (error) {
+          console.error('Failed to decrypt Netlify token:', error);
+          return null;
+        }
+      }
+    } catch (error) {
+      console.error('Error reading Netlify token:', error);
+      return null;
+    }
+  }
 
   /**
    * Start dev server(s) for a project
@@ -192,14 +229,26 @@ class ProcessManager extends EventEmitter {
     const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm');
     const nvmNodePath = path.join(nvmDir, 'versions', 'node', 'v20.19.5', 'bin');
 
+    // Build environment with optional Netlify token
+    const processEnv: Record<string, string | undefined> = {
+      ...process.env,
+      ...config.env,
+      PATH: `${nvmNodePath}:${process.env.PATH}`,
+    };
+
+    // Inject Netlify auth token for netlify dev to work with linked sites
+    if (config.id === 'netlify') {
+      const netlifyToken = this.getNetlifyToken();
+      if (netlifyToken) {
+        processEnv.NETLIFY_AUTH_TOKEN = netlifyToken;
+        console.log('🔑 Injected Netlify auth token for dev server');
+      }
+    }
+
     const childProcess = spawn(config.command, config.args, {
       cwd: config.cwd,
       shell: true,
-      env: {
-        ...process.env,
-        ...config.env,
-        PATH: `${nvmNodePath}:${process.env.PATH}`,
-      },
+      env: processEnv,
     });
 
     const processInfo: ProcessInfo = {

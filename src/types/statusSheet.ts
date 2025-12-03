@@ -49,6 +49,9 @@ export interface ConversationBlock {
   interactionType?: string | null
   deploymentStages?: DeploymentStage[]
   deploymentUrl?: string
+  deploymentProvider?: 'netlify' | 'railway'
+  deploymentLogs?: string[]
+  deploymentStartTime?: number
   initializationStages?: DeploymentStage[]
   templateName?: string
   completedAt?: number

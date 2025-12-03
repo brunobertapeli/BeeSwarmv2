@@ -578,7 +578,22 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           setTempImportProjectId(null)
         }
 
-        // Step 6: Complete - mark initialization as complete
+        // Step 6: Make initial commit (so users can restore to this state)
+        let initialCommitHash: string | undefined
+        try {
+          const commitResult = await window.electronAPI?.git.initialCommit(
+            createdProjectId,
+            'Initial project setup'
+          )
+          if (commitResult?.success && commitResult.commitHash) {
+            initialCommitHash = commitResult.commitHash
+          }
+        } catch (commitErr) {
+          console.warn('Failed to create initial commit:', commitErr)
+          // Don't fail project creation if commit fails
+        }
+
+        // Step 7: Complete - mark initialization as complete (with commit hash for restore)
         await window.electronAPI?.chat.updateInitializationBlock(
           createdProjectId,
           getInitSteps(deployServices, {
@@ -589,7 +604,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
             server: true,
             ready: true
           }),
-          true // Mark as complete
+          true, // Mark as complete
+          initialCommitHash // Pass commit hash for restore functionality
         )
 
         setCurrentStep('complete')

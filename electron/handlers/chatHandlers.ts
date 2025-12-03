@@ -317,7 +317,7 @@ export function registerChatHandlers(): void {
   });
 
   // Update initialization block
-  ipcMain.handle('chat:update-initialization-block', async (_event, projectId: string, stages: Array<{ label: string; isComplete: boolean }>, isComplete: boolean) => {
+  ipcMain.handle('chat:update-initialization-block', async (_event, projectId: string, stages: Array<{ label: string; isComplete: boolean }>, isComplete: boolean, commitHash?: string) => {
     try {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId);
@@ -349,10 +349,18 @@ export function registerChatHandlers(): void {
         stages
       };
 
-      databaseService.updateChatBlock(initBlock.id, {
+      // Build update object with optional commitHash
+      const updateData: { actions: string; isComplete: boolean; commitHash?: string } = {
         actions: JSON.stringify(updatedData),
         isComplete
-      });
+      };
+
+      // Add commit hash if provided (for restore functionality)
+      if (commitHash) {
+        updateData.commitHash = commitHash;
+      }
+
+      databaseService.updateChatBlock(initBlock.id, updateData);
 
       // If complete, mark as completed
       if (isComplete) {

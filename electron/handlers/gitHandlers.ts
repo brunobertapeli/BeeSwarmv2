@@ -159,6 +159,31 @@ export function registerGitHandlers(): void {
     }
   });
 
+  // Get current HEAD commit hash
+  ipcMain.handle('git:get-head-commit', async (_event, projectId: string) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      try {
+        const commitHash = execSync('git rev-parse HEAD', {
+          cwd: project.path,
+          encoding: 'utf-8',
+          timeout: 5000
+        }).trim();
+
+        return { success: true, commitHash };
+      } catch {
+        // Not a git repo or no commits yet
+        return { success: true, commitHash: null };
+      }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
   // Get commit history
   ipcMain.handle('git:get-log', async (_event, projectId: string) => {
     try {
@@ -205,6 +230,32 @@ export function registerGitHandlers(): void {
       await git.push('origin', branch);
 
       return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  });
+
+  // Initial commit (local only, no push)
+  ipcMain.handle('git:initial-commit', async (_event, projectId: string, message: string) => {
+    try {
+      const project = databaseService.getProjectById(projectId);
+      if (!project) {
+        return { success: false, error: 'Project not found' };
+      }
+
+      const git: SimpleGit = simpleGit(project.path);
+
+      // Stage all changes
+      await git.add('.');
+
+      // Commit
+      await git.commit(message);
+
+      // Get the commit hash
+      const log = await git.log({ maxCount: 1 });
+      const commitHash = log.latest?.hash?.substring(0, 7) || null;
+
+      return { success: true, commitHash };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
@@ -513,7 +564,7 @@ async function getCurrentBranch(projectPath: string): Promise<string> {
 
 /**
  * Perform git checkout to a specific commit
- * Uses -B to ensure we stay on a proper branch (not detached HEAD)
+ * Uses hard reset to discard all local changes and move to target commit
  */
 async function performGitCheckout(
   projectId: string,
@@ -525,6 +576,22 @@ async function performGitCheckout(
 
   // Get current branch name to maintain branch context
   const branchName = await getCurrentBranch(projectPath);
+
+  // First do a hard reset to discard all local changes
+  await new Promise<void>((resolve) => {
+    const resetProcess = spawn('git', ['reset', '--hard', 'HEAD'], {
+      cwd: projectPath,
+    });
+    resetProcess.on('close', () => resolve());
+  });
+
+  // Clean untracked files
+  await new Promise<void>((resolve) => {
+    const cleanProcess = spawn('git', ['clean', '-fd'], {
+      cwd: projectPath,
+    });
+    cleanProcess.on('close', () => resolve());
+  });
 
   return new Promise((resolve) => {
     // Use -B to create/reset branch at the target commit

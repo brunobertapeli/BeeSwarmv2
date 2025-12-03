@@ -24,7 +24,7 @@ import noiseBgImage from '../assets/images/noise_bg.png'
 import successSound from '../assets/sounds/success.wav'
 
 function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, onApprovePlan, onRejectPlan, onXMLTagClick, onXMLTagDetected }: StatusSheetProps) {
-  const { deploymentStatus, showStatusSheet, setShowStatusSheet, viewMode } = useAppStore()
+  const { showStatusSheet, setShowStatusSheet, viewMode } = useAppStore()
   const { layoutState, statusSheetExpanded, setStatusSheetExpanded, setModalFreezeActive, setModalFreezeImage } = useLayoutStore()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
@@ -41,6 +41,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
   const [thinkingTimers, setThinkingTimers] = useState<Map<string, number>>(new Map())
   const [thinkingDots, setThinkingDots] = useState('')
   const [latestToolTimer, setLatestToolTimer] = useState<Map<string, number>>(new Map()) // blockId -> elapsed time
+  const [deploymentTimer, setDeploymentTimer] = useState<Map<string, number>>(new Map()) // blockId -> elapsed time
   const [keywords, setKeywords] = useState<Record<string, string>>({})
   const [overflowingMessages, setOverflowingMessages] = useState<Set<string>>(new Set())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -277,57 +278,142 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     }
   }, [projectId])
 
-  // Add deployment block when deployment starts
+  // Listen for deployment events from backend
   useEffect(() => {
-    if (deploymentStatus !== 'idle' && deploymentStatus !== 'live') {
-      // Check if deployment block already exists
-      const hasDeploymentBlock = allBlocks.some((b) => b.type === 'deployment' && !b.isComplete)
+    if (!projectId || !window.electronAPI?.deployment) return
 
-      if (!hasDeploymentBlock) {
-        // Create new deployment block
-        const deploymentBlock: ConversationBlock = {
-          id: `deploy-${Date.now()}`,
-          type: 'deployment',
-          isComplete: false,
-          deploymentStages: [
-            { label: 'Creating instance', isComplete: deploymentStatus !== 'creating' },
-            { label: 'Building app', isComplete: false },
-            { label: 'Setting up keys', isComplete: false },
-            { label: 'Finalizing', isComplete: false },
-          ],
-        }
-        setAllBlocks([...allBlocks, deploymentBlock])
-      } else {
-        // Update existing deployment block
-        setAllBlocks(allBlocks.map((block) => {
-          if (block.type === 'deployment' && !block.isComplete) {
-            const stages = block.deploymentStages?.map((stage, idx) => {
-              if (deploymentStatus === 'creating') return { ...stage, isComplete: idx < 0 }
-              if (deploymentStatus === 'building') return { ...stage, isComplete: idx < 1 }
-              if (deploymentStatus === 'setting-keys') return { ...stage, isComplete: idx < 2 }
-              if (deploymentStatus === 'finalizing') return { ...stage, isComplete: idx < 3 }
-              return stage
-            })
-            return { ...block, deploymentStages: stages }
-          }
-          return block
-        }))
+    // When deployment starts
+    const unsubStarted = window.electronAPI.deployment.onStarted((id: string, provider: string, projectName: string) => {
+      if (id !== projectId) return
+
+      // Create deployment block
+      const deploymentBlock: ConversationBlock = {
+        id: `deploy-${Date.now()}`,
+        projectId: id,
+        type: 'deployment',
+        isComplete: false,
+        deploymentProvider: provider as 'netlify' | 'railway',
+        deploymentStartTime: Date.now(),
+        deploymentLogs: [],
+        deploymentStages: provider === 'netlify'
+          ? [
+              { label: 'Building project', isComplete: false },
+              { label: 'Uploading to Netlify', isComplete: false },
+              { label: 'Deploying', isComplete: false },
+            ]
+          : [
+              { label: 'Creating services', isComplete: false },
+              { label: 'Building Backend', isComplete: false },
+              { label: 'Deploying Backend', isComplete: false },
+              { label: 'Building Frontend', isComplete: false },
+              { label: 'Deploying Frontend', isComplete: false },
+            ],
       }
-    } else if (deploymentStatus === 'live') {
-      // Mark deployment as complete
-      setAllBlocks(allBlocks.map((block) => {
-        if (block.type === 'deployment' && !block.isComplete) {
+      setAllBlocks(prev => [...prev, deploymentBlock])
+    })
+
+    // When progress updates come in
+    const unsubProgress = window.electronAPI.deployment.onProgress((id: string, message: string) => {
+      if (id !== projectId) return
+
+      setAllBlocks(prev => prev.map(block => {
+        if (block.type === 'deployment' && !block.isComplete && block.projectId === id) {
+          // Update stages based on message content
+          const updatedStages = [...(block.deploymentStages || [])]
+          const logs = [...(block.deploymentLogs || []), message]
+
+          // Parse progress messages to update stages
+          if (block.deploymentProvider === 'netlify') {
+            if (message.includes('Build complete') || message.includes('built in')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+            }
+            if (message.includes('Uploading') || message.includes('Finished uploading')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[1] = { ...updatedStages[1], isComplete: message.includes('Finished') }
+            }
+            if (message.includes('Deploy is live') || message.includes('Deploy complete')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[1] = { ...updatedStages[1], isComplete: true }
+              updatedStages[2] = { ...updatedStages[2], isComplete: true }
+            }
+          } else if (block.deploymentProvider === 'railway') {
+            // Stages: [0] Creating services, [1] Building Backend, [2] Deploying Backend, [3] Building Frontend, [4] Deploying Frontend
+
+            // Creating services complete when we start building
+            if (message.includes('Deploying') && message.includes('service')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+            }
+
+            // Backend stages
+            if (message.includes('Backend') && message.includes('BUILDING')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              // Building Backend in progress (not complete yet)
+            }
+            if (message.includes('Backend') && message.includes('DEPLOYING')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[1] = { ...updatedStages[1], isComplete: true }
+              // Deploying Backend in progress
+            }
+            if (message.includes('Backend') && message.includes('SUCCESS')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[1] = { ...updatedStages[1], isComplete: true }
+              updatedStages[2] = { ...updatedStages[2], isComplete: true }
+            }
+
+            // Frontend stages
+            if (message.includes('Frontend') && message.includes('BUILDING')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              // Building Frontend in progress
+            }
+            if (message.includes('Frontend') && message.includes('DEPLOYING')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[3] = { ...updatedStages[3], isComplete: true }
+              // Deploying Frontend in progress
+            }
+            if (message.includes('Frontend') && message.includes('SUCCESS')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[3] = { ...updatedStages[3], isComplete: true }
+              updatedStages[4] = { ...updatedStages[4], isComplete: true }
+            }
+          }
+
           return {
             ...block,
-            isComplete: true,
-            deploymentUrl: 'https://your-app.netlify.app',
-            deploymentStages: block.deploymentStages?.map((s) => ({ ...s, isComplete: true })),
+            deploymentStages: updatedStages,
+            deploymentLogs: logs,
           }
         }
         return block
       }))
+    })
+
+    // When deployment completes
+    const unsubComplete = window.electronAPI.deployment.onComplete((id: string, result: any) => {
+      if (id !== projectId) return
+
+      setAllBlocks(prev => prev.map(block => {
+        if (block.type === 'deployment' && !block.isComplete && block.projectId === id) {
+          return {
+            ...block,
+            isComplete: true,
+            completedAt: Date.now(),
+            deploymentUrl: result.success ? result.url : undefined,
+            deploymentStages: block.deploymentStages?.map(s => ({
+              ...s,
+              isComplete: result.success,
+            })),
+          }
+        }
+        return block
+      }))
+    })
+
+    return () => {
+      unsubStarted?.()
+      unsubProgress?.()
+      unsubComplete?.()
     }
-  }, [deploymentStatus])
+  }, [projectId])
 
   // Auto-scroll to bottom when blocks change or when expanded
   useEffect(() => {
@@ -411,6 +497,36 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
       } else {
         // No active tool - clear timer for this block
         setLatestToolTimer(prev => {
+          const newMap = new Map(prev)
+          newMap.delete(block.id)
+          return newMap
+        })
+      }
+    })
+
+    return () => {
+      intervals.forEach(interval => clearInterval(interval))
+    }
+  }, [allBlocks])
+
+  // Track elapsed time for deployment blocks
+  useEffect(() => {
+    const intervals: NodeJS.Timeout[] = []
+
+    allBlocks.forEach(block => {
+      if (block.type === 'deployment' && !block.isComplete && block.deploymentStartTime) {
+        const interval = setInterval(() => {
+          setDeploymentTimer(prev => {
+            const newMap = new Map(prev)
+            const elapsed = (Date.now() - block.deploymentStartTime!) / 1000
+            newMap.set(block.id, elapsed)
+            return newMap
+          })
+        }, 100)
+        intervals.push(interval)
+      } else if (block.type === 'deployment' && block.isComplete) {
+        // Clear timer for completed deployments
+        setDeploymentTimer(prev => {
           const newMap = new Map(prev)
           newMap.delete(block.id)
           return newMap
@@ -867,6 +983,50 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     <span className="text-[14px] font-semibold text-gray-100">Your project is ready</span>
                                     <Check size={12} className="text-green-400" />
                                   </div>
+                                  {/* Restore button for initial project state */}
+                                  {block.commitHash && block.commitHash !== 'unknown' && block.commitHash.length >= 7 && (
+                                    <div className="mt-3">
+                                      {confirmingRestoreBlockId === block.id ? (
+                                        <div className="flex items-center gap-2">
+                                          <div className="inline-flex items-center gap-1.5 bg-primary/10 px-2.5 py-1 rounded">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-primary">
+                                              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                              <path d="M3 3v5h5" />
+                                            </svg>
+                                            <span className="text-[13px] text-primary font-medium">Restore to initial state?</span>
+                                          </div>
+                                          <button
+                                            onClick={() => {
+                                              handleRestoreCheckpoint(block)
+                                              setConfirmingRestoreBlockId(null)
+                                            }}
+                                            className="p-1.5 bg-green-500/20 hover:bg-green-500/30 rounded transition-colors"
+                                            title="Confirm restore"
+                                          >
+                                            <Check size={14} className="text-green-400" />
+                                          </button>
+                                          <button
+                                            onClick={() => setConfirmingRestoreBlockId(null)}
+                                            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 rounded transition-colors"
+                                            title="Cancel"
+                                          >
+                                            <X size={14} className="text-red-400" />
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          onClick={() => setConfirmingRestoreBlockId(block.id)}
+                                          className="group inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary/15 px-2.5 py-1 rounded transition-colors"
+                                        >
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-primary group-hover:text-primary-light">
+                                            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                            <path d="M3 3v5h5" />
+                                          </svg>
+                                          <span className="text-[13px] text-primary group-hover:text-primary-light font-medium">Restore to initial state</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -899,58 +1059,101 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                       )
                     }
 
-                    // Render deployment block (keep existing for now)
+                    // Render deployment block with timeline design
                     if (block.type === 'deployment') {
+                      const providerName = block.deploymentProvider === 'railway' ? 'Railway' : 'Netlify'
+                      // Use live timer for in-progress, calculated time for completed
+                      const elapsedTime = block.isComplete && block.deploymentStartTime && block.completedAt
+                        ? (block.completedAt - block.deploymentStartTime) / 1000
+                        : deploymentTimer.get(block.id) || 0
+                      const currentStage = block.deploymentStages?.find(s => !s.isComplete)
+
                       return (
-                        <div key={block.id} className="bg-primary/5 rounded-lg p-3 border border-primary/20 relative">
-                          {/* Header */}
-                          <div className="flex items-start gap-2 mb-3">
-                            <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center mt-0.5">
-                              {block.isComplete ? (
-                                <Globe size={12} className="text-primary" />
-                              ) : (
-                                <Rocket size={12} className="text-primary" />
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <span className="text-[13px] font-medium text-primary">
-                                {block.isComplete ? 'Deployment Complete' : 'Deploying to Netlify'}
+                        <div key={block.id} className="mb-6">
+                          <div className="bg-white/[0.02] rounded-lg border border-white/10 p-4 relative">
+                            {/* Timestamp */}
+                            {block.isComplete && block.completedAt && (
+                              <span className="absolute top-3 right-3 text-[11px] text-gray-500 z-10">
+                                {new Date(block.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
-                            </div>
-                          </div>
+                            )}
 
-                          {/* Deployment Stages */}
-                          <div className="space-y-2 ml-7">
-                            {block.deploymentStages?.map((stage, idx) => (
-                              <div key={idx} className="flex items-center gap-2">
-                                {stage.isComplete ? (
-                                  <div className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
-                                ) : (
-                                  <Loader2 size={10} className="text-primary animate-spin flex-shrink-0" />
-                                )}
-                                <span className={`text-[12px] leading-relaxed ${stage.isComplete ? 'text-gray-400 line-through' : 'text-primary font-medium'
-                                  }`}>
-                                  {stage.label}
-                                </span>
+                            {/* Timeline Step */}
+                            <div className="timeline-step">
+                              <div className="step-track">
+                                <div className="step-icon step-icon-deploy">
+                                  <Rocket size={14} className="text-white opacity-90" />
+                                </div>
+                                {block.deploymentUrl && <div className="step-line"></div>}
                               </div>
-                            ))}
-                          </div>
+                              <div className="step-content">
+                                {/* Header */}
+                                <div className="flex items-center gap-2 pt-1 pb-2">
+                                  <span className="text-[14px] font-semibold text-gray-100">
+                                    {block.isComplete
+                                      ? `Deployed to ${providerName}`
+                                      : `Deploying to ${providerName}`}
+                                  </span>
+                                  {block.isComplete ? (
+                                    <span className="text-[12px] text-gray-500">{elapsedTime.toFixed(1)}s</span>
+                                  ) : (
+                                    <Loader2 size={12} className="text-primary animate-spin" />
+                                  )}
+                                </div>
 
-                          {/* Deployment URL - show when complete */}
-                          {block.isComplete && block.deploymentUrl && (
-                            <div className="mt-3 pt-3 border-t border-primary/20">
-                              <a
-                                href={block.deploymentUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 text-[12px] text-primary hover:text-primary-dark transition-colors group"
-                              >
-                                <Globe size={11} />
-                                <span className="font-medium">{block.deploymentUrl}</span>
-                                <ExternalLink size={9} className="opacity-60 group-hover:opacity-100 transition-opacity" />
-                              </a>
+                                {/* Deployment Stages */}
+                                <div className="space-y-2">
+                                  {block.deploymentStages?.map((stage, idx) => (
+                                    <div key={idx} className="flex items-center gap-2">
+                                      {stage.isComplete ? (
+                                        <Check size={12} className="text-green-400 flex-shrink-0" />
+                                      ) : currentStage === stage ? (
+                                        <Loader2 size={12} className="text-primary animate-spin flex-shrink-0" />
+                                      ) : (
+                                        <div className="w-3 h-3 flex items-center justify-center flex-shrink-0">
+                                          <div className="w-1.5 h-1.5 rounded-full bg-gray-600" />
+                                        </div>
+                                      )}
+                                      <span className={`text-[13px] ${
+                                        stage.isComplete
+                                          ? 'text-gray-400'
+                                          : currentStage === stage
+                                          ? 'text-gray-200'
+                                          : 'text-gray-500'
+                                      }`}>
+                                        {stage.label}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
-                          )}
+
+                            {/* Live URL Step */}
+                            {block.isComplete && block.deploymentUrl && (
+                              <div className="timeline-step">
+                                <div className="step-track">
+                                  <div className="step-icon" style={{ background: 'rgba(34, 197, 94, 0.2)' }}>
+                                    <Globe size={14} className="text-green-400" />
+                                  </div>
+                                </div>
+                                <div className="step-content">
+                                  <div className="pt-1">
+                                    <button
+                                      onClick={() => window.electronAPI?.shell?.openExternal(block.deploymentUrl!)}
+                                      className="group inline-flex items-center gap-1.5 bg-green-500/10 hover:bg-green-500/15 px-2.5 py-1 rounded transition-colors"
+                                    >
+                                      <span className="url-dot"></span>
+                                      <span className="text-[13px] font-mono text-green-400 group-hover:text-green-300 font-medium">
+                                        {block.deploymentUrl}
+                                      </span>
+                                      <ExternalLink size={10} className="text-green-400/60 group-hover:text-green-300" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )
                     }
@@ -1730,6 +1933,9 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
           }
           .step-icon-server {
             background: rgba(59, 130, 246, 0.2);
+          }
+          .step-icon-deploy {
+            background: rgba(217, 119, 6, 0.3);
           }
           .step-icon-restore {
             background: rgba(34, 197, 94, 0.2);

@@ -24,7 +24,8 @@ import {
   FolderOpen,
   Github,
   PenTool,
-  MessageSquare
+  MessageSquare,
+  RefreshCw
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '../store/appStore'
@@ -112,6 +113,9 @@ function ActionBar({
   const [deployingProvider, setDeployingProvider] = useState<string | null>(null)
   const [showProviderMenu, setShowProviderMenu] = useState(false)
   const [liveUrl, setLiveUrl] = useState<string | null>(null)
+  const [deployedCommit, setDeployedCommit] = useState<string | null>(null)
+  const [currentCommit, setCurrentCommit] = useState<string | null>(null)
+  const isOutdated = deployedCommit && currentCommit && deployedCommit !== currentCommit
   const providerMenuRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<ContentEditableInputRef>(null)
   const actionBarRef = useRef<HTMLDivElement>(null)
@@ -283,22 +287,54 @@ function ActionBar({
     checkConnectedProviders()
   }, [deployServices])
 
-  // Check for live URL on mount and when projectId changes
+  // Check for live URL and deployment commit on mount and when projectId changes
+  // Also reset deployment state when switching projects
   useEffect(() => {
+    // Reset deployment state when switching projects
+    setIsDeploying(false)
+    setDeployingProvider(null)
+    setDeployProgress(0)
+    setLiveUrl(null)
+    setDeployedCommit(null)
+    setCurrentCommit(null)
+
     if (!projectId) return
 
-    const checkLiveUrl = async () => {
+    const checkDeploymentStatus = async () => {
       try {
+        // Get project info (live URL and deployed commit)
         const result = await window.electronAPI?.projects?.getById(projectId)
-        if (result?.success && result.project?.liveUrl) {
-          setLiveUrl(result.project.liveUrl)
+        if (result?.success && result.project) {
+          setLiveUrl(result.project.liveUrl || null)
+          setDeployedCommit(result.project.deployedCommit || null)
+        }
+
+        // Get current HEAD commit
+        const headResult = await window.electronAPI?.git?.getHeadCommit(projectId)
+        if (headResult?.success) {
+          setCurrentCommit(headResult.commitHash || null)
         }
       } catch (error) {
-        console.error('Failed to check live URL:', error)
+        console.error('Failed to check deployment status:', error)
       }
     }
 
-    checkLiveUrl()
+    checkDeploymentStatus()
+  }, [projectId])
+
+  // Listen for git commits to update currentCommit state (for deployment status updates)
+  useEffect(() => {
+    if (!projectId || !window.electronAPI?.git?.onCommitted) return
+
+    const unsubCommitted = window.electronAPI.git.onCommitted((id: string, commitHash: string) => {
+      if (id === projectId) {
+        setCurrentCommit(commitHash)
+      }
+    })
+
+    return () => {
+      unsubCommitted?.()
+    }
   }, [projectId])
 
   // Listen for deployment events
@@ -311,7 +347,7 @@ function ActionBar({
       }
     })
 
-    const unsubComplete = window.electronAPI.deployment.onComplete((id: string, result: any) => {
+    const unsubComplete = window.electronAPI.deployment.onComplete(async (id: string, result: any) => {
       if (id === projectId) {
         setIsDeploying(false)
         setDeployingProvider(null)
@@ -319,6 +355,11 @@ function ActionBar({
         if (result.success) {
           if (result.url) {
             setLiveUrl(result.url)
+          }
+          // Update deployed commit to current HEAD (since we just deployed)
+          const headResult = await window.electronAPI?.git?.getHeadCommit(projectId)
+          if (headResult?.success && headResult.commitHash) {
+            setDeployedCommit(headResult.commitHash)
           }
           toast.success('Deployment complete!', result.url ? `Live at: ${result.url}` : 'Your app is now live')
         } else {
@@ -818,9 +859,9 @@ function ActionBar({
     }
   }, [isDeploying, liveUrl])
 
-  const handleVisitLive = () => {
+  const handleVisitLive = async () => {
     if (liveUrl) {
-      window.open(liveUrl, '_blank')
+      await window.electronAPI?.shell?.openExternal(liveUrl)
     }
   }
 
@@ -1801,22 +1842,44 @@ function ActionBar({
             <div className="w-px h-5 bg-dark-border/50" />
 
             {/* Deploy Button */}
-            <div className="relative" ref={providerMenuRef}>
+            <div className="relative flex items-center" ref={providerMenuRef}>
               {liveUrl && !isDeploying ? (
-                // Live - show visit button
-                <button
-                  onClick={handleVisitLive}
-                  className="px-2.5 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/30 hover:border-primary/50 rounded-lg transition-all relative icon-button-group"
-                >
-                  <div className="flex items-center gap-1.5">
+                // Live - unified button group: [Live | Redeploy]
+                <div className="flex items-center rounded-lg border border-primary/30 bg-primary/5">
+                  {/* Live button */}
+                  <button
+                    onClick={handleVisitLive}
+                    className="icon-button-group flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-primary/15 transition-all relative"
+                  >
                     <Globe size={13} className="text-primary" />
                     <span className="text-[11px] text-primary font-medium">Live</span>
-                    <ExternalLink size={10} className="text-primary opacity-60" />
-                  </div>
-                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
-                    Visit live site
-                  </span>
-                </button>
+                    <ExternalLink size={10} className="text-primary opacity-50" />
+                    {/* Outdated warning indicator */}
+                    {isOutdated && (
+                      <span className="absolute top-0.5 right-0.5 w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                    )}
+                    <span className="absolute bottom-full mb-2 right-0 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                      {isOutdated ? 'Live site is outdated' : 'Visit live site'}
+                    </span>
+                  </button>
+                  {/* Divider */}
+                  <div className="w-px h-5 bg-primary/20" />
+                  {/* Redeploy button */}
+                  <button
+                    onClick={() => handleDeploy()}
+                    disabled={connectedProviders.length === 0}
+                    className={`icon-button-group p-1.5 transition-all relative ${
+                      connectedProviders.length === 0
+                        ? 'cursor-not-allowed opacity-40'
+                        : 'hover:bg-primary/15'
+                    }`}
+                  >
+                    <RefreshCw size={13} className={isOutdated ? 'text-primary' : 'text-primary/60'} />
+                    <span className="absolute bottom-full mb-2 right-0 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                      {isOutdated ? 'Deploy new version' : 'Redeploy'}
+                    </span>
+                  </button>
+                </div>
               ) : isDeploying ? (
                 // Deploying - show progress animation
                 <button
@@ -1847,7 +1910,7 @@ function ActionBar({
                     <Rocket size={13} className="text-gray-600" />
                     <span className="text-[11px] text-gray-600 font-medium">Deploy</span>
                   </div>
-                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                  <span className="absolute bottom-full mb-2 right-0 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                     Configure deployment in Settings
                   </span>
                 </button>
