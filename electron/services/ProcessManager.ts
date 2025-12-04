@@ -3,7 +3,6 @@ import { EventEmitter } from 'events';
 import stripAnsi from 'strip-ansi';
 import { processPersistence } from './ProcessPersistence';
 import path from 'path';
-import os from 'os';
 import fs from 'fs';
 import { app, safeStorage } from 'electron';
 import {
@@ -12,6 +11,7 @@ import {
   PortAllocation,
   ProcessConfig,
 } from './deployment';
+import { bundledBinaries } from './BundledBinaries';
 
 /**
  * Process state enum
@@ -225,15 +225,13 @@ class ProcessManager extends EventEmitter {
     group: ProcessGroup,
     config: ProcessConfig
   ): Promise<void> {
-    // Setup environment
-    const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm');
-    const nvmNodePath = path.join(nvmDir, 'versions', 'node', 'v20.19.5', 'bin');
+    // Use bundled Node/npm binaries
+    const bundledEnv = bundledBinaries.getEnvWithBundledPath();
 
     // Build environment with optional Netlify token
     const processEnv: Record<string, string | undefined> = {
-      ...process.env,
+      ...bundledEnv,
       ...config.env,
-      PATH: `${nvmNodePath}:${process.env.PATH}`,
     };
 
     // Inject Netlify auth token for netlify dev to work with linked sites
@@ -244,9 +242,23 @@ class ProcessManager extends EventEmitter {
       }
     }
 
-    const childProcess = spawn(config.command, config.args, {
+    // Transform npm/npx commands to use bundled binaries
+    let spawnCommand = config.command;
+    let spawnArgs = config.args;
+
+    if (config.command === 'npm') {
+      const npmConfig = bundledBinaries.getNpmSpawnConfig(config.args);
+      spawnCommand = npmConfig.command;
+      spawnArgs = npmConfig.args;
+    } else if (config.command === 'npx') {
+      const npxConfig = bundledBinaries.getNpxSpawnConfig(config.args);
+      spawnCommand = npxConfig.command;
+      spawnArgs = npxConfig.args;
+    }
+
+    const childProcess = spawn(spawnCommand, spawnArgs, {
       cwd: config.cwd,
-      shell: true,
+      shell: process.platform === 'win32',
       env: processEnv,
     });
 

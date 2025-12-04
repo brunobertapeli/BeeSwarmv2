@@ -1,8 +1,8 @@
 import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import os from 'os'
 import { terminalAggregator } from './TerminalAggregator'
+import { bundledBinaries } from './BundledBinaries'
 
 /**
  * Service for managing npm dependencies in project directories
@@ -44,18 +44,14 @@ class DependencyService {
           terminalAggregator.addNpmLine(projectId, `Installing dependencies in ${path.basename(projectPath)}...\n`)
         }
 
-        // Setup environment with nvm Node path
-        const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm')
-        const nvmNodePath = path.join(nvmDir, 'versions', 'node', 'v20.19.5', 'bin')
-        const env = {
-          ...process.env,
-          PATH: `${nvmNodePath}:${process.env.PATH}`
-        }
+        // Use bundled Node/npm binaries
+        const { command, args } = bundledBinaries.getNpmSpawnConfig(['install'])
+        const env = bundledBinaries.getEnvWithBundledPath()
 
-        // Spawn npm install process
-        const npmProcess = spawn('npm', ['install'], {
+        // Spawn npm install process using bundled binaries
+        const npmProcess = spawn(command, args, {
           cwd: projectPath,
-          shell: true,
+          shell: false,
           stdio: ['ignore', 'pipe', 'pipe'],
           env
         })

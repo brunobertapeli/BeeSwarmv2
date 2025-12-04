@@ -1,11 +1,32 @@
 import { ipcMain, WebContents } from 'electron';
 import { spawn, execSync } from 'child_process';
+import path from 'path';
 import simpleGit, { SimpleGit, StatusResult, LogResult } from 'simple-git';
 import { databaseService } from '../services/DatabaseService';
 import { terminalAggregator } from '../services/TerminalAggregator';
 import { chatHistoryManager } from '../services/ChatHistoryManager';
 import { processManager } from '../services/ProcessManager';
 import { emitChatEvent } from './chatHandlers';
+import { bundledBinaries } from '../services/BundledBinaries';
+
+/**
+ * Get a SimpleGit instance configured to use bundled git binary
+ */
+function getGit(basePath: string): SimpleGit {
+  return simpleGit(basePath, { binary: bundledBinaries.gitPath });
+}
+
+/**
+ * Execute gh CLI command using bundled binary
+ */
+function execGh(args: string, options?: { cwd?: string }): string {
+  const ghPath = bundledBinaries.ghPath;
+  return execSync(`"${ghPath}" ${args}`, {
+    ...options,
+    stdio: 'pipe',
+    encoding: 'utf-8',
+  });
+}
 
 let mainWindowContents: WebContents | null = null;
 
@@ -23,16 +44,14 @@ export function registerGitHandlers(): void {
   // Check if GitHub CLI is installed and authenticated
   ipcMain.handle('git:check-gh-cli', async () => {
     try {
-      // Check if gh is installed
-      try {
-        execSync('gh --version', { stdio: 'pipe' });
-      } catch {
+      // Check if gh is available (bundled)
+      if (!bundledBinaries.isGhAvailable()) {
         return { success: true, installed: false, authenticated: false };
       }
 
       // Check if gh is authenticated
       try {
-        execSync('gh auth status', { stdio: 'pipe' });
+        execGh('auth status');
         return { success: true, installed: true, authenticated: true };
       } catch {
         return { success: true, installed: true, authenticated: false };
@@ -50,7 +69,7 @@ export function registerGitHandlers(): void {
         return { success: false, error: 'Project not found' };
       }
 
-      const git: SimpleGit = simpleGit(project.path);
+      const git: SimpleGit = getGit(project.path);
       const status: StatusResult = await git.status();
 
       // Format files with their status
@@ -82,7 +101,7 @@ export function registerGitHandlers(): void {
         return { success: false, error: 'Project not found' };
       }
 
-      const git: SimpleGit = simpleGit(project.path);
+      const git: SimpleGit = getGit(project.path);
 
       try {
         const remotes = await git.getRemotes(true);
@@ -101,10 +120,7 @@ export function registerGitHandlers(): void {
           // Try to get repo visibility using gh CLI
           let isPrivate = true; // Default to private
           try {
-            const repoInfo = execSync('gh repo view --json isPrivate', {
-              cwd: project.path,
-              stdio: 'pipe',
-            }).toString();
+            const repoInfo = execGh('repo view --json isPrivate', { cwd: project.path });
             const parsed = JSON.parse(repoInfo);
             isPrivate = parsed.isPrivate ?? true;
           } catch {
@@ -131,7 +147,7 @@ export function registerGitHandlers(): void {
         return { success: false, error: 'Project not found' };
       }
 
-      const git: SimpleGit = simpleGit(project.path);
+      const git: SimpleGit = getGit(project.path);
 
       try {
         // Get current branch
@@ -168,7 +184,7 @@ export function registerGitHandlers(): void {
       }
 
       try {
-        const commitHash = execSync('git rev-parse HEAD', {
+        const commitHash = execSync(`"${bundledBinaries.gitPath}" rev-parse HEAD`, {
           cwd: project.path,
           encoding: 'utf-8',
           timeout: 5000
@@ -192,7 +208,7 @@ export function registerGitHandlers(): void {
         return { success: false, error: 'Project not found' };
       }
 
-      const git: SimpleGit = simpleGit(project.path);
+      const git: SimpleGit = getGit(project.path);
 
       try {
         const log: LogResult = await git.log({ maxCount: 50 });
@@ -223,7 +239,7 @@ export function registerGitHandlers(): void {
         return { success: false, error: 'Project not found' };
       }
 
-      const git: SimpleGit = simpleGit(project.path);
+      const git: SimpleGit = getGit(project.path);
       const status = await git.status();
       const branch = status.current || 'main';
 
@@ -243,7 +259,7 @@ export function registerGitHandlers(): void {
         return { success: false, error: 'Project not found' };
       }
 
-      const git: SimpleGit = simpleGit(project.path);
+      const git: SimpleGit = getGit(project.path);
 
       // Stage all changes
       await git.add('.');
@@ -269,7 +285,7 @@ export function registerGitHandlers(): void {
         return { success: false, error: 'Project not found' };
       }
 
-      const git: SimpleGit = simpleGit(project.path);
+      const git: SimpleGit = getGit(project.path);
 
       // Stage all changes
       await git.add('.');
@@ -294,7 +310,7 @@ export function registerGitHandlers(): void {
         return { success: false, error: 'Project not found' };
       }
 
-      const git: SimpleGit = simpleGit(project.path);
+      const git: SimpleGit = getGit(project.path);
 
       // Check if there are any commits, if not create an initial commit
       try {
@@ -308,12 +324,18 @@ export function registerGitHandlers(): void {
       const visibility = isPrivate ? '--private' : '--public';
       const descFlag = description ? `--description "${description}"` : '';
 
-      // Use gh CLI to create repo and push
-      const command = `gh repo create "${repoName}" ${visibility} ${descFlag} --source=. --remote=origin --push`;
+      // Use bundled gh CLI to create repo and push
+      // GIT_EXEC_PATH tells gh where to find git
+      const ghPath = bundledBinaries.ghPath;
+      const command = `"${ghPath}" repo create "${repoName}" ${visibility} ${descFlag} --source=. --remote=origin --push`;
 
       execSync(command, {
         cwd: project.path,
         stdio: 'pipe',
+        env: {
+          ...process.env,
+          PATH: `${path.dirname(bundledBinaries.gitPath)}${path.delimiter}${process.env.PATH}`,
+        },
       });
 
       return { success: true };
@@ -335,7 +357,7 @@ export function registerGitHandlers(): void {
         return { success: false, error: 'Project not found' };
       }
 
-      const git: SimpleGit = simpleGit(project.path);
+      const git: SimpleGit = getGit(project.path);
 
       // Hard reset to commit
       await git.reset(['--hard', commitHash]);
@@ -506,7 +528,7 @@ async function verifyCommitExists(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     // Use git cat-file to check if commit exists
-    const verifyProcess = spawn('git', ['cat-file', '-e', `${commitHash}^{commit}`], {
+    const verifyProcess = spawn(bundledBinaries.gitPath, ['cat-file', '-e', `${commitHash}^{commit}`], {
       cwd: projectPath,
     });
 
@@ -524,7 +546,7 @@ async function resetEphemeralFiles(projectPath: string): Promise<void> {
   return new Promise((resolve) => {
     // Reset .codedeck/ directory - these are ephemeral logging files
     // that shouldn't block checkpoint restoration
-    const resetProcess = spawn('git', ['checkout', 'HEAD', '--', '.codedeck/'], {
+    const resetProcess = spawn(bundledBinaries.gitPath, ['checkout', 'HEAD', '--', '.codedeck/'], {
       cwd: projectPath,
     });
 
@@ -541,7 +563,7 @@ async function resetEphemeralFiles(projectPath: string): Promise<void> {
 async function getCurrentBranch(projectPath: string): Promise<string> {
   return new Promise((resolve) => {
     // Try to get current branch name
-    const branchProcess = spawn('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+    const branchProcess = spawn(bundledBinaries.gitPath, ['rev-parse', '--abbrev-ref', 'HEAD'], {
       cwd: projectPath,
     });
 
@@ -579,7 +601,7 @@ async function performGitCheckout(
 
   // First do a hard reset to discard all local changes
   await new Promise<void>((resolve) => {
-    const resetProcess = spawn('git', ['reset', '--hard', 'HEAD'], {
+    const resetProcess = spawn(bundledBinaries.gitPath, ['reset', '--hard', 'HEAD'], {
       cwd: projectPath,
     });
     resetProcess.on('close', () => resolve());
@@ -587,7 +609,7 @@ async function performGitCheckout(
 
   // Clean untracked files
   await new Promise<void>((resolve) => {
-    const cleanProcess = spawn('git', ['clean', '-fd'], {
+    const cleanProcess = spawn(bundledBinaries.gitPath, ['clean', '-fd'], {
       cwd: projectPath,
     });
     cleanProcess.on('close', () => resolve());
@@ -596,7 +618,7 @@ async function performGitCheckout(
   return new Promise((resolve) => {
     // Use -B to create/reset branch at the target commit
     // This avoids detached HEAD state and keeps history clean
-    const checkoutProcess = spawn('git', ['checkout', '-B', branchName, commitHash], {
+    const checkoutProcess = spawn(bundledBinaries.gitPath, ['checkout', '-B', branchName, commitHash], {
       cwd: projectPath,
     });
 

@@ -243,8 +243,8 @@ function createWindow() {
   })
 
   // Suppress harmless DevTools Autofill protocol errors
-  mainWindow.webContents.on('console-message', (event, level, message) => {
-    if (message.includes('Autofill.enable') || message.includes('Autofill.setAddresses')) {
+  mainWindow.webContents.on('console-message', (event) => {
+    if (event.message.includes('Autofill.enable') || event.message.includes('Autofill.setAddresses')) {
       event.preventDefault()
     }
   })

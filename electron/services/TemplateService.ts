@@ -4,13 +4,12 @@ import fs from 'fs'
 import { app } from 'electron'
 import { terminalAggregator } from './TerminalAggregator'
 import { backendService } from './BackendService'
+import { bundledBinaries } from './BundledBinaries'
 import AdmZip from 'adm-zip'
 
 class TemplateService {
-  private git: SimpleGit
-
-  constructor() {
-    this.git = simpleGit()
+  private getGit(basePath?: string): SimpleGit {
+    return simpleGit(basePath, { binary: bundledBinaries.gitPath });
   }
 
   /**
@@ -95,7 +94,7 @@ class TemplateService {
       }
 
       // Initialize new git repository
-      const projectGit = simpleGit(projectPath)
+      const projectGit = this.getGit(projectPath)
       await projectGit.init()
 
       if (projectId) {

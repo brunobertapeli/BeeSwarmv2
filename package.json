@@ -11,7 +11,9 @@
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "vite build && tsc -p tsconfig.electron.json && electron-builder",
     "download-cli": "node scripts/download-railway-cli.cjs",
-    "prebuild": "npm run download-cli"
+    "download-node": "node scripts/download-node.cjs",
+    "download-git": "node scripts/download-git.cjs",
+    "prebuild": "npm run download-cli && npm run download-node && npm run download-git"
   },
   "keywords": [
     "electron",
@@ -31,7 +33,7 @@
     "@xterm/addon-fit": "^0.10.0",
     "adm-zip": "^0.5.16",
     "ansi-to-html": "^0.7.2",
-    "better-sqlite3": "^12.4.1",
+    "better-sqlite3": "^12.5.0",
     "canvas": "^3.2.0",
     "detect-port": "^2.1.0",
     "dotenv": "^17.2.3",
@@ -62,7 +64,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.17",
     "concurrently": "^8.2.2",
-    "electron": "^32.2.7",
+    "electron": "^38.7.2",
     "electron-builder": "^24.9.1",
     "lucide-react": "^0.312.0",
     "postcss": "^8.4.33",
@@ -87,7 +89,9 @@
       {
         "from": "resources/binaries/${platform}-${arch}",
         "to": "binaries",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "mac": {
@@ -100,7 +104,9 @@
       ]
     },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "extraResources": [
         {
           "from": "resources/binaries/win32-x64",
@@ -109,7 +115,9 @@
       ]
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "extraResources": [
         {
           "from": "resources/binaries/linux-x64",

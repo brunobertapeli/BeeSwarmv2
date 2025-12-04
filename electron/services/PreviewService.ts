@@ -170,11 +170,11 @@ class PreviewService extends EventEmitter {
     });
 
     // Capture console messages
-    webContents.on('console-message', (event, level, message, line, sourceId) => {
+    webContents.on('console-message', ({ level, message, lineNumber, sourceId }) => {
       this.emit('preview-console', projectId, {
         level,
         message,
-        line,
+        line: lineNumber,
         sourceId,
       });
     });

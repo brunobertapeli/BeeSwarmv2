@@ -25,3 +25,19 @@ out/
 *.dmg
 *.exe
 *.AppImage
+
+# Bundled binaries (downloaded via scripts)
+resources/binaries/*/node
+resources/binaries/*/node.exe
+resources/binaries/*/npm/
+resources/binaries/*/npm-cli
+resources/binaries/*/npm-cli.cmd
+resources/binaries/*/npx-cli
+resources/binaries/*/npx-cli.cmd
+resources/binaries/*/git
+resources/binaries/*/git/
+resources/binaries/*/git.cmd
+resources/binaries/*/gh
+resources/binaries/*/gh.exe
+resources/binaries/*.tar.gz
+resources/binaries/*.zip
