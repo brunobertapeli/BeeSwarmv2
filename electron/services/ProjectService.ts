@@ -291,7 +291,7 @@ class ProjectService {
       throw new Error('Project folder not found')
     }
 
-    shell.showItemInFolder(validatedPath)
+    shell.openPath(validatedPath)
   }
 
   /**

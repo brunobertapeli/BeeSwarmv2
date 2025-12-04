@@ -448,7 +448,7 @@ function ProjectSettings({
         />
 
         {/* Modal */}
-        <div className="relative w-[700px] max-h-[80vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden flex-col">
+        <div className="relative w-[700px] max-h-[80vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden flex flex-col">
           {/* Header */}
           <div className="border-b border-dark-border/50">
             <div className="flex items-center justify-between px-5 py-4">
@@ -1196,7 +1196,7 @@ function ProjectSettings({
             {!isSetupMode && hasUnsavedChanges && (
               <button
                 onClick={handleSaveChanges}
-                className="px-4 py-2 text-sm font-medium rounded-lg transition-all bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary shadow-lg shadow-primary/20"
+                className="px-4 py-2 text-sm font-medium rounded-lg transition-all bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary"
               >
                 Save Changes
               </button>

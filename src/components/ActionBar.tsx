@@ -25,7 +25,8 @@ import {
   Github,
   PenTool,
   MessageSquare,
-  RefreshCw
+  RefreshCw,
+  Shapes
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '../store/appStore'
@@ -84,7 +85,7 @@ function ActionBar({
   deployServices = []
 }: ActionBarProps) {
   const { viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, chatWidgetEnabled, setChatWidgetEnabled, setStatusSheetExpanded, bringWidgetToFront, setPreviewHidden } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, chatWidgetEnabled, setChatWidgetEnabled, iconsWidgetEnabled, setIconsWidgetEnabled, setStatusSheetExpanded, bringWidgetToFront, setPreviewHidden } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
@@ -960,6 +961,21 @@ function ActionBar({
     )
   }
 
+  const toggleIcons = () => {
+    // Only allow in TOOLS mode
+    if (layoutState !== 'TOOLS') return
+
+    const newState = !iconsWidgetEnabled
+    setIconsWidgetEnabled(newState)
+    if (newState) {
+      bringWidgetToFront('icons')
+    }
+    toast.info(
+      newState ? 'Icons Enabled' : 'Icons Disabled',
+      newState ? 'Icons widget shown' : 'Icons widget hidden'
+    )
+  }
+
   const handleTakeScreenshot = async () => {
     // Only allow in DEFAULT mode
     if (layoutState !== 'DEFAULT' || !projectId) return
@@ -1530,47 +1546,38 @@ function ActionBar({
             {/* Action Icons */}
             {/* Widgets Menu */}
             <div
-              className="relative flex items-center"
+              className="relative flex items-center py-3 -my-3 px-2 -mx-2"
               onMouseEnter={() => setShowWidgetsMenu(true)}
               onMouseLeave={() => setShowWidgetsMenu(false)}
             >
-              {/* Main Widgets Icon */}
-              <button
-                disabled={layoutState !== 'TOOLS'}
-                className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
-                  layoutState !== 'TOOLS'
-                    ? 'opacity-40 cursor-not-allowed'
-                    : 'hover:bg-dark-bg/50'
-                }`}
-              >
-                <LayoutGrid
-                  size={15}
-                  className={`transition-colors ${
-                    layoutState === 'TOOLS'
-                      ? 'text-gray-400 hover:text-gray-200'
-                      : 'text-gray-400'
+              {/* Main Widgets Icon - hidden when menu is open */}
+              {!(showWidgetsMenu && layoutState === 'TOOLS') && (
+                <button
+                  disabled={layoutState !== 'TOOLS'}
+                  className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
+                    layoutState !== 'TOOLS'
+                      ? 'opacity-40 cursor-not-allowed'
+                      : 'hover:bg-dark-bg/50'
                   }`}
-                />
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
-                  Open Widgets
-                </span>
-              </button>
+                >
+                  <LayoutGrid
+                    size={15}
+                    className={`transition-colors ${
+                      layoutState === 'TOOLS'
+                        ? 'text-gray-400 hover:text-gray-200'
+                        : 'text-gray-400'
+                    }`}
+                  />
+                  <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                    Open Widgets
+                  </span>
+                </button>
+              )}
 
-              {/* Animated Widget Icons */}
-              <AnimatePresence>
-                {showWidgetsMenu && layoutState === 'TOOLS' && (
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: 'auto' }}
-                    exit={{ width: 0 }}
-                    transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-                    className="flex items-center overflow-hidden"
-                  >
-                    <motion.button
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2, delay: 0.1 }}
+              {/* Widget Icons */}
+              {showWidgetsMenu && layoutState === 'TOOLS' && (
+                <div className="flex items-center">
+                    <button
                       onClick={handleAddStickyNote}
                       className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
                     >
@@ -1581,13 +1588,9 @@ function ActionBar({
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         New Sticky Note (N)
                       </span>
-                    </motion.button>
+                    </button>
 
-                    <motion.button
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2, delay: 0.15 }}
+                    <button
                       onClick={toggleKanban}
                       className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
                     >
@@ -1602,13 +1605,9 @@ function ActionBar({
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle Kanban (K)
                       </span>
-                    </motion.button>
+                    </button>
 
-                    <motion.button
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2, delay: 0.2 }}
+                    <button
                       onClick={toggleAnalytics}
                       className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
                     >
@@ -1623,13 +1622,9 @@ function ActionBar({
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle Analytics (A)
                       </span>
-                    </motion.button>
+                    </button>
 
-                    <motion.button
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2, delay: 0.25 }}
+                    <button
                       onClick={toggleProjectAssets}
                       className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
                     >
@@ -1644,13 +1639,9 @@ function ActionBar({
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle Project Assets (F)
                       </span>
-                    </motion.button>
+                    </button>
 
-                    <motion.button
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2, delay: 0.3 }}
+                    <button
                       onClick={toggleWhiteboard}
                       className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
                     >
@@ -1665,13 +1656,9 @@ function ActionBar({
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle Whiteboard (W)
                       </span>
-                    </motion.button>
+                    </button>
 
-                    <motion.button
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2, delay: 0.35 }}
+                    <button
                       onClick={toggleChat}
                       className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
                     >
@@ -1686,10 +1673,26 @@ function ActionBar({
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle AI Chat (C)
                       </span>
-                    </motion.button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    </button>
+
+                    <button
+                      onClick={toggleIcons}
+                      className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
+                    >
+                      <Shapes
+                        size={15}
+                        className={`transition-colors ${
+                          iconsWidgetEnabled
+                            ? 'text-pink-500'
+                            : 'text-gray-400 hover:text-pink-400'
+                        }`}
+                      />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                        Toggle Icons (I)
+                      </span>
+                    </button>
+                  </div>
+              )}
             </div>
 
             {/* Divider */}

@@ -629,7 +629,7 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Preview Area - Desktop or Mobile Mode */}
       <div
-        className={`w-full relative overflow-hidden p-[5px] ${projects.length > 0 ? 'border-b border-gray-700/50' : ''} z-[101] ${layoutState === 'TOOLS' ? 'pointer-events-none' : ''
+        className={`w-full relative overflow-hidden p-[5px] z-[101] ${layoutState === 'TOOLS' ? 'pointer-events-none' : ''
           }`}
         style={{ height: 'calc(100vh - 40px - 200px)' }}
       >
@@ -730,11 +730,16 @@ Please read the manifest to understand what my website is about, then create an 
         )}
       </div>
 
-      {/* Bottom Section - Split into AI Agents (left 40%) and Action Bar (right 60%) */}
+      {/* Horizontal Divider */}
+      {projects.length > 0 && (
+        <div className="fixed bottom-[198px] left-[1px] right-[1px] h-px bg-gray-700/50 z-[150]" />
+      )}
+
+      {/* Bottom Section - Split into AI Agents (left 35%) and Action Bar (right 65%) */}
       {projects.length > 0 && currentProject && (
-        <div className="fixed bottom-0 left-0 right-0 h-[200px] flex border-t border-gray-700/50 pt-[2px] z-[150]">
+        <div className="fixed bottom-0 left-0 right-0 h-[200px] flex z-[150]">
           {/* Left Section: AI Agents Block */}
-          <div className="w-[40%] h-full border-r border-gray-700/50 relative">
+          <div className="w-[35%] h-full relative">
             {/* Research Agent Status Sheet */}
             <ResearchAgentStatusSheet
               projectId={currentProjectId || undefined}
@@ -751,8 +756,13 @@ Please read the manifest to understand what my website is about, then create an 
             />
           </div>
 
+          {/* Vertical Divider */}
+          <div className="w-px pt-[2px] pb-[1px]">
+            <div className="w-full h-full bg-gray-700/50" />
+          </div>
+
           {/* Right Section: Action Bar Block */}
-          <div className="w-[60%] h-full relative">
+          <div className="flex-1 h-full relative">
             {/* Action Bar */}
             <ActionBar
               projectId={currentProjectId || undefined}

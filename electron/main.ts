@@ -193,7 +193,7 @@ function createMenu() {
         {
           label: 'Discord',
           click: async () => {
-            await shell.openExternal('https://discord.gg/codedeck')
+            await shell.openExternal('https://discord.gg/zkfAAGqFwW')
           }
         },
         {
