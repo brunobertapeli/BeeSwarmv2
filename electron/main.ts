@@ -26,6 +26,7 @@ import { registerImageHandlers } from './handlers/imageHandlers.js'
 import { registerFileHandlers } from './handlers/fileHandlers.js'
 import { registerAnalyticsHandlers } from './handlers/analyticsHandlers.js'
 import { registerChatWidgetHandlers, setChatWidgetWindow } from './handlers/chatWidgetHandlers.js'
+import { registerBackgroundRemoverHandlers } from './handlers/backgroundRemoverHandlers.js'
 import { registerDeploymentHandlers, setDeploymentMainWindow } from './handlers/deploymentHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { analyticsService } from './services/AnalyticsService.js'
@@ -405,6 +406,7 @@ async function initializeApp() {
     registerGitHandlers()
     registerWebsiteImportHandlers()
     registerChatWidgetHandlers()
+    registerBackgroundRemoverHandlers()
     registerDeploymentHandlers()
 
     // App-level IPC handlers

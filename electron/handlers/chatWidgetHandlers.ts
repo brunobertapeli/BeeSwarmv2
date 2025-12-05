@@ -75,15 +75,27 @@ export function registerChatWidgetHandlers(): void {
   // Image generation
   ipcMain.handle('chatWidget:generate-image', async (
     _event,
-    projectPath: string,
+    projectId: string,
     prompt: string,
     size?: string
   ) => {
     try {
       const result = await backendService.generateImage(prompt, size)
 
-      // Save image to .codedeck/generations folder
-      const genDir = path.join(projectPath, '.codedeck', 'generations')
+      // Get project to determine correct assets path
+      const project = databaseService.getProjectById(projectId)
+      if (!project || !project.path) {
+        throw new Error('Project not found')
+      }
+
+      // Use imagePath to determine assets folder (e.g., "frontend/public/assets/images" -> "frontend/public/assets")
+      let assetsFolder = 'public/assets' // default fallback
+      if (project.imagePath) {
+        assetsFolder = path.dirname(project.imagePath)
+      }
+
+      // Save image to assets/generations folder
+      const genDir = path.join(project.path, assetsFolder, 'generations')
       if (!fs.existsSync(genDir)) {
         fs.mkdirSync(genDir, { recursive: true })
       }

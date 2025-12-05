@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { projectService } from '../services/ProjectService'
 import { backendService } from '../services/BackendService'
-import { databaseService, KanbanState, StickyNotesState, AnalyticsWidgetState, WhiteboardWidgetState, ChatWidgetState } from '../services/DatabaseService'
+import { databaseService, KanbanState, StickyNotesState, AnalyticsWidgetState, WhiteboardWidgetState, ChatWidgetState, BackgroundRemoverWidgetState } from '../services/DatabaseService'
 import { envService } from '../services/EnvService'
 import { dependencyService } from '../services/DependencyService'
 import { getCurrentUserId, getCurrentUserEmail } from '../main'
@@ -875,6 +875,63 @@ export function registerProjectHandlers() {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get Chat widget state'
+      }
+    }
+  })
+
+  // Save Background Remover widget state
+  ipcMain.handle('project:save-background-remover-widget-state', async (_event, projectId: string, widgetState: BackgroundRemoverWidgetState) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      databaseService.saveBackgroundRemoverWidgetState(projectId, widgetState)
+
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('❌ Error saving Background Remover widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to save Background Remover widget state'
+      }
+    }
+  })
+
+  // Get Background Remover widget state
+  ipcMain.handle('project:get-background-remover-widget-state', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      validateProjectOwnership(projectId)
+
+      const widgetState = databaseService.getBackgroundRemoverWidgetState(projectId)
+
+      return {
+        success: true,
+        widgetState
+      }
+    } catch (error) {
+      console.error('❌ Error getting Background Remover widget state:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to get Background Remover widget state'
       }
     }
   })

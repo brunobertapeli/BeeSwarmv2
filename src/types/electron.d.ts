@@ -466,6 +466,25 @@ export interface ElectronAPI {
       } | null;
       error?: string;
     }>;
+    saveBackgroundRemoverWidgetState: (id: string, widgetState: {
+      enabled: boolean;
+      position: { x: number; y: number };
+      size: { width: number; height: number };
+      zIndex: number;
+    }) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    getBackgroundRemoverWidgetState: (id: string) => Promise<{
+      success: boolean;
+      widgetState?: {
+        enabled: boolean;
+        position: { x: number; y: number };
+        size: { width: number; height: number };
+        zIndex: number;
+      } | null;
+      error?: string;
+    }>;
     getAssetsStructure: (id: string) => Promise<{
       success: boolean;
       assets?: Array<{
@@ -953,7 +972,7 @@ export interface ElectronAPI {
       usage?: any
       error?: string
     }>
-    generateImage: (projectPath: string, prompt: string, size?: string) => Promise<{
+    generateImage: (projectId: string, prompt: string, size?: string) => Promise<{
       success: boolean
       localPath?: string
       filePath?: string
@@ -1030,6 +1049,38 @@ export interface ElectronAPI {
     onStreamDone: (callback: (usage: any) => void) => () => void
     onStreamError: (callback: (error: string) => void) => () => void
     removeStreamListeners: () => void
+  }
+
+  // Background Remover methods
+  backgroundRemover: {
+    remove: (imageBase64: string, projectId: string) => Promise<{
+      success: boolean
+      imageDataUrl?: string
+      localPath?: string
+      usage?: {
+        count: number
+        limit: number
+        remaining: number
+      }
+      error?: string
+    }>
+    saveState: (projectId: string, state: {
+      inputImagePath: string | null
+      inputImageName: string | null
+      resultImagePath: string | null
+    }) => Promise<{
+      success: boolean
+      error?: string
+    }>
+    loadState: (projectId: string) => Promise<{
+      success: boolean
+      state?: {
+        inputImagePath: string | null
+        inputImageName: string | null
+        resultImagePath: string | null
+      } | null
+      error?: string
+    }>
   }
 
   app: {

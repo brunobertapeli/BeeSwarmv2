@@ -503,6 +503,72 @@ class BackendService {
     return { image: response.image, usage: response.usage }
   }
 
+  async removeBackground(imageBase64: string): Promise<{ success: boolean; imageUrl?: string; usage?: { count: number; limit: number; remaining: number }; error?: string }> {
+    this.init()
+
+    if (!this.authToken) {
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    return new Promise((resolve) => {
+      const url = new URL('/api/v1/ai/background-removal', this.baseUrl)
+      const isHttps = url.protocol === 'https:'
+      const client = isHttps ? https : http
+
+      console.log(`[BG-REMOVER-SERVICE] Sending request to ${url.toString()}`)
+
+      const options: https.RequestOptions = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${this.authToken}`
+        },
+        timeout: 120000 // 2 minute timeout
+      }
+
+      const req = client.request(url, options, (res) => {
+        let data = ''
+        console.log(`[BG-REMOVER-SERVICE] Response status: ${res.statusCode}`)
+
+        res.on('data', (chunk) => {
+          data += chunk
+        })
+
+        res.on('end', () => {
+          console.log(`[BG-REMOVER-SERVICE] Response received, length: ${data.length}`)
+          try {
+            const parsed = JSON.parse(data)
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              resolve({ success: true, imageUrl: parsed.imageUrl, usage: parsed.usage })
+            } else {
+              resolve({ success: false, error: parsed.error || `HTTP ${res.statusCode}` })
+            }
+          } catch (error) {
+            console.error(`[BG-REMOVER-SERVICE] JSON parse error:`, data.substring(0, 200))
+            resolve({ success: false, error: 'Invalid JSON response' })
+          }
+        })
+      })
+
+      req.on('error', (error) => {
+        console.error(`[BG-REMOVER-SERVICE] Request error:`, error.message)
+        resolve({ success: false, error: error.message })
+      })
+
+      req.on('timeout', () => {
+        console.error(`[BG-REMOVER-SERVICE] Request timeout`)
+        req.destroy()
+        resolve({ success: false, error: 'Request timeout' })
+      })
+
+      const body = JSON.stringify({ image: imageBase64 })
+      console.log(`[BG-REMOVER-SERVICE] Sending body, size: ${Math.round(body.length / 1024)}KB`)
+      req.write(body)
+      req.end()
+    })
+  }
+
   // Streaming chat - returns a readable stream
   streamChat(
     messages: Array<{ role: string; content: string }>,

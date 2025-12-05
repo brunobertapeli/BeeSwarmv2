@@ -104,6 +104,19 @@ export interface ChatWidgetState {
   zIndex: number
 }
 
+export interface BackgroundRemoverWidgetState {
+  enabled: boolean
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  zIndex: number
+}
+
+export interface BgRemoverImageState {
+  inputImagePath: string | null
+  inputImageName: string | null
+  resultImagePath: string | null
+}
+
 export interface ChatWidgetMessage {
   id: string
   role: 'user' | 'assistant'
@@ -502,6 +515,18 @@ class DatabaseService {
       const hasDeployedCommit = tableInfo.some(col => col.name === 'deployedCommit')
       if (!hasDeployedCommit) {
         this.db.exec('ALTER TABLE projects ADD COLUMN deployedCommit TEXT')
+      }
+
+      // Migration 29: Add backgroundRemoverWidgetState column if it doesn't exist
+      const hasBackgroundRemoverWidgetState = tableInfo.some(col => col.name === 'backgroundRemoverWidgetState')
+      if (!hasBackgroundRemoverWidgetState) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN backgroundRemoverWidgetState TEXT')
+      }
+
+      // Migration 30: Add bgRemoverImageState column if it doesn't exist
+      const hasBgRemoverImageState = tableInfo.some(col => col.name === 'bgRemoverImageState')
+      if (!hasBgRemoverImageState) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN bgRemoverImageState TEXT')
       }
 
       // Future migrations can be added here
@@ -1122,6 +1147,88 @@ class DatabaseService {
       return JSON.parse(project.chatWidgetState) as ChatWidgetState
     } catch (error) {
       console.error('❌ Failed to parse Chat widget state:', error)
+      return null
+    }
+  }
+
+  /**
+   * Save Background Remover widget state for a project
+   */
+  saveBackgroundRemoverWidgetState(projectId: string, widgetState: BackgroundRemoverWidgetState): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save Background Remover widget state after database closed - ignoring')
+      return
+    }
+
+    const stateJson = JSON.stringify(widgetState)
+    const sql = 'UPDATE projects SET backgroundRemoverWidgetState = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(stateJson, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save Background Remover widget state:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get Background Remover widget state for a project
+   */
+  getBackgroundRemoverWidgetState(projectId: string): BackgroundRemoverWidgetState | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!project?.backgroundRemoverWidgetState) {
+      return null
+    }
+
+    try {
+      return JSON.parse(project.backgroundRemoverWidgetState) as BackgroundRemoverWidgetState
+    } catch (error) {
+      console.error('❌ Failed to parse Background Remover widget state:', error)
+      return null
+    }
+  }
+
+  /**
+   * Save Background Remover image state for a project
+   */
+  saveBgRemoverImageState(projectId: string, imageState: BgRemoverImageState): void {
+    if (!this.db) {
+      console.warn('⚠️ Attempted to save BG Remover image state after database closed - ignoring')
+      return
+    }
+
+    const stateJson = JSON.stringify(imageState)
+    const sql = 'UPDATE projects SET bgRemoverImageState = ? WHERE id = ?'
+
+    try {
+      this.db.prepare(sql).run(stateJson, projectId)
+    } catch (error) {
+      console.error('❌ Failed to save BG Remover image state:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get Background Remover image state for a project
+   */
+  getBgRemoverImageState(projectId: string): BgRemoverImageState | null {
+    if (!this.db) {
+      throw new Error('Database not initialized')
+    }
+
+    const project = this.getProjectById(projectId)
+    if (!(project as any)?.bgRemoverImageState) {
+      return null
+    }
+
+    try {
+      return JSON.parse((project as any).bgRemoverImageState) as BgRemoverImageState
+    } catch (error) {
+      console.error('❌ Failed to parse BG Remover image state:', error)
       return null
     }
   }

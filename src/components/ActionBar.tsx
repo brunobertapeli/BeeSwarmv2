@@ -26,7 +26,8 @@ import {
   PenTool,
   MessageSquare,
   RefreshCw,
-  Shapes
+  Shapes,
+  Wand2
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '../store/appStore'
@@ -85,7 +86,7 @@ function ActionBar({
   deployServices = []
 }: ActionBarProps) {
   const { viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, chatWidgetEnabled, setChatWidgetEnabled, iconsWidgetEnabled, setIconsWidgetEnabled, setStatusSheetExpanded, bringWidgetToFront, setPreviewHidden } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, chatWidgetEnabled, setChatWidgetEnabled, iconsWidgetEnabled, setIconsWidgetEnabled, backgroundRemoverWidgetEnabled, setBackgroundRemoverWidgetEnabled, setStatusSheetExpanded, bringWidgetToFront, setPreviewHidden } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
@@ -489,11 +490,19 @@ function ActionBar({
           toggleChat()
         }
       }
+
+      // B - Toggle Background Remover Widget (only in TOOLS mode)
+      if (e.key.toLowerCase() === 'b' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
+        if (layoutState === 'TOOLS') {
+          e.preventDefault()
+          toggleBackgroundRemover()
+        }
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, whiteboardWidgetEnabled, chatWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setWhiteboardWidgetEnabled, setChatWidgetEnabled, setEditModeEnabled])
+  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, whiteboardWidgetEnabled, chatWidgetEnabled, backgroundRemoverWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setWhiteboardWidgetEnabled, setChatWidgetEnabled, setBackgroundRemoverWidgetEnabled, setEditModeEnabled])
 
   // Listen for global shortcuts from Electron main process
   useEffect(() => {
@@ -973,6 +982,21 @@ function ActionBar({
     toast.info(
       newState ? 'Icons Enabled' : 'Icons Disabled',
       newState ? 'Icons widget shown' : 'Icons widget hidden'
+    )
+  }
+
+  const toggleBackgroundRemover = () => {
+    // Only allow in TOOLS mode
+    if (layoutState !== 'TOOLS') return
+
+    const newState = !backgroundRemoverWidgetEnabled
+    setBackgroundRemoverWidgetEnabled(newState)
+    if (newState) {
+      bringWidgetToFront('backgroundRemover')
+    }
+    toast.info(
+      newState ? 'Background Remover Enabled' : 'Background Remover Disabled',
+      newState ? 'Background Remover widget shown' : 'Background Remover widget hidden'
     )
   }
 
@@ -1715,6 +1739,23 @@ function ActionBar({
                       />
                       <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                         Toggle Icons (I)
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={toggleBackgroundRemover}
+                      className="p-1.5 rounded-lg hover:bg-dark-bg/50 transition-all icon-button-group relative ml-1"
+                    >
+                      <Wand2
+                        size={15}
+                        className={`transition-colors ${
+                          backgroundRemoverWidgetEnabled
+                            ? 'text-purple-500'
+                            : 'text-gray-400 hover:text-purple-400'
+                        }`}
+                      />
+                      <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                        Background Remover (B)
                       </span>
                     </button>
                   </div>

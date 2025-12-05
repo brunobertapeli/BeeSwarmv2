@@ -22,6 +22,7 @@ import ProjectAssetsWidget from './ProjectAssetsWidget'
 import WhiteboardWidget from './WhiteboardWidget'
 import IconsWidget from './IconsWidget'
 import ChatWidget from './ChatWidget'
+import { BackgroundRemoverWidget } from './BackgroundRemoverWidget'
 import GitHubSheet from './GitHubSheet'
 import { ModalPortal } from './ModalPortal'
 import { Project, ProcessState, ProcessOutput } from '../types/electron'
@@ -50,7 +51,7 @@ function ProjectView() {
     setSelectedDevice,
   } = useAppStore()
 
-  const { layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState, whiteboardWidgetEnabled, loadWhiteboardWidgetState, iconsWidgetEnabled, setIconsWidgetEnabled, loadIconsWidgetState, chatWidgetEnabled, loadChatWidgetState, setPreviewHidden } = useLayoutStore()
+  const { layoutState, kanbanEnabled, loadKanbanState, stickyNotes, loadStickyNotesState, analyticsWidgetEnabled, loadAnalyticsWidgetState, projectAssetsWidgetEnabled, loadProjectAssetsWidgetState, whiteboardWidgetEnabled, loadWhiteboardWidgetState, iconsWidgetEnabled, setIconsWidgetEnabled, loadIconsWidgetState, chatWidgetEnabled, loadChatWidgetState, backgroundRemoverWidgetEnabled, loadBackgroundRemoverWidgetState, setPreviewHidden } = useLayoutStore()
   const toast = useToast()
   const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'environment' | 'deployment'>('general')
   const [projects, setProjects] = useState<Project[]>([])
@@ -148,8 +149,9 @@ function ProjectView() {
       loadWhiteboardWidgetState(currentProjectId)
       loadIconsWidgetState(currentProjectId)
       loadChatWidgetState(currentProjectId)
+      loadBackgroundRemoverWidgetState(currentProjectId)
     }
-  }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState, loadProjectAssetsWidgetState, loadWhiteboardWidgetState, loadIconsWidgetState, loadChatWidgetState])
+  }, [currentProjectId, loadKanbanState, loadStickyNotesState, loadAnalyticsWidgetState, loadProjectAssetsWidgetState, loadWhiteboardWidgetState, loadIconsWidgetState, loadChatWidgetState, loadBackgroundRemoverWidgetState])
 
   // Sync helpChatFreezeReady with showHelpChat state
   useEffect(() => {
@@ -806,6 +808,9 @@ Please read the manifest to understand what my website is about, then create an 
 
       {/* Chat Widget */}
       {chatWidgetEnabled && layoutState === 'TOOLS' && <ChatWidget />}
+
+      {/* Background Remover Widget */}
+      {backgroundRemoverWidgetEnabled && layoutState === 'TOOLS' && <BackgroundRemoverWidget />}
 
       {/* Sticky Notes */}
       {layoutState === 'TOOLS' && stickyNotes.map((note) => (

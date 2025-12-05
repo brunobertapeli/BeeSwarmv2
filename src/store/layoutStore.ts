@@ -175,8 +175,18 @@ interface LayoutStoreState {
   chatWidgetZIndex: number;
   loadChatWidgetState: (projectId: string) => Promise<void>;
 
+  // Background Remover widget state
+  backgroundRemoverWidgetEnabled: boolean;
+  setBackgroundRemoverWidgetEnabled: (enabled: boolean) => void;
+  backgroundRemoverWidgetPosition: { x: number; y: number };
+  setBackgroundRemoverWidgetPosition: (position: { x: number; y: number }) => void;
+  backgroundRemoverWidgetSize: { width: number; height: number };
+  setBackgroundRemoverWidgetSize: (size: { width: number; height: number }) => void;
+  backgroundRemoverWidgetZIndex: number;
+  loadBackgroundRemoverWidgetState: (projectId: string) => Promise<void>;
+
   // Unified bring to front for all widgets and sticky notes
-  bringWidgetToFront: (widgetType: 'kanban' | 'analytics' | 'projectAssets' | 'whiteboard' | 'icons' | 'chat' | 'stickyNote', stickyNoteId?: string) => void;
+  bringWidgetToFront: (widgetType: 'kanban' | 'analytics' | 'projectAssets' | 'whiteboard' | 'icons' | 'chat' | 'backgroundRemover' | 'stickyNote', stickyNoteId?: string) => void;
 
   // Preview hidden state (when modals are open over browser)
   previewHidden: boolean;
@@ -369,6 +379,27 @@ const debouncedSaveChatWidgetState = (projectId: string, widgetState: {
   }, 500); // 500ms debounce
 };
 
+// Debounce helper for saving Background Remover widget state
+let saveBackgroundRemoverTimeout: NodeJS.Timeout | null = null;
+const debouncedSaveBackgroundRemoverWidgetState = (projectId: string, widgetState: {
+  enabled: boolean;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  zIndex: number;
+}) => {
+  if (saveBackgroundRemoverTimeout) {
+    clearTimeout(saveBackgroundRemoverTimeout);
+  }
+
+  saveBackgroundRemoverTimeout = setTimeout(async () => {
+    try {
+      await window.electronAPI?.projects.saveBackgroundRemoverWidgetState(projectId, widgetState);
+    } catch (error) {
+      console.error('Failed to save Background Remover widget state:', error);
+    }
+  }, 500); // 500ms debounce
+};
+
 export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   // State
   layoutState: 'DEFAULT', // Start in DEFAULT state
@@ -422,6 +453,12 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   chatWidgetPosition: { x: 5, y: 48 }, // 5px from left, below header
   chatWidgetSize: { width: 420, height: 550 },
   chatWidgetZIndex: 55,
+
+  // Background Remover widget initial state
+  backgroundRemoverWidgetEnabled: false,
+  backgroundRemoverWidgetPosition: { x: 20, y: 48 }, // 20px from left, below header
+  backgroundRemoverWidgetSize: { width: 650, height: 450 },
+  backgroundRemoverWidgetZIndex: 56,
 
   // Setters
   setLayoutState: (state) => set({ layoutState: state }),
@@ -1036,6 +1073,80 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
     }
   },
 
+  // Background Remover widget functions
+  setBackgroundRemoverWidgetEnabled: (enabled) => {
+    set({ backgroundRemoverWidgetEnabled: enabled });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveBackgroundRemoverWidgetState(currentProjectId, {
+        enabled,
+        position: state.backgroundRemoverWidgetPosition,
+        size: state.backgroundRemoverWidgetSize,
+        zIndex: state.backgroundRemoverWidgetZIndex
+      });
+    }
+  },
+
+  setBackgroundRemoverWidgetPosition: (position) => {
+    set({ backgroundRemoverWidgetPosition: position });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveBackgroundRemoverWidgetState(currentProjectId, {
+        enabled: state.backgroundRemoverWidgetEnabled,
+        position,
+        size: state.backgroundRemoverWidgetSize,
+        zIndex: state.backgroundRemoverWidgetZIndex
+      });
+    }
+  },
+
+  setBackgroundRemoverWidgetSize: (size) => {
+    set({ backgroundRemoverWidgetSize: size });
+    const currentProjectId = useAppStore.getState().currentProjectId;
+    if (currentProjectId) {
+      const state = get();
+      debouncedSaveBackgroundRemoverWidgetState(currentProjectId, {
+        enabled: state.backgroundRemoverWidgetEnabled,
+        position: state.backgroundRemoverWidgetPosition,
+        size,
+        zIndex: state.backgroundRemoverWidgetZIndex
+      });
+    }
+  },
+
+  loadBackgroundRemoverWidgetState: async (projectId: string) => {
+    try {
+      const result = await window.electronAPI?.projects.getBackgroundRemoverWidgetState(projectId);
+      if (result?.success && result.widgetState) {
+        set({
+          backgroundRemoverWidgetEnabled: result.widgetState.enabled,
+          backgroundRemoverWidgetPosition: result.widgetState.position,
+          backgroundRemoverWidgetSize: result.widgetState.size,
+          backgroundRemoverWidgetZIndex: result.widgetState.zIndex ?? 56
+        });
+      } else {
+        // Reset to defaults if no saved state
+        set({
+          backgroundRemoverWidgetEnabled: false,
+          backgroundRemoverWidgetPosition: { x: 20, y: 48 },
+          backgroundRemoverWidgetSize: { width: 650, height: 450 },
+          backgroundRemoverWidgetZIndex: 56
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load Background Remover widget state:', error);
+      // Reset to defaults on error
+      set({
+        backgroundRemoverWidgetEnabled: false,
+        backgroundRemoverWidgetPosition: { x: 20, y: 48 },
+        backgroundRemoverWidgetSize: { width: 650, height: 450 },
+        backgroundRemoverWidgetZIndex: 56
+      });
+    }
+  },
+
   // Unified bring to front for all widgets and sticky notes
   bringWidgetToFront: (widgetType, stickyNoteId) => {
     const state = get();
@@ -1049,6 +1160,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
       { type: 'whiteboard', zIndex: state.whiteboardWidgetZIndex },
       { type: 'icons', zIndex: state.iconsWidgetZIndex },
       { type: 'chat', zIndex: state.chatWidgetZIndex },
+      { type: 'backgroundRemover', zIndex: state.backgroundRemoverWidgetZIndex },
       ...state.stickyNotes.map(note => ({ type: 'stickyNote', id: note.id, zIndex: note.zIndex }))
     ];
 
@@ -1072,6 +1184,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
         else if (item.type === 'whiteboard') set({ whiteboardWidgetZIndex: normalizedZ });
         else if (item.type === 'icons') set({ iconsWidgetZIndex: normalizedZ });
         else if (item.type === 'chat') set({ chatWidgetZIndex: normalizedZ });
+        else if (item.type === 'backgroundRemover') set({ backgroundRemoverWidgetZIndex: normalizedZ });
         else if (item.type === 'stickyNote' && item.id) {
           set((s) => ({
             stickyNotes: s.stickyNotes.map(n => n.id === item.id ? { ...n, zIndex: normalizedZ } : n)
@@ -1141,6 +1254,16 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
           enabled: state.chatWidgetEnabled,
           position: state.chatWidgetPosition,
           size: state.chatWidgetSize,
+          zIndex: newTopZ
+        });
+      }
+    } else if (widgetType === 'backgroundRemover') {
+      set({ backgroundRemoverWidgetZIndex: newTopZ });
+      if (currentProjectId) {
+        debouncedSaveBackgroundRemoverWidgetState(currentProjectId, {
+          enabled: state.backgroundRemoverWidgetEnabled,
+          position: state.backgroundRemoverWidgetPosition,
+          size: state.backgroundRemoverWidgetSize,
           zIndex: newTopZ
         });
       }

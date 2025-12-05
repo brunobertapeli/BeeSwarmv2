@@ -496,12 +496,12 @@ function ChatWidget() {
     try {
       if (modelCategory === 'images') {
         // Image generation - direct response, not streaming
-        if (!projectPath) {
-          throw new Error('No project path available for saving images')
+        if (!currentProjectId) {
+          throw new Error('No project available for saving images')
         }
 
         const result = await window.electronAPI?.chatWidget?.generateImage(
-          projectPath,
+          currentProjectId,
           userPrompt,
           '1024x1024' // Default size
         )

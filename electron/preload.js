@@ -102,6 +102,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getIconsWidgetState: (id) => ipcRenderer.invoke('project:get-icons-widget-state', id),
     saveChatWidgetState: (id, widgetState) => ipcRenderer.invoke('project:save-chat-widget-state', id, widgetState),
     getChatWidgetState: (id) => ipcRenderer.invoke('project:get-chat-widget-state', id),
+    saveBackgroundRemoverWidgetState: (id, widgetState) => ipcRenderer.invoke('project:save-background-remover-widget-state', id, widgetState),
+    getBackgroundRemoverWidgetState: (id) => ipcRenderer.invoke('project:get-background-remover-widget-state', id),
     getAssetsStructure: (id) => ipcRenderer.invoke('project:get-assets-structure', id)
   },
 
@@ -351,7 +353,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getModels: () => ipcRenderer.invoke('chatWidget:get-models'),
     getUsage: () => ipcRenderer.invoke('chatWidget:get-usage'),
     chat: (messages, model) => ipcRenderer.invoke('chatWidget:chat', messages, model),
-    generateImage: (projectPath, prompt, size) => ipcRenderer.invoke('chatWidget:generate-image', projectPath, prompt, size),
+    generateImage: (projectId, prompt, size) => ipcRenderer.invoke('chatWidget:generate-image', projectId, prompt, size),
 
     // Conversation persistence
     getConversations: (projectId) => ipcRenderer.invoke('chatWidget:get-conversations', projectId),
@@ -380,6 +382,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeAllListeners('chatWidget:stream-done')
       ipcRenderer.removeAllListeners('chatWidget:stream-error')
     }
+  },
+
+  // Background Remover methods
+  backgroundRemover: {
+    remove: (imageBase64, projectId) => ipcRenderer.invoke('backgroundRemover:remove', imageBase64, projectId),
+    saveState: (projectId, state) => ipcRenderer.invoke('backgroundRemover:saveState', projectId, state),
+    loadState: (projectId) => ipcRenderer.invoke('backgroundRemover:loadState', projectId)
   },
 
   // Git methods
