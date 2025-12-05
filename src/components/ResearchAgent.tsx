@@ -57,7 +57,7 @@ const getModelDisplayName = (modelId: string): string => {
 const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectId, onStatusClick }, ref) => {
   const [isVisible, setIsVisible] = useState(false)
   const [availableModels, setAvailableModels] = useState<any[]>([])
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-5-20250929')
+  const [selectedModel, setSelectedModel] = useState('claude-opus-4-5-20251101')
   const [showModelDropdown, setShowModelDropdown] = useState(false)
   const [selectedAgentType, setSelectedAgentType] = useState('bug-finder')
   const [showAgentTypeDropdown, setShowAgentTypeDropdown] = useState(false)
@@ -273,8 +273,8 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
                     <div className="absolute bottom-full left-0 mb-1 w-40 bg-dark-card border border-dark-border rounded-lg shadow-xl z-[201] overflow-hidden">
                       <div className="p-1">
                         {(availableModels.length > 0 ? availableModels : [
-                          { value: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5' },
-                          { value: 'claude-opus-4-1-20250805', displayName: 'Opus 4.1' },
+                          { value: 'claude-opus-4-5-20251101', displayName: 'Sonnet 4.5' },
+                          { value: 'claude-opus-4-5-20251101', displayName: 'Opus 4.5' },
                           { value: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5' }
                         ]).map((model) => (
                           <button

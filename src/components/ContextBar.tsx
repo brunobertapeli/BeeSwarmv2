@@ -20,6 +20,8 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
   const [addendumText, setAddendumText] = useState('')
   const [isLoadingAddendum, setIsLoadingAddendum] = useState(false)
   const [isSavingAddendum, setIsSavingAddendum] = useState(false)
+  const [compactionCount, setCompactionCount] = useState(0)
+  const [compactedTokensOffset, setCompactedTokensOffset] = useState(0)
   const tooltipRef = useRef<HTMLDivElement>(null)
 
   // Hide/show preview when tooltip or addendum modal is open
@@ -180,14 +182,36 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
   // Note: Cache tokens (read/creation) do NOT count toward 200k limit
   const baselineTokens = baseline.systemPrompt + baseline.systemTools + baseline.memoryFiles + baseline.messages
   const conversationTokens = (context?.tokens.input || 0) + (context?.tokens.output || 0)
-  const totalTokens = baselineTokens + conversationTokens
+  const rawTotalTokens = baselineTokens + conversationTokens
   const contextWindow = context?.contextWindow || 200000
+
+  // Apply compaction offset
+  const totalTokens = Math.max(0, rawTotalTokens - compactedTokensOffset)
   const percentage = Math.round((totalTokens / contextWindow) * 100)
+
+  // Auto-compact when reaching 99% - resets to 33%
+  useEffect(() => {
+    if (percentage >= 99) {
+      // Calculate offset needed to bring percentage to 33%
+      const targetTokens = Math.round(contextWindow * 0.33)
+      const newOffset = rawTotalTokens - targetTokens
+      setCompactedTokensOffset(newOffset)
+      setCompactionCount(prev => prev + 1)
+    }
+  }, [percentage, rawTotalTokens, contextWindow])
+
+  // Reset compaction when context is cleared
+  useEffect(() => {
+    if (rawTotalTokens <= baselineTokens + 100 && compactedTokensOffset > 0) {
+      setCompactedTokensOffset(0)
+      setCompactionCount(0)
+    }
+  }, [rawTotalTokens, baselineTokens, compactedTokensOffset])
 
   const getBarColor = () => {
     if (percentage >= 80) return 'from-red-500 to-red-600'
-    if (percentage >= 60) return 'from-yellow-500 to-yellow-600'
-    return 'from-primary to-green-600'
+    if (percentage >= 60) return 'from-yellow-500 to-orange-500'
+    return 'from-green-500 to-green-600'
   }
 
   // Estimate tokens from addendum text (rough estimate: ~4 chars per token)
@@ -377,6 +401,19 @@ function ContextBar({ context, onClearContext, projectId }: ContextBarProps) {
                 </div>
               </div>
             </div>
+
+            {/* Compaction Stats - only show if compaction has occurred */}
+            {compactionCount > 0 && (
+              <div className="space-y-1.5 mt-2 pt-2 border-t border-dark-border/50">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0" />
+                  <span className="text-[10px] text-gray-400 flex-1">Compacted:</span>
+                  <span className="text-[10px] text-gray-300 font-medium tabular-nums">
+                    {compactionCount}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

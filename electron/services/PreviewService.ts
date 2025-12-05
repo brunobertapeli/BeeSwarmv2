@@ -80,42 +80,57 @@ class PreviewService extends EventEmitter {
 
     // Intercept keyboard shortcuts in WebContentsView
     view.webContents.on('before-input-event', async (event, input) => {
-      // Shift+Tab - used for layout switching (cycle between Browser and Workspace)
-      if (input.key === 'Tab' && input.type === 'keyDown' && input.shift && !input.meta && !input.control && !input.alt) {
-        event.preventDefault();
-        this.mainWindow?.webContents.send('layout-cycle-requested');
-      }
+      // Only process keyDown events
+      if (input.type !== 'keyDown') return;
 
-      // G key - Toggle GitHub Sheet
-      if (input.key.toLowerCase() === 'g' && input.type === 'keyDown' && !input.meta && !input.control && !input.alt) {
-        event.preventDefault();
-        this.mainWindow?.webContents.send('github-sheet-toggle-requested');
-      }
-
-      // For E and P keys, check if we're editing text first
-      if ((input.key.toLowerCase() === 'e' || input.key.toLowerCase() === 'p') && input.type === 'keyDown' && !input.meta && !input.control && !input.alt) {
+      // Helper function to check if user is typing in a form field
+      const isUserTyping = async (): Promise<boolean> => {
         try {
-          // Check if any element is currently contentEditable
-          const isEditing = await view.webContents.executeJavaScript(`
+          return await view.webContents.executeJavaScript(`
             (function() {
-              const activeElement = document.activeElement;
-              return activeElement && activeElement.isContentEditable;
+              const el = document.activeElement;
+              if (!el) return false;
+              const tagName = el.tagName.toLowerCase();
+              // Check for input, textarea, select, or contentEditable
+              if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+                return true;
+              }
+              if (el.isContentEditable) {
+                return true;
+              }
+              return false;
             })();
           `);
-
-          // If we're editing text, don't intercept the key
-          if (isEditing) {
-            return;
-          }
         } catch (error) {
-          // If executeJavaScript fails, assume we're not editing
-          console.error('Failed to check contentEditable state:', error);
+          // If executeJavaScript fails, assume NOT editing (allow hotkeys)
+          return false;
+        }
+      };
+
+      // Shift+Tab - used for layout switching (cycle between Browser and Workspace)
+      if (input.key === 'Tab' && input.shift && !input.meta && !input.control && !input.alt) {
+        // Always allow Shift+Tab hotkey even when typing (it's not a character key)
+        event.preventDefault();
+        this.mainWindow?.webContents.send('layout-cycle-requested');
+        return;
+      }
+
+      // For character keys, check if user is typing first
+      const charKeys = ['g', 'e', 'p'];
+      if (charKeys.includes(input.key.toLowerCase()) && !input.meta && !input.control && !input.alt) {
+        // Check if user is typing in a form field
+        const typing = await isUserTyping();
+        if (typing) {
+          // User is typing, don't intercept
+          return;
         }
 
-        // Not editing, so intercept the key
+        // Not typing, intercept the hotkey
         event.preventDefault();
 
-        if (input.key.toLowerCase() === 'e') {
+        if (input.key.toLowerCase() === 'g') {
+          this.mainWindow?.webContents.send('github-sheet-toggle-requested');
+        } else if (input.key.toLowerCase() === 'e') {
           this.mainWindow?.webContents.send('edit-mode-toggle-requested');
         } else if (input.key.toLowerCase() === 'p') {
           this.mainWindow?.webContents.send('screenshot-requested');

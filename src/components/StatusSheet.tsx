@@ -21,7 +21,7 @@ import AnthropicIcon from '../assets/images/anthropic.svg'
 import GitIcon from '../assets/images/git.svg'
 import successSound from '../assets/sounds/success.wav'
 
-function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, onApprovePlan, onRejectPlan, onXMLTagClick, onXMLTagDetected }: StatusSheetProps) {
+function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onStopClick, onApprovePlan, onRejectPlan, onXMLTagClick, onXMLTagDetected, onFixDeploymentError }: StatusSheetProps) {
   const { showStatusSheet, setShowStatusSheet, viewMode } = useAppStore()
   const { layoutState, statusSheetExpanded, setStatusSheetExpanded, setPreviewHidden } = useLayoutStore()
   const [isExpanded, setIsExpanded] = useState(false)
@@ -324,6 +324,10 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             if (message.includes('Build complete') || message.includes('built in')) {
               updatedStages[0] = { ...updatedStages[0], isComplete: true }
             }
+            // Build FAILED - mark Building project as failed
+            if (message.includes('Build') && message.includes('FAILED')) {
+              updatedStages[0] = { ...updatedStages[0], isFailed: true }
+            }
             if (message.includes('Uploading') || message.includes('Finished uploading')) {
               updatedStages[0] = { ...updatedStages[0], isComplete: true }
               updatedStages[1] = { ...updatedStages[1], isComplete: message.includes('Finished') }
@@ -356,6 +360,17 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
               updatedStages[1] = { ...updatedStages[1], isComplete: true }
               updatedStages[2] = { ...updatedStages[2], isComplete: true }
             }
+            // Backend FAILED - mark Building Backend as failed
+            if (message.includes('Backend') && message.includes('FAILED')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[1] = { ...updatedStages[1], isFailed: true }
+            }
+            // Backend CRASHED - deployed successfully but crashed at runtime
+            if (message.includes('Backend') && message.includes('CRASHED')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[1] = { ...updatedStages[1], isComplete: true }
+              updatedStages[2] = { ...updatedStages[2], isFailed: true, label: 'Backend Crashed' }
+            }
 
             // Frontend stages
             if (message.includes('Frontend') && message.includes('BUILDING')) {
@@ -369,6 +384,31 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             }
             if (message.includes('Frontend') && message.includes('SUCCESS')) {
               updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[3] = { ...updatedStages[3], isComplete: true }
+              updatedStages[4] = { ...updatedStages[4], isComplete: true }
+            }
+            // Frontend FAILED - mark Building Frontend as failed
+            if (message.includes('Frontend') && message.includes('FAILED')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              // Backend should be complete if we got to frontend
+              updatedStages[1] = { ...updatedStages[1], isComplete: true }
+              updatedStages[2] = { ...updatedStages[2], isComplete: true }
+              updatedStages[3] = { ...updatedStages[3], isFailed: true }
+            }
+            // Frontend CRASHED - deployed successfully but crashed at runtime
+            if (message.includes('Frontend') && message.includes('CRASHED')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[1] = { ...updatedStages[1], isComplete: true }
+              updatedStages[2] = { ...updatedStages[2], isComplete: true }
+              updatedStages[3] = { ...updatedStages[3], isComplete: true }
+              updatedStages[4] = { ...updatedStages[4], isFailed: true, label: 'Frontend Crashed' }
+            }
+
+            // All services running - mark everything complete
+            if (message.includes('All services running')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[1] = { ...updatedStages[1], isComplete: true }
+              updatedStages[2] = { ...updatedStages[2], isComplete: true }
               updatedStages[3] = { ...updatedStages[3], isComplete: true }
               updatedStages[4] = { ...updatedStages[4], isComplete: true }
             }
@@ -395,10 +435,11 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
             isComplete: true,
             completedAt: Date.now(),
             deploymentUrl: result.success ? result.url : undefined,
-            deploymentStages: block.deploymentStages?.map(s => ({
-              ...s,
-              isComplete: result.success,
-            })),
+            // Only mark all stages complete if successful
+            // If failed, preserve individual stage statuses (including isFailed)
+            deploymentStages: result.success
+              ? block.deploymentStages?.map(s => ({ ...s, isComplete: true }))
+              : block.deploymentStages, // Keep existing statuses on failure
           }
         }
         return block
@@ -412,9 +453,27 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     }
   }, [projectId])
 
-  // Auto-scroll to bottom when blocks change or when expanded
+  // Track if user is near bottom (for smart auto-scroll)
+  const isNearBottomRef = useRef(true)
+
+  // Update near-bottom status on scroll
   useEffect(() => {
-    if (isExpanded && scrollContainerRef.current) {
+    const scrollContainer = scrollContainerRef.current
+    if (!scrollContainer || !isExpanded) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+      isNearBottomRef.current = distanceFromBottom < 150
+    }
+
+    scrollContainer.addEventListener('scroll', handleScroll)
+    return () => scrollContainer.removeEventListener('scroll', handleScroll)
+  }, [isExpanded])
+
+  // Auto-scroll to bottom only if user is near bottom
+  useEffect(() => {
+    if (isExpanded && scrollContainerRef.current && isNearBottomRef.current) {
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight
     }
   }, [allBlocks, isExpanded])
@@ -577,6 +636,11 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
     }
 
     if (currentBlock.type === 'deployment') {
+      // Check if any stage failed
+      const hasFailed = currentBlock.deploymentStages?.some(s => s.isFailed)
+      if (hasFailed) {
+        return { text: 'Deployment failed', icon: X, needsAttention: true }
+      }
       if (currentBlock.isComplete) {
         return { text: 'Deployment complete!', icon: Globe, needsAttention: true }
       }
@@ -1052,24 +1116,52 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                               </div>
                               <div className="step-content">
                                 {/* Header */}
-                                <div className="flex items-center gap-2 pt-1 pb-2">
-                                  <span className="text-[14px] font-semibold text-gray-100">
-                                    {block.isComplete
-                                      ? `Deployed to ${providerName}`
-                                      : `Deploying to ${providerName}`}
-                                  </span>
-                                  {block.isComplete ? (
-                                    <span className="text-[12px] text-gray-500">{elapsedTime.toFixed(1)}s</span>
-                                  ) : (
-                                    <Loader2 size={12} className="text-primary animate-spin" />
-                                  )}
-                                </div>
+                                {(() => {
+                                  // Check if any stage failed
+                                  const hasFailed = block.deploymentStages?.some(s => s.isFailed)
+                                  // Check if all stages are complete (health check phase)
+                                  const allStagesComplete = block.deploymentStages?.every(s => s.isComplete) && !hasFailed
+                                  const isHealthCheckPhase = allStagesComplete && !block.isComplete
+
+                                  return (
+                                    <div className="flex flex-col gap-1 pt-1 pb-2">
+                                      <div className="flex items-center gap-2">
+                                        <span className={`text-[14px] font-semibold ${hasFailed ? 'text-red-400' : 'text-gray-100'}`}>
+                                          {hasFailed
+                                            ? `${providerName} Deployment Failed`
+                                            : block.isComplete
+                                            ? `Deployed to ${providerName}`
+                                            : isHealthCheckPhase
+                                            ? `Deployed to ${providerName}`
+                                            : `Deploying to ${providerName}`}
+                                        </span>
+                                        {hasFailed ? (
+                                          <span className="text-[12px] text-gray-500">{elapsedTime.toFixed(1)}s</span>
+                                        ) : block.isComplete ? (
+                                          <span className="text-[12px] text-gray-500">{elapsedTime.toFixed(1)}s</span>
+                                        ) : (
+                                          <Loader2 size={12} className="text-primary animate-spin" />
+                                        )}
+                                      </div>
+                                      {/* Subtext for different phases */}
+                                      {!block.isComplete && !hasFailed && (
+                                        <span className="text-[11px] text-gray-500">
+                                          {isHealthCheckPhase
+                                            ? 'Running health checks to make sure everything works...'
+                                            : 'This can take up to 5 minutes'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
 
                                 {/* Deployment Stages */}
                                 <div className="space-y-2">
                                   {block.deploymentStages?.map((stage, idx) => (
                                     <div key={idx} className="flex items-center gap-2">
-                                      {stage.isComplete ? (
+                                      {stage.isFailed ? (
+                                        <X size={12} className="text-red-400 flex-shrink-0" />
+                                      ) : stage.isComplete ? (
                                         <Check size={12} className="text-green-400 flex-shrink-0" />
                                       ) : currentStage === stage ? (
                                         <Loader2 size={12} className="text-primary animate-spin flex-shrink-0" />
@@ -1079,13 +1171,26 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                         </div>
                                       )}
                                       <span className={`text-[13px] ${
-                                        stage.isComplete
+                                        stage.isFailed
+                                          ? 'text-red-400'
+                                          : stage.isComplete
                                           ? 'text-gray-400'
                                           : currentStage === stage
                                           ? 'text-gray-200'
                                           : 'text-gray-500'
                                       }`}>
                                         {stage.label}
+                                        {stage.isFailed && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              onFixDeploymentError?.()
+                                            }}
+                                            className="ml-2 text-[11px] text-red-400/70 hover:text-red-300 hover:underline transition-colors"
+                                          >
+                                            (Click to fix)
+                                          </button>
+                                        )}
                                       </span>
                                     </div>
                                   ))}
@@ -1251,7 +1356,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                                       return (
                                         <div>
-                                          <p className={`text-[14px] text-gray-300 leading-relaxed ${needsExpansion && !isPromptExpanded ? 'line-clamp-3' : ''}`}>
+                                          <p className={`text-[14px] text-gray-300 leading-relaxed whitespace-pre-wrap ${needsExpansion && !isPromptExpanded ? 'line-clamp-3' : ''}`}>
                                             {prompt}
                                           </p>
                                           {needsExpansion && (

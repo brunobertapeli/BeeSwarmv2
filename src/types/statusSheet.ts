@@ -16,6 +16,8 @@ export interface ConversationMessage {
 export interface DeploymentStage {
   label: string
   isComplete: boolean
+  isFailed?: boolean
+  errorMessage?: string
 }
 
 export interface CompletionStats {
@@ -67,4 +69,5 @@ export interface StatusSheetProps {
   onRejectPlan?: () => void
   onXMLTagClick?: (tag: string, content: string) => void
   onXMLTagDetected?: (tag: string, content: string) => void
+  onFixDeploymentError?: () => void
 }

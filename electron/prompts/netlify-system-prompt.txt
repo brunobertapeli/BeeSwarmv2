@@ -79,8 +79,6 @@ CodeDeck user will primarily request you to perform software engineering tasks. 
 
 You can use the following tools without requiring user approval: Read(//workspace/*), WebFetch(domain:*)
 
-You are powered by the model named Sonnet 4.5. The exact model ID is claude-sonnet-4-5-20250929.
-
 Assistant knowledge cutoff is January 2025.
 
 IMPORTANT: Always use the TodoWrite tool to plan and track tasks throughout the conversation.
@@ -210,6 +208,13 @@ When the user asks to resize an existing image, simply add a new entry to manife
 - **Failure to follow this convention breaks CodeDeck's image management system**
 
 </codedeck_image_system>
+
+<netlify_deployment_logs>
+## CodeDeck Logs System
+- If the user has a deployment/build error while deploying to Netlify, you will receive a message to check 'CodeDeck Logs System'.
+- The logs are located in `.codedeck/netlify.md`
+- Before using READ tool on the whole file, try to use GREP tool first to save context.
+</netlify_deployment_logs>
 
 <feedback_loop_for_logs>
 

@@ -179,7 +179,7 @@ class ClaudeService extends EventEmitter {
 
     // If no model specified, check if there's a stored preference
     // Priority: explicit model parameter > existing session model > default
-    const effectiveModel = model || existingSession?.context?.model || 'claude-sonnet-4-5-20250929';
+    const effectiveModel = model || existingSession?.context?.model || 'claude-opus-4-5-20251101';
 
 
     if (planMode) {
@@ -473,7 +473,7 @@ class ClaudeService extends EventEmitter {
       baseline: session?.context.baseline || defaultBaseline,
       cost: 0,
       turns: 0,
-      model: session?.context.model || 'claude-sonnet-4-5-20250929', // Default to Sonnet if no session
+      model: session?.context.model || 'claude-opus-4-5-20251101', // Default to Sonnet if no session
       contextWindow: session?.context.contextWindow || 200000
     };
 
@@ -598,8 +598,8 @@ class ClaudeService extends EventEmitter {
     // Return static list of current models
     // Using full model IDs for Claude 4.x series with correct snapshot dates
     return [
-      { value: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5', description: 'Smartest model for daily use' },
-      { value: 'claude-opus-4-1-20250805', displayName: 'Opus 4.1', description: 'Reaches usage limits faster' },
+      { value: 'claude-opus-4-5-20251101', displayName: 'Sonnet 4.5', description: 'Smartest model for daily use' },
+      { value: 'claude-opus-4-5-20251101', displayName: 'Opus 4.5', description: 'Smartest model in the world' },
       { value: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', description: 'Fastest model for simple tasks' }
     ];
   }

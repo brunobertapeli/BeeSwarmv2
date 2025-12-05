@@ -267,22 +267,7 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
             </div>
           )}
 
-          {/* Highlight layer behind textarea */}
-          <div
-            ref={highlightRef}
-            className={`absolute inset-0 pointer-events-none whitespace-pre-wrap break-words overflow-auto ${hasPills ? 'pl-2 py-2.5' : 'px-3.5 py-2.5'} [&::-webkit-scrollbar]:hidden`}
-            style={{
-              lineHeight: '24px',
-              height: '77px',
-              wordWrap: 'break-word',
-              overflowWrap: 'break-word',
-              scrollbarWidth: 'none',
-              msOverflowStyle: 'none',
-            }}
-            aria-hidden="true"
-          >
-            {getHighlightedText()}
-          </div>
+          {/* Highlight layer - hidden, kept for potential future use */}
 
           {/* Actual textarea on top */}
           <textarea
@@ -297,15 +282,13 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
             onDrop={onDrop}
             onScroll={handleScroll}
             disabled={disabled}
-            className={`relative bg-transparent border-none outline-none resize-none ${hasPills ? 'pl-2 py-2.5' : 'px-3.5 py-2.5'} w-full`}
+            className={`relative bg-transparent border-none outline-none resize-none ${hasPills ? 'pl-2 py-2.5' : 'px-3.5 py-2.5'} w-full text-white`}
             rows={3}
             style={{
               lineHeight: '24px',
               height: '77px',
               overflow: 'auto',
               caretColor: 'white',
-              color: 'transparent',
-              WebkitTextFillColor: 'transparent',
             }}
           />
         </div>

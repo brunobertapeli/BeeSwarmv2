@@ -476,7 +476,20 @@ class DeploymentService {
       )
 
       if (!buildResult.success) {
-        return { success: false, error: `Build failed: ${buildResult.error}` }
+        // Combine stdout and stderr for full build output
+        const fullOutput = buildResult.output + '\n' + (buildResult.error || '')
+        const logs = fullOutput.split('\n').filter(line => line.trim())
+
+        // Extract meaningful error summary
+        const errorSummary = this.extractErrorSummary(logs)
+
+        // Save logs to netlify.md
+        this.saveNetlifyErrorLogs(projectPath, logs)
+
+        // Send progress message for StatusSheet to detect
+        onProgress(`❌ Build: FAILED${errorSummary ? ` - ${errorSummary}` : ''}`)
+
+        return { success: false, error: `Build failed: ${errorSummary || buildResult.error}` }
       }
 
       onProgress('✅ Build complete!')
@@ -1068,19 +1081,27 @@ class DeploymentService {
             projectId,
             servicesToPoll,
             environmentId,
+            projectPath,
             onProgress
           )
 
           if (!pollResult.success) {
-            // Check which services failed
+            // Check which services failed and extract error summary
             const failedServices = servicesToPoll
               .filter(s => pollResult.statuses[s.id] === 'FAILED' || pollResult.statuses[s.id] === 'CRASHED')
-              .map(s => `${s.name}: ${pollResult.statuses[s.id]}`)
 
             if (failedServices.length > 0) {
+              // Build error message with actual error from logs
+              const errorDetails = failedServices.map(s => {
+                const logs = pollResult.errorLogs[s.id] || []
+                // Extract the most relevant error line (look for error patterns)
+                const errorLine = this.extractErrorSummary(logs)
+                return `${s.name}: ${errorLine || pollResult.statuses[s.id]}`
+              }).join('\n')
+
               return {
                 success: false,
-                error: `Build failed: ${failedServices.join(', ')}`,
+                error: `Build failed:\n${errorDetails}`,
                 projectId: projectId || undefined
               }
             }
@@ -1147,15 +1168,19 @@ class DeploymentService {
             projectId,
             [{ id: serviceId, name: 'Service' }],
             environmentId,
+            projectPath,
             onProgress
           )
 
           if (!pollResult.success) {
             const status = pollResult.statuses[serviceId]
             if (status === 'FAILED' || status === 'CRASHED') {
+              // Extract error summary from logs
+              const logs = pollResult.errorLogs[serviceId] || []
+              const errorLine = this.extractErrorSummary(logs)
               return {
                 success: false,
-                error: `Build failed: ${status}`,
+                error: `Build failed: ${errorLine || status}`,
                 projectId: projectId || undefined
               }
             }
@@ -1188,6 +1213,311 @@ class DeploymentService {
   }
 
   /**
+   * Save Railway error logs to project's .codedeck/logs/railway.md
+   * Clears the file before writing (only keeps latest error)
+   */
+  private saveRailwayErrorLogs(projectPath: string, serviceName: string, logs: string[]): void {
+    try {
+      const logsDir = path.join(projectPath, '.codedeck', 'logs')
+      const railwayLogPath = path.join(logsDir, 'railway.md')
+
+      // Ensure directory exists
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true })
+      }
+
+      // Build log content with header
+      const timestamp = new Date().toISOString()
+      const content = `# Railway Build Error - ${serviceName}\n` +
+        `**Timestamp:** ${timestamp}\n\n` +
+        `## Build Logs\n\n` +
+        '```\n' +
+        logs.join('\n') +
+        '\n```\n'
+
+      // Clear and write (only keep latest error)
+      fs.writeFileSync(railwayLogPath, content, 'utf-8')
+      console.log(`📝 [RAILWAY] Error logs saved to ${railwayLogPath}`)
+    } catch (error) {
+      console.error('❌ [RAILWAY] Failed to save error logs:', error)
+    }
+  }
+
+  /**
+   * Save Netlify build error logs to project's .codedeck/logs/netlify.md
+   * Clears the file before writing (only keeps latest error)
+   */
+  private saveNetlifyErrorLogs(projectPath: string, logs: string[]): void {
+    try {
+      const logsDir = path.join(projectPath, '.codedeck', 'logs')
+      const netlifyLogPath = path.join(logsDir, 'netlify.md')
+
+      // Ensure directory exists
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true })
+      }
+
+      // Build log content with header
+      const timestamp = new Date().toISOString()
+      const content = `# Netlify Build Error\n` +
+        `**Timestamp:** ${timestamp}\n\n` +
+        `## Build Logs\n\n` +
+        '```\n' +
+        logs.join('\n') +
+        '\n```\n'
+
+      // Clear and write (only keep latest error)
+      fs.writeFileSync(netlifyLogPath, content, 'utf-8')
+      console.log(`📝 [NETLIFY] Error logs saved to ${netlifyLogPath}`)
+    } catch (error) {
+      console.error('❌ [NETLIFY] Failed to save error logs:', error)
+    }
+  }
+
+  /**
+   * Extract a meaningful error summary from build logs
+   * Looks for common error patterns and returns the most relevant line
+   */
+  private extractErrorSummary(logs: string[]): string | null {
+    if (logs.length === 0) return null
+
+    // Common error patterns to look for (in priority order)
+    const errorPatterns = [
+      /error\[E\d+\]:/i,                    // Rust errors
+      /error: /i,                            // Generic error
+      /Error: /,                             // Node/JS errors
+      /failed to compile/i,                  // Build failures
+      /Cannot find module/i,                 // Module not found
+      /Module not found/i,                   // Webpack module errors
+      /SyntaxError/i,                        // Syntax errors
+      /TypeError/i,                          // Type errors
+      /ReferenceError/i,                     // Reference errors
+      /ENOENT/i,                             // File not found
+      /npm ERR!/i,                           // npm errors
+      /exit code 1/i,                        // Generic exit failure
+      /Build failed/i,                       // Build failure
+      /command failed/i,                     // Command failure
+    ]
+
+    // Search logs from end to start (recent logs are more relevant)
+    const reversedLogs = [...logs].reverse()
+
+    for (const pattern of errorPatterns) {
+      for (const line of reversedLogs) {
+        if (pattern.test(line)) {
+          // Clean up the line and truncate if too long
+          const cleanLine = line.trim().slice(0, 200)
+          return cleanLine
+        }
+      }
+    }
+
+    // If no pattern matched, return the last non-empty line
+    for (const line of reversedLogs) {
+      const trimmed = line.trim()
+      if (trimmed && trimmed.length > 10) {
+        return trimmed.slice(0, 200)
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Fetch build logs for a Railway deployment
+   * Returns the last N lines of build logs
+   */
+  private async fetchRailwayBuildLogs(
+    token: string,
+    deploymentId: string,
+    limit: number = 100
+  ): Promise<string[]> {
+    try {
+      const response = await fetch('https://backboard.railway.app/graphql/v2', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          query: `
+            query GetBuildLogs($deploymentId: String!, $limit: Int!) {
+              buildLogs(deploymentId: $deploymentId, limit: $limit) {
+                message
+              }
+            }
+          `,
+          variables: { deploymentId, limit }
+        })
+      })
+
+      const result = await response.json() as any
+      const logs = result.data?.buildLogs || []
+      return logs.map((log: { message: string }) => log.message)
+    } catch (error) {
+      console.error('❌ [RAILWAY] Error fetching build logs:', error)
+      return []
+    }
+  }
+
+  /**
+   * Post-deployment health check - monitors services for runtime crashes after successful deployment
+   * Polls for ~20 seconds to catch services that crash on startup
+   */
+  private async postDeploymentHealthCheck(
+    token: string,
+    projectId: string,
+    services: Array<{ id: string; name: string }>,
+    environmentId: string,
+    projectPath: string,
+    deploymentIds: Record<string, string>,
+    onProgress: (message: string) => void
+  ): Promise<{ success: boolean; statuses: Record<string, string>; errorLogs: Record<string, string[]> }> {
+    const healthCheckDurationMs = 20000 // 20 seconds
+    const pollIntervalMs = 3000 // Poll every 3 seconds
+    const startTime = Date.now()
+    const statuses: Record<string, string> = {}
+    const errorLogs: Record<string, string[]> = {}
+
+    // Initialize all statuses as SUCCESS (they passed deployment)
+    for (const service of services) {
+      statuses[service.id] = 'SUCCESS'
+    }
+
+    while (Date.now() - startTime < healthCheckDurationMs) {
+      try {
+        // Query current deployment status to detect crashes
+        const response = await fetch('https://backboard.railway.app/graphql/v2', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            query: `
+              query GetDeployments($projectId: String!, $environmentId: String!) {
+                deployments(
+                  first: 10
+                  input: {
+                    projectId: $projectId
+                    environmentId: $environmentId
+                  }
+                ) {
+                  edges {
+                    node {
+                      id
+                      status
+                      serviceId
+                    }
+                  }
+                }
+              }
+            `,
+            variables: { projectId, environmentId }
+          })
+        })
+
+        const result = await response.json() as any
+        const deployments = result.data?.deployments?.edges || []
+
+        // Check each service for crashes
+        for (const service of services) {
+          const serviceDeployment = deployments.find((d: any) => d.node.serviceId === service.id)
+          const currentStatus = serviceDeployment?.node?.status || 'UNKNOWN'
+
+          // Detect if service crashed after deployment
+          if (currentStatus === 'CRASHED') {
+            const prevStatus = statuses[service.id]
+            statuses[service.id] = 'CRASHED'
+
+            // Only log and fetch if this is a new crash
+            if (prevStatus !== 'CRASHED') {
+              console.log(`\n💥 [RAILWAY] ${service.name} crashed at runtime!`)
+              onProgress(`💥 ${service.name}: CRASHED (runtime error)`)
+
+              // Fetch deployment logs (runtime errors are in deploy logs, not build logs)
+              const deploymentId = deploymentIds[service.id] || serviceDeployment?.node?.id
+              if (deploymentId) {
+                const logs = await this.fetchRailwayDeployLogs(token, deploymentId, 150)
+                errorLogs[service.id] = logs
+
+                if (logs.length > 0) {
+                  console.log(`\n========== ${service.name} RUNTIME ERROR LOGS ==========`)
+                  const relevantLogs = logs.slice(-50)
+                  for (const line of relevantLogs) {
+                    console.log(line)
+                  }
+                  console.log(`========== END ${service.name} LOGS ==========\n`)
+
+                  // Save logs to railway.md
+                  this.saveRailwayErrorLogs(projectPath, service.name, logs)
+
+                  // Send detailed error message
+                  const errorSummary = this.extractErrorSummary(logs)
+                  onProgress(`❌ ${service.name}: CRASHED${errorSummary ? ` - ${errorSummary}` : ''}`)
+                } else {
+                  console.log(`⚠️ [RAILWAY] No runtime logs available for ${service.name}`)
+                }
+              }
+
+              // Return immediately on crash detection
+              return { success: false, statuses, errorLogs }
+            }
+          }
+        }
+
+      } catch (error) {
+        console.error('❌ [RAILWAY] Error during health check:', error)
+        // Continue checking despite errors
+      }
+
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
+    }
+
+    // Health check passed - all services still running
+    onProgress('✅ All services running')
+    return { success: true, statuses, errorLogs }
+  }
+
+  /**
+   * Fetch deploy/runtime logs for a Railway deployment
+   * Different from build logs - these are the logs from when the service runs
+   */
+  private async fetchRailwayDeployLogs(
+    token: string,
+    deploymentId: string,
+    limit: number = 100
+  ): Promise<string[]> {
+    try {
+      const response = await fetch('https://backboard.railway.app/graphql/v2', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          query: `
+            query GetDeployLogs($deploymentId: String!, $limit: Int!) {
+              deploymentLogs(deploymentId: $deploymentId, limit: $limit) {
+                message
+              }
+            }
+          `,
+          variables: { deploymentId, limit }
+        })
+      })
+
+      const result = await response.json() as any
+      const logs = result.data?.deploymentLogs || []
+      return logs.map((log: { message: string }) => log.message)
+    } catch (error) {
+      console.error('❌ [RAILWAY] Error fetching deploy logs:', error)
+      return []
+    }
+  }
+
+  /**
    * Poll Railway deployment status until it reaches a terminal state (SUCCESS, FAILED, CRASHED)
    * Returns the final status for all services
    */
@@ -1196,12 +1526,15 @@ class DeploymentService {
     projectId: string,
     services: Array<{ id: string; name: string }>,
     environmentId: string,
+    projectPath: string,
     onProgress: (message: string) => void,
     maxWaitMs: number = 300000 // 5 minutes max
-  ): Promise<{ success: boolean; statuses: Record<string, string> }> {
+  ): Promise<{ success: boolean; statuses: Record<string, string>; errorLogs: Record<string, string[]> }> {
     const startTime = Date.now()
     const pollIntervalMs = 5000 // Poll every 5 seconds
     const statuses: Record<string, string> = {}
+    const deploymentIds: Record<string, string> = {} // Track deployment ID for each service
+    const errorLogs: Record<string, string[]> = {} // Store error logs for failed services
 
     // Create a map of serviceId -> name for easy lookup
     const serviceNames = new Map(services.map(s => [s.id, s.name]))
@@ -1254,9 +1587,13 @@ class DeploymentService {
           // Find the most recent deployment for this service
           const serviceDeployment = deployments.find((d: any) => d.node.serviceId === service.id)
           const status = serviceDeployment?.node?.status || 'UNKNOWN'
+          const deploymentId = serviceDeployment?.node?.id
           const prevStatus = statuses[service.id]
 
           statuses[service.id] = status
+          if (deploymentId) {
+            deploymentIds[service.id] = deploymentId
+          }
 
           // Log status changes
           if (prevStatus !== status) {
@@ -1272,9 +1609,67 @@ class DeploymentService {
           }
         }
 
-        // If all services have reached terminal status, we're done
+        // If all services have reached terminal status, check for failures
         if (allTerminal && services.length > 0) {
-          return { success: !anyFailed, statuses }
+          // If any service failed during build/deploy, handle it
+          if (anyFailed) {
+            // Fetch error logs for any failed services
+            for (const service of services) {
+              const status = statuses[service.id]
+              const deploymentId = deploymentIds[service.id]
+
+              if ((status === 'FAILED' || status === 'CRASHED') && deploymentId) {
+                console.log(`\n❌ [RAILWAY] ${service.name} build failed. Fetching logs...`)
+                const logs = await this.fetchRailwayBuildLogs(token, deploymentId, 150)
+                errorLogs[service.id] = logs
+
+                // Log the error to console
+                if (logs.length > 0) {
+                  console.log(`\n========== ${service.name} BUILD ERROR LOGS ==========`)
+                  const relevantLogs = logs.slice(-50)
+                  for (const line of relevantLogs) {
+                    console.log(line)
+                  }
+                  console.log(`========== END ${service.name} LOGS ==========\n`)
+
+                  // Save logs to railway.md
+                  this.saveRailwayErrorLogs(projectPath, service.name, logs)
+
+                  // Extract error summary and send progress message
+                  const errorSummary = this.extractErrorSummary(logs)
+                  onProgress(`❌ ${service.name}: FAILED${errorSummary ? ` - ${errorSummary}` : ''}`)
+                } else {
+                  console.log(`⚠️ [RAILWAY] No build logs available for ${service.name}`)
+                  onProgress(`❌ ${service.name}: FAILED`)
+                }
+              }
+            }
+            return { success: false, statuses, errorLogs }
+          }
+
+          // All services succeeded - now do post-deployment health check for runtime crashes
+          onProgress('🔍 Verifying services are running...')
+          const healthCheckResult = await this.postDeploymentHealthCheck(
+            token,
+            projectId,
+            services,
+            environmentId,
+            projectPath,
+            deploymentIds,
+            onProgress
+          )
+
+          if (!healthCheckResult.success) {
+            // A service crashed at runtime
+            return {
+              success: false,
+              statuses: healthCheckResult.statuses,
+              errorLogs: healthCheckResult.errorLogs
+            }
+          }
+
+          // All services healthy!
+          return { success: true, statuses, errorLogs }
         }
 
       } catch (error) {
@@ -1288,7 +1683,7 @@ class DeploymentService {
 
     // Timeout reached
     onProgress('⚠️ Build status polling timed out')
-    return { success: false, statuses }
+    return { success: false, statuses, errorLogs }
   }
 
   /**

@@ -92,7 +92,7 @@ function ActionBar({
   const [claudeContext, setClaudeContext] = useState<ClaudeContext | null>(null)
   const [availableModels, setAvailableModels] = useState<ClaudeModel[]>([])
   const [message, setMessage] = useState('')
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-5-20250929')
+  const [selectedModel, setSelectedModel] = useState('claude-opus-4-5-20251101')
   const [isTextareaFocused, setIsTextareaFocused] = useState(false)
   const [deployProgress, setDeployProgress] = useState(0)
   const [showModelDropdown, setShowModelDropdown] = useState(false)
@@ -187,7 +187,7 @@ function ActionBar({
 
     // Reset status only - don't clear context yet (will be fetched below)
     setClaudeStatus('idle')
-    setSelectedModel('claude-sonnet-4-5-20250929') // Default, will be overridden by context if available
+    setSelectedModel('claude-opus-4-5-20251101') // Default, will be overridden by context if available
 
     const unsubStatus = window.electronAPI.claude.onStatusChanged((id, status) => {
       if (id === projectId) {
@@ -1029,7 +1029,10 @@ function ActionBar({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      // Only send if not blocked (Claude working or deploying)
+      if (!isInputBlocked) {
+        handleSend()
+      }
     }
   }
 
@@ -1190,6 +1193,35 @@ function ActionBar({
               console.error('Failed to send plan approval to Claude:', error)
             }
           }}
+          onFixDeploymentError={async () => {
+            if (!projectId) return
+
+            // Send fix request message as if the user sent it
+            const fixPrompt = "Claude, I got an error during deployment build, please use CodeDeck Logs System to identify and fix it."
+
+            try {
+              // Create chat block for the fix request
+              const blockResult = await window.electronAPI?.chat.createBlock(projectId, fixPrompt)
+
+              if (!blockResult?.success) {
+                console.error('Failed to create chat block for fix request:', blockResult?.error)
+                return
+              }
+
+              // Send to Claude
+              await window.electronAPI?.claude.sendPrompt(
+                projectId,
+                fixPrompt,
+                selectedModel,
+                undefined, // no attachments
+                thinkingEnabled,
+                false // not plan mode
+              )
+            } catch (error) {
+              console.error('Failed to send fix request to Claude:', error)
+              toast.error('Failed to send fix request', error instanceof Error ? error.message : 'Unknown error')
+            }
+          }}
           onXMLTagClick={(tag, content) => {
             // Handle interactive XML tag clicks
             if (tag === 'env') {
@@ -1279,19 +1311,13 @@ function ActionBar({
                 onFocus={() => setIsTextareaFocused(true)}
                 onBlur={() => setIsTextareaFocused(false)}
                 placeholder={
-                  isDeploying
-                    ? "Deploying your app..."
-                    : isClaudeWorking
-                    ? `Claude is working${loadingDots}`
-                    : planModeToggle
+                  planModeToggle
                     ? ""
                     : "Ask Claude to build..."
                 }
-                disabled={isInputBlocked}
+                disabled={false}
                 className={`flex-1 border rounded-xl pr-11 text-sm outline-none transition-all overflow-y-auto ${
-                  isInputBlocked
-                    ? 'bg-dark-bg/30 text-gray-500 placeholder-gray-600 cursor-not-allowed border-dark-border/50'
-                    : planModeToggle
+                  planModeToggle
                     ? 'bg-dark-bg/50 text-white placeholder-gray-500 border-blue-400/50 focus:border-blue-400/70'
                     : 'bg-dark-bg/50 text-white placeholder-gray-500 border-dark-border/50 focus:border-primary/30'
                 } ${attachments.length > 0 ? 'pt-[38px]' : ''}`}
@@ -1477,8 +1503,8 @@ function ActionBar({
                   <div className="absolute bottom-full left-0 mb-1 w-40 bg-dark-card border border-dark-border rounded-lg shadow-xl z-[201] overflow-hidden">
                     <div className="p-1">
                       {(availableModels.length > 0 ? availableModels : [
-                        { value: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5' },
-                        { value: 'claude-opus-4-1-20250805', displayName: 'Opus 4.1' },
+                        { value: 'claude-opus-4-5-20251101', displayName: 'Sonnet 4.5' },
+                        { value: 'claude-opus-4-5-20251101', displayName: 'Opus 4.5' },
                         { value: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5' }
                       ]).map((model) => (
                         <button
