@@ -1838,6 +1838,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   currentStep === 'installing' ? 'Running npm install... This may take a few minutes' :
                   selectedTemplate?.deployServices?.includes('railway')
                     ? 'Starting backend and frontend servers...'
+                    : selectedTemplate?.deployServices?.includes('vercel')
+                    ? 'Starting Vercel Dev Server...'
                     : 'Starting Netlify Dev and Vite...'
                 }
                 isLoading

@@ -328,6 +328,8 @@ export function ProjectCreationWizard({
                 description={
                   template.deployServices?.includes('railway')
                     ? "Starting backend and frontend servers..."
+                    : template.deployServices?.includes('vercel')
+                    ? "Starting Vercel Dev Server..."
                     : "Starting Netlify Dev and Vite..."
                 }
                 isLoading

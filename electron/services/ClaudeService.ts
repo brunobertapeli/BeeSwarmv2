@@ -100,6 +100,8 @@ class ClaudeService extends EventEmitter {
           const deployServices = JSON.parse(project.deployServices) as string[];
           if (deployServices.includes('railway')) {
             promptFileName = 'railway-system-prompt.txt';
+          } else if (deployServices.includes('vercel')) {
+            promptFileName = 'vercel-system-prompt.txt';
           }
         } catch (e) {
           // Invalid JSON, use default

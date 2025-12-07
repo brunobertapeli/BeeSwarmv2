@@ -289,7 +289,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
         projectId: id,
         type: 'deployment',
         isComplete: false,
-        deploymentProvider: provider as 'netlify' | 'railway',
+        deploymentProvider: provider as 'netlify' | 'railway' | 'vercel',
         deploymentStartTime: Date.now(),
         deploymentLogs: [],
         deploymentStages: provider === 'netlify'
@@ -297,6 +297,11 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
               { label: 'Building project', isComplete: false },
               { label: 'Uploading to Netlify', isComplete: false },
               { label: 'Deploying', isComplete: false },
+            ]
+          : provider === 'vercel'
+          ? [
+              { label: 'Building project', isComplete: false },
+              { label: 'Deploying to Vercel', isComplete: false },
             ]
           : [
               { label: 'Creating services', isComplete: false },
@@ -412,6 +417,27 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
               updatedStages[3] = { ...updatedStages[3], isComplete: true }
               updatedStages[4] = { ...updatedStages[4], isComplete: true }
             }
+          } else if (block.deploymentProvider === 'vercel') {
+            // Stages: [0] Building project, [1] Deploying to Vercel
+            if (message.includes('Build complete') || message.includes('built in')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+            }
+            // Build FAILED
+            if (message.includes('Build') && message.includes('FAILED')) {
+              updatedStages[0] = { ...updatedStages[0], isFailed: true }
+            }
+            if (message.includes('Deploying to Vercel')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+            }
+            if (message.includes('Deployed successfully') || message.includes('Production:')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[1] = { ...updatedStages[1], isComplete: true }
+            }
+            // Deploy FAILED
+            if (message.includes('Deploy failed')) {
+              updatedStages[0] = { ...updatedStages[0], isComplete: true }
+              updatedStages[1] = { ...updatedStages[1], isFailed: true }
+            }
           }
 
           return {
@@ -426,24 +452,42 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
     // When deployment completes
     const unsubComplete = window.electronAPI.deployment.onComplete((id: string, result: any) => {
-      if (id !== projectId) return
+      if (id !== projectId) {
+        return
+      }
 
-      setAllBlocks(prev => prev.map(block => {
-        if (block.type === 'deployment' && !block.isComplete && block.projectId === id) {
-          return {
-            ...block,
-            isComplete: true,
-            completedAt: Date.now(),
-            deploymentUrl: result.success ? result.url : undefined,
-            // Only mark all stages complete if successful
-            // If failed, preserve individual stage statuses (including isFailed)
-            deploymentStages: result.success
-              ? block.deploymentStages?.map(s => ({ ...s, isComplete: true }))
-              : block.deploymentStages, // Keep existing statuses on failure
+      setAllBlocks(prev => {
+        return prev.map(block => {
+          if (block.type === 'deployment' && !block.isComplete && block.projectId === id) {
+            let updatedStages = block.deploymentStages
+
+            if (result.success) {
+              // Mark all stages as complete
+              updatedStages = block.deploymentStages?.map(s => ({ ...s, isComplete: true }))
+            } else {
+              // Mark the current (first non-complete) stage as failed
+              updatedStages = block.deploymentStages?.map((s, idx) => {
+                // Find first non-complete stage and mark it as failed
+                const firstIncompleteIdx = block.deploymentStages?.findIndex(stage => !stage.isComplete && !stage.isFailed)
+                if (idx === firstIncompleteIdx) {
+                  return { ...s, isFailed: true }
+                }
+                return s
+              })
+            }
+
+            return {
+              ...block,
+              isComplete: true,
+              completedAt: Date.now(),
+              deploymentUrl: result.success ? result.url : undefined,
+              deploymentError: result.success ? undefined : result.error,
+              deploymentStages: updatedStages,
+            }
           }
-        }
-        return block
-      }))
+          return block
+        })
+      })
     })
 
     return () => {
@@ -1089,7 +1133,7 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                     // Render deployment block with timeline design
                     if (block.type === 'deployment') {
-                      const providerName = block.deploymentProvider === 'railway' ? 'Railway' : 'Netlify'
+                      const providerName = block.deploymentProvider === 'railway' ? 'Railway' : block.deploymentProvider === 'vercel' ? 'Vercel' : 'Netlify'
                       // Use live timer for in-progress, calculated time for completed
                       const elapsedTime = block.isComplete && block.deploymentStartTime && block.completedAt
                         ? (block.completedAt - block.deploymentStartTime) / 1000
@@ -1195,6 +1239,15 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
                                     </div>
                                   ))}
                                 </div>
+
+                                {/* Error message */}
+                                {block.deploymentError && (
+                                  <div className="mt-3 p-2 bg-red-500/10 rounded border border-red-500/20">
+                                    <p className="text-[12px] text-red-400 font-mono break-words">
+                                      {block.deploymentError}
+                                    </p>
+                                  </div>
+                                )}
                               </div>
                             </div>
 

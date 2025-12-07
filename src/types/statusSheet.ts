@@ -51,7 +51,8 @@ export interface ConversationBlock {
   interactionType?: string | null
   deploymentStages?: DeploymentStage[]
   deploymentUrl?: string
-  deploymentProvider?: 'netlify' | 'railway'
+  deploymentError?: string
+  deploymentProvider?: 'netlify' | 'railway' | 'vercel'
   deploymentLogs?: string[]
   deploymentStartTime?: number
   initializationStages?: DeploymentStage[]

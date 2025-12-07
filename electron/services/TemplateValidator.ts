@@ -44,7 +44,20 @@ class TemplateValidator {
     // Validate each requirement
     for (const req of requirements) {
       const fullPath = path.join(projectPath, req.path);
-      const exists = fs.existsSync(fullPath);
+      let exists = fs.existsSync(fullPath);
+      let matchedPath = req.path;
+
+      // Check alternatives if primary path doesn't exist
+      if (!exists && req.alternatives) {
+        for (const alt of req.alternatives) {
+          const altPath = path.join(projectPath, alt);
+          if (fs.existsSync(altPath)) {
+            exists = true;
+            matchedPath = alt;
+            break;
+          }
+        }
+      }
 
       if (!exists) {
         if (req.required) {
@@ -56,13 +69,13 @@ class TemplateValidator {
       }
 
       // Verify type matches
-      const stats = fs.statSync(fullPath);
+      const stats = fs.statSync(path.join(projectPath, matchedPath));
       const isCorrectType =
         (req.type === 'file' && stats.isFile()) ||
         (req.type === 'directory' && stats.isDirectory());
 
       if (!isCorrectType) {
-        errors.push(`Invalid type for ${req.path}: expected ${req.type}`);
+        errors.push(`Invalid type for ${matchedPath}: expected ${req.type}`);
       }
     }
 
@@ -110,15 +123,10 @@ class TemplateValidator {
       }
     }
 
-    // Check frontend port configuration
-    const viteConfigPath = path.join(projectPath, 'frontend/vite.config.ts');
+    // Check frontend port configuration (supports both .ts and .js)
+    const viteConfigTsPath = path.join(projectPath, 'frontend/vite.config.ts');
     const viteConfigJsPath = path.join(projectPath, 'frontend/vite.config.js');
-
-    if (fs.existsSync(viteConfigJsPath)) {
-      warnings.push(
-        'Found vite.config.js - should use vite.config.ts instead to avoid port conflicts'
-      );
-    }
+    const viteConfigPath = fs.existsSync(viteConfigTsPath) ? viteConfigTsPath : viteConfigJsPath;
 
     if (fs.existsSync(viteConfigPath)) {
       try {
@@ -127,11 +135,11 @@ class TemplateValidator {
         // Check for port 5174 configuration
         if (!viteConfig.includes('5174')) {
           warnings.push(
-            'frontend/vite.config.ts should specify port 5174 to avoid conflict with CodeDeck (port 5173)'
+            `${path.basename(viteConfigPath)} should specify port 5174 to avoid conflict with CodeDeck (port 5173)`
           );
         }
       } catch (error) {
-        warnings.push(`Could not read vite.config.ts: ${error}`);
+        warnings.push(`Could not read ${path.basename(viteConfigPath)}: ${error}`);
       }
     }
   }

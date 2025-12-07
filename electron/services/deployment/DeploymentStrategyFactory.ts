@@ -1,6 +1,7 @@
 import { DeploymentStrategy } from './types';
 import { NetlifyStrategy } from './strategies/NetlifyStrategy';
 import { RailwayStrategy } from './strategies/RailwayStrategy';
+import { VercelStrategy } from './strategies/VercelStrategy';
 
 /**
  * Factory for creating deployment strategies
@@ -11,6 +12,7 @@ import { RailwayStrategy } from './strategies/RailwayStrategy';
 export class DeploymentStrategyFactory {
   private static netlifyStrategy: NetlifyStrategy | null = null;
   private static railwayStrategy: RailwayStrategy | null = null;
+  private static vercelStrategy: VercelStrategy | null = null;
 
   /**
    * Create a deployment strategy based on the deploy services configuration
@@ -26,6 +28,14 @@ export class DeploymentStrategyFactory {
       return this.railwayStrategy;
     }
 
+    // Check for Vercel
+    if (deployServices.includes('vercel')) {
+      if (!this.vercelStrategy) {
+        this.vercelStrategy = new VercelStrategy();
+      }
+      return this.vercelStrategy;
+    }
+
     // Default to Netlify
     if (!this.netlifyStrategy) {
       this.netlifyStrategy = new NetlifyStrategy();
@@ -38,7 +48,7 @@ export class DeploymentStrategyFactory {
    * @param type - The deployment service type
    * @returns The appropriate DeploymentStrategy instance
    */
-  static getByType(type: 'netlify' | 'railway'): DeploymentStrategy {
+  static getByType(type: 'netlify' | 'railway' | 'vercel'): DeploymentStrategy {
     return this.create([type]);
   }
 
@@ -48,5 +58,6 @@ export class DeploymentStrategyFactory {
   static clearCache(): void {
     this.netlifyStrategy = null;
     this.railwayStrategy = null;
+    this.vercelStrategy = null;
   }
 }

@@ -145,6 +145,7 @@ export class NetlifyStrategy implements DeploymentStrategy {
         type: 'file',
         required: false,
         description: 'Vite configuration (recommended)',
+        alternatives: ['frontend/vite.config.js'],
       },
       {
         path: 'netlify/functions',
@@ -179,7 +180,9 @@ export class NetlifyStrategy implements DeploymentStrategy {
   }
 
   private updateViteConfig(projectPath: string, vitePort: number): void {
-    const viteConfigPath = path.join(projectPath, 'frontend/vite.config.ts');
+    const viteConfigTsPath = path.join(projectPath, 'frontend/vite.config.ts');
+    const viteConfigJsPath = path.join(projectPath, 'frontend/vite.config.js');
+    const viteConfigPath = fs.existsSync(viteConfigTsPath) ? viteConfigTsPath : viteConfigJsPath;
 
     if (!fs.existsSync(viteConfigPath)) {
       return;
@@ -191,7 +194,7 @@ export class NetlifyStrategy implements DeploymentStrategy {
       content = content.replace(portPattern, `port: ${vitePort}`);
       fs.writeFileSync(viteConfigPath, content);
     } catch (error) {
-      console.error('Failed to update vite.config.ts:', error);
+      console.error(`Failed to update ${path.basename(viteConfigPath)}:`, error);
     }
   }
 

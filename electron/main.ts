@@ -109,6 +109,11 @@ if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 }
 
+// Hide dock icon until window is ready (prevents multiple dock icons flashing)
+if (process.platform === 'darwin') {
+  app.dock.hide()
+}
+
 // Register custom protocol for production builds
 // This allows CORS to work properly with a real origin instead of 'null'
 if (!isDev) {
@@ -342,6 +347,13 @@ User: ${currentUserId || 'not logged in'}
     // Use custom protocol for better CORS support
     mainWindow.loadURL('codedeck://localhost/index.html')
   }
+
+  // Show dock icon once window is ready
+  mainWindow.once('ready-to-show', () => {
+    if (process.platform === 'darwin') {
+      app.dock.show()
+    }
+  })
 
   mainWindow.on('closed', () => {
     mainWindow = null

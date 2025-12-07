@@ -31,7 +31,7 @@ function getAppRoot(): string {
   }
 }
 
-export type DeploymentProvider = 'railway' | 'netlify'
+export type DeploymentProvider = 'railway' | 'netlify' | 'vercel'
 
 interface CLIStatus {
   available: boolean
@@ -43,11 +43,13 @@ interface CLIStatus {
 interface DeploymentServiceStatus {
   railway: CLIStatus
   netlify: CLIStatus
+  vercel: CLIStatus
 }
 
 class DeploymentService {
   private railwayCliPath: string | null = null
   private netlifyCliPath: string | null = null
+  private vercelCliPath: string | null = null
   private initialized = false
 
   /**
@@ -56,7 +58,8 @@ class DeploymentService {
   async init(): Promise<DeploymentServiceStatus> {
     const status: DeploymentServiceStatus = {
       railway: { available: false, path: null, version: null, error: null },
-      netlify: { available: false, path: null, version: null, error: null }
+      netlify: { available: false, path: null, version: null, error: null },
+      vercel: { available: false, path: null, version: null, error: null }
     }
 
     // Initialize Railway CLI
@@ -97,6 +100,26 @@ class DeploymentService {
     } catch (error) {
       status.netlify.error = error instanceof Error ? error.message : 'Unknown error'
       console.error('❌ Netlify CLI initialization failed:', error)
+    }
+
+    // Initialize Vercel CLI
+    try {
+      this.vercelCliPath = this.getVercelCliPath()
+      if (this.vercelCliPath) {
+        const version = await this.getCliVersion('vercel')
+        status.vercel = {
+          available: true,
+          path: this.vercelCliPath,
+          version,
+          error: null
+        }
+      } else {
+        status.vercel.error = 'Vercel CLI not found'
+        console.warn('⚠️ Vercel CLI not found')
+      }
+    } catch (error) {
+      status.vercel.error = error instanceof Error ? error.message : 'Unknown error'
+      console.error('❌ Vercel CLI initialization failed:', error)
     }
 
     this.initialized = true
@@ -194,6 +217,40 @@ class DeploymentService {
   }
 
   /**
+   * Get the path to the Vercel CLI
+   * Uses require.resolve to find the npm package
+   */
+  private getVercelCliPath(): string | null {
+    const isDev = !app.isPackaged
+    const appRoot = getAppRoot()
+
+    // Build list of possible paths
+    const possiblePaths: string[] = []
+
+    if (isDev) {
+      // Development: look in node_modules relative to app root
+      possiblePaths.push(
+        path.join(appRoot, 'node_modules/vercel/dist/index.js')
+      )
+    } else {
+      // Production: look in unpacked asar
+      possiblePaths.push(
+        path.join(process.resourcesPath || '', 'app.asar.unpacked/node_modules/vercel/dist/index.js'),
+        path.join(process.resourcesPath || '', 'app/node_modules/vercel/dist/index.js')
+      )
+    }
+
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        return p
+      }
+    }
+
+    console.warn('Vercel CLI not found in any expected location')
+    return null
+  }
+
+  /**
    * Get CLI version
    */
   private async getCliVersion(provider: DeploymentProvider): Promise<string | null> {
@@ -209,7 +266,7 @@ class DeploymentService {
           }
           cmd = this.railwayCliPath
           args = ['--version']
-        } else {
+        } else if (provider === 'netlify') {
           if (!this.netlifyCliPath) {
             resolve(null)
             return
@@ -217,6 +274,17 @@ class DeploymentService {
           // Netlify CLI needs to be run with Node
           cmd = process.execPath
           args = [this.netlifyCliPath, '--version']
+        } else if (provider === 'vercel') {
+          if (!this.vercelCliPath) {
+            resolve(null)
+            return
+          }
+          // Vercel CLI needs to be run with Node
+          cmd = process.execPath
+          args = [this.vercelCliPath, '--version']
+        } else {
+          resolve(null)
+          return
         }
 
         const proc = spawn(cmd, args, {
@@ -256,6 +324,8 @@ class DeploymentService {
       return this.railwayCliPath !== null && fs.existsSync(this.railwayCliPath)
     } else if (provider === 'netlify') {
       return this.netlifyCliPath !== null
+    } else if (provider === 'vercel') {
+      return this.vercelCliPath !== null
     }
     return false
   }
@@ -268,6 +338,8 @@ class DeploymentService {
       return this.railwayCliPath
     } else if (provider === 'netlify') {
       return this.netlifyCliPath
+    } else if (provider === 'vercel') {
+      return this.vercelCliPath
     }
     return null
   }
@@ -312,6 +384,14 @@ class DeploymentService {
         cmd: nodePath,
         baseArgs: [this.netlifyCliPath]
       }
+    } else if (provider === 'vercel') {
+      if (!this.vercelCliPath) return null
+      // Vercel CLI needs to be run with system Node.js (not Electron)
+      const nodePath = this.getSystemNodePath()
+      return {
+        cmd: nodePath,
+        baseArgs: [this.vercelCliPath]
+      }
     }
     return null
   }
@@ -335,6 +415,13 @@ class DeploymentService {
         ...baseEnv,
         NETLIFY_AUTH_TOKEN: token,
         NETLIFY_SITE_ID: '', // Will be set per-command if needed
+        CI: 'true', // Non-interactive mode
+        NODE_ENV: 'production'
+      }
+    } else if (provider === 'vercel') {
+      return {
+        ...baseEnv,
+        VERCEL_TOKEN: token,
         CI: 'true', // Non-interactive mode
         NODE_ENV: 'production'
       }
@@ -363,6 +450,12 @@ class DeploymentService {
         path: this.netlifyCliPath,
         version: await this.getCliVersion('netlify'),
         error: this.netlifyCliPath ? null : 'CLI not found'
+      },
+      vercel: {
+        available: this.isProviderAvailable('vercel'),
+        path: this.vercelCliPath,
+        version: await this.getCliVersion('vercel'),
+        error: this.vercelCliPath ? null : 'CLI not found'
       }
     }
   }
@@ -1275,6 +1368,36 @@ class DeploymentService {
   }
 
   /**
+   * Save Vercel error logs to project's .codedeck/logs/vercel.md
+   * Clears the file before writing (only keeps latest error)
+   */
+  private saveVercelErrorLogs(projectPath: string, logs: string[]): void {
+    try {
+      const logsDir = path.join(projectPath, '.codedeck', 'logs')
+      const vercelLogPath = path.join(logsDir, 'vercel.md')
+
+      // Ensure directory exists
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true })
+      }
+
+      // Build log content with header
+      const timestamp = new Date().toISOString()
+      const content = `# Vercel Build Error\n` +
+        `**Timestamp:** ${timestamp}\n\n` +
+        `## Build Logs\n\n` +
+        '```\n' +
+        logs.join('\n') +
+        '\n```\n'
+
+      // Clear and write (only keep latest error)
+      fs.writeFileSync(vercelLogPath, content, 'utf-8')
+    } catch (error) {
+      console.error('❌ [VERCEL] Failed to save error logs:', error)
+    }
+  }
+
+  /**
    * Extract a meaningful error summary from build logs
    * Looks for common error patterns and returns the most relevant line
    */
@@ -1687,6 +1810,263 @@ class DeploymentService {
   }
 
   /**
+   * Deploy to Vercel - handles frontend-only projects
+   */
+  async deployVercel(
+    projectPath: string,
+    projectName: string,
+    token: string,
+    envVars: Record<string, string>,
+    existingProjectId: string | null,
+    onProgress: (message: string) => void
+  ): Promise<DeployResult> {
+    const cliCommand = this.getCliCommand('vercel')
+    if (!cliCommand) {
+      return { success: false, error: 'Vercel CLI not available' }
+    }
+
+    const { cmd, baseArgs } = cliCommand
+    const env = this.getCliEnv('vercel', token)
+
+    try {
+      // Step 1: Build the project
+      onProgress('📦 Building project...')
+
+      // Determine if we should build from frontend/ or root
+      const hasFrontend = fs.existsSync(path.join(projectPath, 'frontend'))
+      const buildCwd = hasFrontend ? path.join(projectPath, 'frontend') : projectPath
+
+      const buildResult = await this.runCommand(
+        'npm',
+        ['run', 'build'],
+        { cwd: buildCwd, env: { ...process.env } },
+        onProgress
+      )
+
+      if (!buildResult.success) {
+        const fullOutput = buildResult.output + '\n' + (buildResult.error || '')
+        const logs = fullOutput.split('\n').filter(line => line.trim())
+        const errorSummary = this.extractErrorSummary(logs)
+
+        // Save logs to vercel.md
+        this.saveVercelErrorLogs(projectPath, logs)
+
+        onProgress(`❌ Build: FAILED${errorSummary ? ` - ${errorSummary}` : ''}`)
+        return { success: false, error: `Build failed: ${errorSummary || buildResult.error}` }
+      }
+
+      onProgress('✅ Build complete!')
+
+      // Determine build directory
+      const possibleBuildDirs = hasFrontend
+        ? ['frontend/dist', 'frontend/build', 'frontend/.next', 'frontend/out']
+        : ['dist', 'build', '.next', 'out']
+      let buildDir: string | null = null
+
+      for (const dir of possibleBuildDirs) {
+        const checkPath = path.join(projectPath, dir)
+        if (fs.existsSync(checkPath)) {
+          buildDir = dir
+          break
+        }
+      }
+
+      if (!buildDir) {
+        return { success: false, error: `Build directory not found. Checked: ${possibleBuildDirs.join(', ')}` }
+      }
+
+      // Step 2: Deploy to Vercel
+      onProgress('🚀 Deploying to Vercel...')
+
+      // Build deploy args
+      // --yes skips confirmation prompts and auto-links/creates project
+      // --prod deploys to production
+      // --token passed explicitly via CLI flag (more reliable than env var)
+      const deployCwd = hasFrontend ? path.join(projectPath, 'frontend') : projectPath
+
+      // Extract unique suffix from CodeDeck project path (e.g., proj_1765120725824_q4tbqega4 -> q4tbqega4)
+      // This ensures globally unique Vercel project names even if two users have same project name
+      const pathParts = projectPath.split('/')
+      const codedeckProjectId = pathParts.find(p => p.startsWith('proj_')) || ''
+      const uniqueSuffix = codedeckProjectId.split('_').pop() || Math.random().toString(36).substring(2, 8)
+
+      // Clean project name for Vercel (lowercase, alphanumeric and hyphens only)
+      // Format: codedeck-{projectname}-{uniquesuffix}
+      const cleanProjectName = `codedeck-${projectName}-${uniqueSuffix}`
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .substring(0, 100) // Vercel has a max length
+
+      // Check if this is a first deploy or redeploy
+      const vercelConfigPath = path.join(deployCwd, '.vercel', 'project.json')
+      const isFirstDeploy = !fs.existsSync(vercelConfigPath)
+
+      // For first deploy, set the project name. For redeploy, Vercel uses .vercel/project.json
+      const deployArgs = isFirstDeploy
+        ? [...baseArgs, '--prod', '--yes', '--token', token, '--name', cleanProjectName]
+        : [...baseArgs, '--prod', '--yes', '--token', token]
+
+      const deployResult = await this.runCommand(
+        cmd,
+        deployArgs,
+        { cwd: deployCwd, env },
+        onProgress
+      )
+
+      if (!deployResult.success) {
+        return { success: false, error: `Deploy failed: ${deployResult.error}` }
+      }
+
+      // Read project ID from .vercel/project.json
+      let projectId = existingProjectId
+      let url: string | null = null
+
+      // After deploy, .vercel/project.json should exist with projectId and orgId
+      if (fs.existsSync(vercelConfigPath)) {
+        try {
+          const vercelConfig = JSON.parse(fs.readFileSync(vercelConfigPath, 'utf-8'))
+          if (vercelConfig.projectId) {
+            projectId = vercelConfig.projectId
+          }
+        } catch (e) {
+          // Failed to read .vercel/project.json
+        }
+      }
+
+      // Query Vercel API to get the production domain
+      if (projectId) {
+        try {
+          const response = await fetch(`https://api.vercel.com/v9/projects/${projectId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          })
+
+          if (response.ok) {
+            const projectData = await response.json()
+            // Get production domain - check aliases or targets
+            const domains = projectData.targets?.production?.alias || projectData.alias || []
+            const productionDomain = domains.find((d: string) => d.endsWith('.vercel.app'))
+
+            if (productionDomain) {
+              url = `https://${productionDomain}`
+            }
+          }
+        } catch (e) {
+          // Failed to query Vercel API
+        }
+      }
+
+      // Fallback: parse URL from CLI output if API didn't work
+      if (!url) {
+        const previewUrlMatch = deployResult.output.match(/(https:\/\/[a-z0-9-]+\.vercel\.app)/i)
+        url = previewUrlMatch?.[1] || null
+      }
+
+      // Step 3: Set environment variables via Vercel API
+      if (Object.keys(envVars).length > 0 && projectId) {
+        onProgress('🔐 Setting environment variables...')
+        let envVarsSet = 0
+        let envVarsFailed = 0
+
+        for (const [key, value] of Object.entries(envVars)) {
+          if (value && value.trim()) {
+            try {
+              // Use Vercel API to create/update environment variable
+              // POST /v10/projects/{projectId}/env
+              const response = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  key: key,
+                  value: value,
+                  type: 'encrypted', // Use encrypted for security
+                  target: ['production', 'preview', 'development'], // Apply to all environments
+                }),
+              })
+
+              if (response.ok) {
+                envVarsSet++
+              } else {
+                // Check if it's a conflict (variable already exists)
+                const responseText = await response.text()
+                const isConflict = response.status === 409 || responseText.includes('ENV_CONFLICT')
+
+                if (isConflict) {
+                  // Variable already exists, try to update it
+                  const listResponse = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env`, {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                  })
+
+                  if (listResponse.ok) {
+                    const envList = await listResponse.json()
+                    const existingVar = envList.envs?.find((e: any) => e.key === key)
+
+                    if (existingVar) {
+                      // PATCH to update existing variable
+                      const updateResponse = await fetch(`https://api.vercel.com/v10/projects/${projectId}/env/${existingVar.id}`, {
+                        method: 'PATCH',
+                        headers: {
+                          'Authorization': `Bearer ${token}`,
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                          value: value,
+                        }),
+                      })
+
+                      if (updateResponse.ok) {
+                        envVarsSet++
+                      } else {
+                        envVarsFailed++
+                      }
+                    } else {
+                      envVarsFailed++
+                    }
+                  } else {
+                    envVarsFailed++
+                  }
+                } else {
+                  envVarsFailed++
+                }
+              }
+            } catch (e) {
+              envVarsFailed++
+            }
+          }
+        }
+
+        if (envVarsSet > 0) {
+          onProgress(`✅ Set ${envVarsSet} environment variable${envVarsSet > 1 ? 's' : ''}`)
+        }
+        if (envVarsFailed > 0) {
+          onProgress(`⚠️ Failed to set ${envVarsFailed} environment variable${envVarsFailed > 1 ? 's' : ''}`)
+        }
+
+        // Note: Env vars are applied immediately to new deployments
+        // No need to redeploy - the current deployment already has them
+      }
+
+      onProgress(`✅ Deployed successfully!${url ? ` Live at: ${url}` : ''}`)
+
+      return {
+        success: true,
+        url: url || undefined,
+        projectId: projectId || undefined
+      }
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : 'Unknown error'
+      console.error('❌ [VERCEL] Deploy error:', error)
+      return { success: false, error: errMsg }
+    }
+  }
+
+  /**
    * Main deploy method - routes to appropriate provider
    */
   async deploy(
@@ -1702,6 +2082,8 @@ class DeploymentService {
       return this.deployNetlify(projectPath, projectName, token, envVars, existingId, onProgress)
     } else if (provider === 'railway') {
       return this.deployRailway(projectPath, projectName, token, envVars, existingId, onProgress)
+    } else if (provider === 'vercel') {
+      return this.deployVercel(projectPath, projectName, token, envVars, existingId, onProgress)
     }
     return { success: false, error: `Unknown provider: ${provider}` }
   }

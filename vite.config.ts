@@ -55,39 +55,13 @@ export default defineConfig({
                       fs.copyFileSync(src, dest)
                     }
                   }
-                }
-              ]
-            }
-          }
-        }
-      },
-      {
-        entry: 'electron/preload.js',
-        onstart(options) {
-          // Just copy the file directly without processing
-          const src = path.resolve('electron/preload.js')
-          const dest = path.resolve('dist-electron/preload.cjs')
-          fs.mkdirSync(path.dirname(dest), { recursive: true })
-          fs.copyFileSync(src, dest)
-          options.reload()
-        },
-        vite: {
-          build: {
-            watch: {},
-            minify: false,
-            outDir: 'dist-electron',
-            rollupOptions: {
-              external: ['electron'],
-              output: {
-                format: 'cjs',
-                entryFileNames: 'preload-unused.js'
-              },
-              plugins: [
+                },
                 {
                   name: 'copy-preload',
                   writeBundle() {
                     const src = path.resolve('electron/preload.js')
                     const dest = path.resolve('dist-electron/preload.cjs')
+                    fs.mkdirSync(path.dirname(dest), { recursive: true })
                     fs.copyFileSync(src, dest)
                   }
                 }

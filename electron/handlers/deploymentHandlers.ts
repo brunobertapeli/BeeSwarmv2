@@ -270,6 +270,8 @@ export function registerDeploymentHandlers() {
           databaseService.saveDeploymentId(projectId, 'netlify', result.siteId)
         } else if (provider === 'railway' && result.projectId) {
           databaseService.saveDeploymentId(projectId, 'railway', result.projectId)
+        } else if (provider === 'vercel' && result.projectId) {
+          databaseService.saveDeploymentId(projectId, 'vercel', result.projectId)
         }
 
         // Save live URL

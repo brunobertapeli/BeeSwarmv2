@@ -212,7 +212,7 @@ When the user asks to resize an existing image, simply add a new entry to manife
 <netlify_deployment_logs>
 ## CodeDeck Logs System
 - If the user has a deployment/build error while deploying to Netlify, you will receive a message to check 'CodeDeck Logs System'.
-- The logs are located in `.codedeck/netlify.md`
+- The logs are located in `.codedeck/logs/netlify.md`
 - Before using READ tool on the whole file, try to use GREP tool first to save context.
 </netlify_deployment_logs>
 

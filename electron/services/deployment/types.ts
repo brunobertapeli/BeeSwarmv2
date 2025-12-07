@@ -5,7 +5,7 @@
  * Supports Netlify, Railway, and future deployment services.
  */
 
-export type DeploymentServiceType = 'netlify' | 'railway';
+export type DeploymentServiceType = 'netlify' | 'railway' | 'vercel';
 
 /**
  * Port allocation for a deployment service
@@ -13,7 +13,7 @@ export type DeploymentServiceType = 'netlify' | 'railway';
 export interface PortAllocation {
   primary: number;
   secondary?: number;
-  portType: 'netlify' | 'vite' | 'frontend' | 'backend';
+  portType: 'netlify' | 'vite' | 'frontend' | 'backend' | 'vercel';
 }
 
 /**
@@ -48,6 +48,7 @@ export interface ValidationRequirement {
   type: 'file' | 'directory';
   required: boolean;
   description: string;
+  alternatives?: string[]; // Alternative paths that satisfy this requirement
 }
 
 /**

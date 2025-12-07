@@ -128,6 +128,40 @@ class ProcessManager extends EventEmitter {
   }
 
   /**
+   * Get decrypted Vercel token for authenticating vercel dev
+   */
+  private getVercelToken(): string | null {
+    try {
+      const tokensFilePath = path.join(app.getPath('userData'), 'deployment-tokens.json');
+      if (!fs.existsSync(tokensFilePath)) {
+        return null;
+      }
+
+      const tokens = JSON.parse(fs.readFileSync(tokensFilePath, 'utf-8'));
+      const tokenData = tokens['vercel'];
+      if (!tokenData) {
+        return null;
+      }
+
+      // Decrypt the token
+      if (tokenData.isFallback) {
+        return Buffer.from(tokenData.encrypted, 'base64').toString('utf-8');
+      } else {
+        try {
+          const buffer = Buffer.from(tokenData.encrypted, 'base64');
+          return safeStorage.decryptString(buffer);
+        } catch (error) {
+          console.error('Failed to decrypt Vercel token:', error);
+          return null;
+        }
+      }
+    } catch (error) {
+      console.error('Error reading Vercel token:', error);
+      return null;
+    }
+  }
+
+  /**
    * Start dev server(s) for a project
    * @param projectId - Unique project identifier
    * @param projectPath - Absolute path to project root
@@ -239,6 +273,14 @@ class ProcessManager extends EventEmitter {
       const netlifyToken = this.getNetlifyToken();
       if (netlifyToken) {
         processEnv.NETLIFY_AUTH_TOKEN = netlifyToken;
+      }
+    }
+
+    // Inject Vercel token for vercel dev to work
+    if (config.id === 'vercel') {
+      const vercelToken = this.getVercelToken();
+      if (vercelToken) {
+        processEnv.VERCEL_TOKEN = vercelToken;
       }
     }
 
