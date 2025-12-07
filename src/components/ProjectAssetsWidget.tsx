@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { X, FolderOpen, ChevronRight, ChevronDown, Folder, FileImage, Music, FileType, Image as ImageIcon, Loader2, ExternalLink, Copy, MessageSquarePlus, Edit3 } from 'lucide-react'
+import { X, FolderOpen, ChevronRight, ChevronDown, Folder, FileImage, Music, FileType, Image as ImageIcon, Loader2, ExternalLink, Copy, MessageSquarePlus, Edit3, Scissors, Pencil } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
 import { motion, AnimatePresence } from 'framer-motion'
 import ImageEditorModal from './ImageEditorModal'
+import AudioEditorModal from './AudioEditorModal'
 
 interface FileNode {
   name: string
@@ -84,6 +85,10 @@ function ProjectAssetsWidget() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, file: null, filePath: '', type: 'file' })
   const [previewImage, setPreviewImage] = useState<PreviewState | null>(null)
   const [editorModal, setEditorModal] = useState<{ open: boolean; file: FileNode | null; filePath: string; src: string } | null>(null)
+  const [audioEditorModal, setAudioEditorModal] = useState<{ open: boolean; file: FileNode | null; filePath: string } | null>(null)
+  const [renamingFile, setRenamingFile] = useState<{ path: string; name: string; extension: string } | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const renameInputRef = useRef<HTMLInputElement>(null)
   const widgetRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
 
@@ -105,10 +110,22 @@ function ProjectAssetsWidget() {
       if (e.key === 'Escape' && previewImage) {
         setPreviewImage(null)
       }
+      if (e.key === 'Escape' && renamingFile) {
+        setRenamingFile(null)
+        setRenameValue('')
+      }
     }
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
-  }, [previewImage])
+  }, [previewImage, renamingFile])
+
+  // Focus rename input when it appears
+  useEffect(() => {
+    if (renamingFile && renameInputRef.current) {
+      renameInputRef.current.focus()
+      renameInputRef.current.select()
+    }
+  }, [renamingFile])
 
   // Load real assets when widget opens
   const loadAssets = async (resetFolders = true) => {
@@ -266,30 +283,62 @@ function ProjectAssetsWidget() {
     switch (action) {
       case 'use-context':
         try {
-          // Read image as base64
-          const fileData = await window.electronAPI?.files?.readFileAsBase64?.(contextMenu.filePath)
-          if (fileData && contextMenu.file) {
-            // Determine mime type from extension
-            const ext = contextMenu.file.name.split('.').pop()?.toLowerCase()
-            let mimeType = 'image/png'
-            if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg'
-            else if (ext === 'gif') mimeType = 'image/gif'
-            else if (ext === 'svg') mimeType = 'image/svg+xml'
-            else if (ext === 'webp') mimeType = 'image/webp'
+          const displayPath = contextMenu.file.relativePath || contextMenu.filePath
 
-            // Add image reference to ActionBar
-            addImageReference({
-              id: `asset-${Date.now()}`,
-              name: contextMenu.file.name,
-              path: contextMenu.filePath,
-              src: `data:${mimeType};base64,${fileData}`,
-              dimensions: contextMenu.file.dimensions || 'Unknown'
-            })
+          if (contextMenu.file.fileType === 'audio') {
+            // For audio files, get duration and show sound path
+            try {
+              const fileData = await window.electronAPI?.files?.readFileAsBase64?.(contextMenu.filePath)
+              if (fileData) {
+                const ext = contextMenu.file.name.split('.').pop()?.toLowerCase()
+                const mimeType = ext === 'wav' ? 'audio/wav' : 'audio/mpeg'
+                const audioUrl = `data:${mimeType};base64,${fileData}`
 
-            // Set prefilled message with relative path from project root
-            const displayPath = contextMenu.file.relativePath || contextMenu.filePath
-            const message = `[Image Path: '${displayPath}' Dimensions: ${contextMenu.file.dimensions || 'Unknown'}]`
-            setPrefilledMessage(message)
+                // Create audio element to get duration
+                const audio = new Audio(audioUrl)
+                await new Promise<void>((resolve) => {
+                  audio.onloadedmetadata = () => resolve()
+                  audio.onerror = () => resolve()
+                })
+
+                const duration = audio.duration
+                const formattedDuration = duration && !isNaN(duration)
+                  ? duration < 60
+                    ? `${Math.round(duration)}s`
+                    : `${Math.floor(duration / 60)}m ${Math.round(duration % 60)}s`
+                  : 'Unknown'
+
+                const message = `[Sound Path: '${displayPath}' Duration: ${formattedDuration}]`
+                setPrefilledMessage(message)
+              }
+            } catch {
+              const message = `[Sound Path: '${displayPath}' Duration: Unknown]`
+              setPrefilledMessage(message)
+            }
+          } else {
+            // For images, read as base64 and add reference
+            const fileData = await window.electronAPI?.files?.readFileAsBase64?.(contextMenu.filePath)
+            if (fileData && contextMenu.file) {
+              // Determine mime type from extension
+              const ext = contextMenu.file.name.split('.').pop()?.toLowerCase()
+              let mimeType = 'image/png'
+              if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg'
+              else if (ext === 'gif') mimeType = 'image/gif'
+              else if (ext === 'svg') mimeType = 'image/svg+xml'
+              else if (ext === 'webp') mimeType = 'image/webp'
+
+              // Add image reference to ActionBar
+              addImageReference({
+                id: `asset-${Date.now()}`,
+                name: contextMenu.file.name,
+                path: contextMenu.filePath,
+                src: `data:${mimeType};base64,${fileData}`,
+                dimensions: contextMenu.file.dimensions || 'Unknown'
+              })
+
+              const message = `[Image Path: '${displayPath}' Dimensions: ${contextMenu.file.dimensions || 'Unknown'}]`
+              setPrefilledMessage(message)
+            }
           }
         } catch (error) {
           console.error('Failed to add to context:', error)
@@ -318,6 +367,15 @@ function ProjectAssetsWidget() {
           console.error('Failed to open editor:', error)
         }
         break
+      case 'edit-audio':
+        if (contextMenu.file) {
+          setAudioEditorModal({
+            open: true,
+            file: contextMenu.file,
+            filePath: contextMenu.filePath
+          })
+        }
+        break
       case 'open-file':
         try {
           await window.electronAPI?.shell?.openPath(contextMenu.filePath)
@@ -339,9 +397,63 @@ function ProjectAssetsWidget() {
           console.error('Failed to copy path:', error)
         }
         break
+      case 'rename':
+        if (contextMenu.file) {
+          const fileName = contextMenu.file.name
+          const lastDotIndex = fileName.lastIndexOf('.')
+          const nameWithoutExt = lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName
+          const extension = lastDotIndex > 0 ? fileName.substring(lastDotIndex) : ''
+
+          setRenamingFile({
+            path: contextMenu.filePath,
+            name: nameWithoutExt,
+            extension: extension
+          })
+          setRenameValue(nameWithoutExt)
+        }
+        break
     }
 
     setContextMenu({ visible: false, x: 0, y: 0, file: null, filePath: '', type: 'file' })
+  }
+
+  const handleRenameSubmit = async () => {
+    if (!renamingFile || !renameValue.trim() || !currentProjectId) {
+      setRenamingFile(null)
+      setRenameValue('')
+      return
+    }
+
+    const newName = renameValue.trim() + renamingFile.extension
+    if (newName === renamingFile.name + renamingFile.extension) {
+      setRenamingFile(null)
+      setRenameValue('')
+      return
+    }
+
+    try {
+      const result = await window.electronAPI?.files?.renameFile?.(renamingFile.path, newName)
+      if (result?.success) {
+        await loadAssets(false)
+      } else {
+        console.error('Failed to rename file:', result?.error)
+      }
+    } catch (error) {
+      console.error('Failed to rename file:', error)
+    }
+
+    setRenamingFile(null)
+    setRenameValue('')
+  }
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      handleRenameSubmit()
+    } else if (e.key === 'Escape') {
+      setRenamingFile(null)
+      setRenameValue('')
+    }
   }
 
   const renderNode = (node: FileNode, path: string, depth: number = 0) => {
@@ -387,20 +499,42 @@ function ProjectAssetsWidget() {
       )
     } else {
       const fileFullPath = node.path || fullPath
+      const isRenaming = renamingFile?.path === fileFullPath
+
+      // Split filename for rename display
+      const lastDotIndex = node.name.lastIndexOf('.')
+      const extension = lastDotIndex > 0 ? node.name.substring(lastDotIndex) : ''
 
       return (
-        <button
+        <div
           key={fullPath}
-          className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-dark-bg/40 rounded transition-colors text-left group"
+          className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-dark-bg/40 rounded transition-colors text-left group cursor-pointer"
           style={{ paddingLeft: `${24 + depth * 16}px` }}
-          onClick={(e) => handleFileClick(e, node, fileFullPath)}
-          onDoubleClick={() => handleFileDoubleClick(node, fileFullPath)}
-          onContextMenu={(e) => handleFileRightClick(e, node, fileFullPath)}
+          onClick={(e) => !isRenaming && handleFileClick(e, node, fileFullPath)}
+          onDoubleClick={() => !isRenaming && handleFileDoubleClick(node, fileFullPath)}
+          onContextMenu={(e) => !isRenaming && handleFileRightClick(e, node, fileFullPath)}
         >
           {getFileIcon(node.fileType)}
-          <span className="text-xs text-gray-400 truncate min-w-0 group-hover:text-white transition-colors" style={{ flex: '1 1 0' }}>
-            {node.name}
-          </span>
+          {isRenaming ? (
+            <div className="flex items-center min-w-0" style={{ flex: '1 1 0' }}>
+              <input
+                ref={renameInputRef}
+                type="text"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={handleRenameKeyDown}
+                onBlur={handleRenameSubmit}
+                className="text-xs bg-dark-bg border border-blue-500 rounded px-1 py-0.5 text-white outline-none min-w-0"
+                style={{ width: `${Math.max(renameValue.length * 7, 50)}px` }}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <span className="text-xs text-gray-500">{extension}</span>
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400 truncate min-w-0 group-hover:text-white transition-colors" style={{ flex: '1 1 0' }}>
+              {node.name}
+            </span>
+          )}
           <div className="flex items-center gap-2 flex-shrink-0 ml-2">
             {node.fileType === 'image' && (
               <span className="text-[10px] text-blue-400 font-mono" style={{ minWidth: '60px', textAlign: 'right' }}>
@@ -411,7 +545,7 @@ function ProjectAssetsWidget() {
               {node.size}
             </span>
           </div>
-        </button>
+        </div>
       )
     }
   }
@@ -579,19 +713,30 @@ function ProjectAssetsWidget() {
               </button>
             )}
 
-            {/* Only show "Edit Image" for image files */}
+            {/* Only show "Image Editor" for image files */}
             {contextMenu.type === 'file' && contextMenu.file?.fileType === 'image' && (
               <button
                 onClick={() => handleContextMenuAction('edit-image')}
                 className="w-full px-3 py-2 text-left text-xs text-gray-300 hover:bg-dark-bg/50 flex items-center gap-2 transition-colors"
               >
                 <Edit3 size={14} className="text-purple-400" />
-                Edit Image
+                Image Editor
               </button>
             )}
 
-            {/* Only show "Open Image" for files */}
-            {contextMenu.type === 'file' && (
+            {/* Only show "Audio Editor" for audio files */}
+            {contextMenu.type === 'file' && contextMenu.file?.fileType === 'audio' && (
+              <button
+                onClick={() => handleContextMenuAction('edit-audio')}
+                className="w-full px-3 py-2 text-left text-xs text-gray-300 hover:bg-dark-bg/50 flex items-center gap-2 transition-colors"
+              >
+                <Scissors size={14} className="text-orange-400" />
+                Audio Editor
+              </button>
+            )}
+
+            {/* Only show "Open File" for image files */}
+            {contextMenu.type === 'file' && contextMenu.file?.fileType === 'image' && (
               <button
                 onClick={() => handleContextMenuAction('open-file')}
                 className="w-full px-3 py-2 text-left text-xs text-gray-300 hover:bg-dark-bg/50 flex items-center gap-2 transition-colors"
@@ -608,6 +753,17 @@ function ProjectAssetsWidget() {
               <ExternalLink size={14} className="text-gray-400" />
               Show in {navigator.platform.includes('Mac') ? 'Finder' : 'Explorer'}
             </button>
+            {/* Rename option for files */}
+            {contextMenu.type === 'file' && (
+              <button
+                onClick={() => handleContextMenuAction('rename')}
+                className="w-full px-3 py-2 text-left text-xs text-gray-300 hover:bg-dark-bg/50 flex items-center gap-2 transition-colors"
+              >
+                <Pencil size={14} className="text-yellow-400" />
+                Rename
+              </button>
+            )}
+
             <button
               onClick={() => handleContextMenuAction('copy-path')}
               className="w-full px-3 py-2 text-left text-xs text-gray-300 hover:bg-dark-bg/50 flex items-center gap-2 transition-colors"
@@ -703,6 +859,17 @@ function ProjectAssetsWidget() {
           imageHeight={editorModal.file?.dimensions ? parseInt(editorModal.file.dimensions.split('x')[1]) : undefined}
           imagePath={editorModal.filePath}
           imageName={editorModal.file?.name}
+        />
+      )}
+
+      {/* Audio Editor Modal */}
+      {audioEditorModal && (
+        <AudioEditorModal
+          isOpen={audioEditorModal.open}
+          onClose={() => setAudioEditorModal(null)}
+          onSave={() => loadAssets(false)}
+          audioPath={audioEditorModal.filePath}
+          audioName={audioEditorModal.file?.name}
         />
       )}
     </>

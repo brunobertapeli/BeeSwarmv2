@@ -385,3 +385,55 @@ ipcMain.handle('files:save-base64-image', async (_event, filePath: string, base6
     };
   }
 });
+
+/**
+ * Rename a file
+ */
+ipcMain.handle('files:rename', async (_event, filePath: string, newName: string) => {
+  try {
+    // Validate inputs
+    if (!filePath || typeof filePath !== 'string') {
+      throw new Error('Invalid file path');
+    }
+
+    if (!newName || typeof newName !== 'string') {
+      throw new Error('Invalid new name');
+    }
+
+    // Sanitize new name - remove any path separators
+    const sanitizedName = newName.replace(/[/\\]/g, '');
+    if (!sanitizedName) {
+      throw new Error('Invalid file name');
+    }
+
+    // Get directory and construct new path
+    const dir = path.dirname(filePath);
+    const newPath = path.join(dir, sanitizedName);
+
+    // Check if file exists
+    await fs.access(filePath);
+
+    // Check if target already exists
+    try {
+      await fs.access(newPath);
+      throw new Error('A file with that name already exists');
+    } catch (e: any) {
+      if (e.code !== 'ENOENT') {
+        throw e;
+      }
+      // File doesn't exist, we can proceed
+    }
+
+    // Rename the file
+    await fs.rename(filePath, newPath);
+
+    console.log(`✅ [FileHandlers] File renamed: ${filePath} -> ${newPath}`);
+    return { success: true, newPath };
+  } catch (error) {
+    console.error('❌ [FileHandlers] Error renaming file:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to rename file'
+    };
+  }
+});

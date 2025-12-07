@@ -221,6 +221,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cropAndReplace: (projectId, imagePath, sourceImage, cropData) => ipcRenderer.invoke('image:cropAndReplace', projectId, imagePath, sourceImage, cropData)
   },
 
+  // Audio methods
+  audio: {
+    cropAudio: (options) => ipcRenderer.invoke('audio:crop', options)
+  },
+
   // Terminal methods
   terminal: {
     createSession: (projectId) => ipcRenderer.invoke('terminal:create-session', projectId),
@@ -501,7 +506,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     replaceTextInProject: (projectId, originalText, newText) => ipcRenderer.invoke('files:replace-text-in-project', projectId, originalText, newText),
     replaceTextBySelector: (projectId, elementInfo, originalText, newText) => ipcRenderer.invoke('files:replace-text-by-selector', projectId, elementInfo, originalText, newText),
     readFileAsBase64: (filePath) => ipcRenderer.invoke('files:read-as-base64', filePath),
-    saveBase64Image: (filePath, base64Data) => ipcRenderer.invoke('files:save-base64-image', filePath, base64Data)
+    saveBase64Image: (filePath, base64Data) => ipcRenderer.invoke('files:save-base64-image', filePath, base64Data),
+    renameFile: (filePath, newName) => ipcRenderer.invoke('files:rename', filePath, newName)
   },
 
   // Analytics methods

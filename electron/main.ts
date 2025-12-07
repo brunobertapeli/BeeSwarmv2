@@ -23,6 +23,7 @@ import { registerSecureStorageHandlers } from './handlers/secureStorageHandlers.
 import { registerWebsiteImportHandlers} from './handlers/websiteImportHandlers.js'
 import { registerClaudeMdHandlers } from './handlers/claudeMdHandlers.js'
 import { registerImageHandlers } from './handlers/imageHandlers.js'
+import { registerAudioHandlers } from './handlers/audioHandlers.js'
 import { registerFileHandlers } from './handlers/fileHandlers.js'
 import { registerAnalyticsHandlers } from './handlers/analyticsHandlers.js'
 import { registerChatWidgetHandlers, setChatWidgetWindow } from './handlers/chatWidgetHandlers.js'
@@ -408,6 +409,7 @@ async function initializeApp() {
     registerLayoutHandlers()
     registerShellHandlers()
     registerImageHandlers()
+    registerAudioHandlers()
     registerFileHandlers()
     registerClaudeMdHandlers()
     registerTerminalHandlers()
