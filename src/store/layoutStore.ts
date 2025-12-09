@@ -21,6 +21,23 @@ interface LayoutStoreState {
   editModeEnabled: boolean;
   setEditModeEnabled: (enabled: boolean) => void;
 
+  // Select mode state (for selecting UI elements)
+  selectModeEnabled: boolean;
+  setSelectModeEnabled: (enabled: boolean) => void;
+  selectedElements: Array<{
+    id: string;
+    selector: string;
+    elementType: string;
+    preview: string;
+    filePath: string | null;
+    lineRange: string | null;
+    displayLabel: string;
+  }>;
+  addSelectedElement: (element: { selector: string; elementType: string; preview: string; filePath: string | null; lineRange: string | null; displayLabel: string }) => void;
+  removeSelectedElement: (id: string) => void;
+  removeSelectedElementBySelector: (selector: string) => void;
+  clearSelectedElements: () => void;
+
   // Image edit modal state
   imageEditModalOpen: boolean;
   imageEditModalData: { src: string; width?: number; height?: number; path?: string } | null;
@@ -406,6 +423,8 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
   statusSheetExpanded: false,
   actionBarHeight: 110, // Default ActionBar height
   editModeEnabled: false,
+  selectModeEnabled: false,
+  selectedElements: [],
   imageEditModalOpen: false,
   imageEditModalData: null,
   imageReferences: [],
@@ -469,6 +488,20 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => ({
     window.electronAPI?.layout.setActionBarHeight(height);
   },
   setEditModeEnabled: (enabled) => set({ editModeEnabled: enabled }),
+  setSelectModeEnabled: (enabled) => {
+    set({ selectModeEnabled: enabled });
+    // Keep selectedElements as references even when mode is disabled
+  },
+  addSelectedElement: (element) => set((state) => ({
+    selectedElements: [...state.selectedElements, { ...element, id: `SEL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` }]
+  })),
+  removeSelectedElement: (id) => set((state) => ({
+    selectedElements: state.selectedElements.filter(e => e.id !== id)
+  })),
+  removeSelectedElementBySelector: (selector) => set((state) => ({
+    selectedElements: state.selectedElements.filter(e => e.selector !== selector)
+  })),
+  clearSelectedElements: () => set({ selectedElements: [] }),
   setImageEditModalOpen: (open) => set({ imageEditModalOpen: open }),
   setImageEditModalData: (data) => set({ imageEditModalData: data }),
   addImageReference: (ref) => set((state) => ({ imageReferences: [...state.imageReferences, ref] })),

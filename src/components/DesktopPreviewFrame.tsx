@@ -25,6 +25,10 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
   const {
     layoutState,
     editModeEnabled,
+    selectModeEnabled,
+    selectedElements,
+    addSelectedElement,
+    removeSelectedElementBySelector,
     imageEditModalOpen,
     imageEditModalData,
     setImageEditModalOpen,
@@ -822,6 +826,381 @@ function DesktopPreviewFrame({ children, port, projectId, useBrowserView = true 
 
     return () => clearInterval(pollInterval)
   }, [useBrowserView, projectId, editModeEnabled])
+
+  // Inject CSS/JS for select mode highlighting
+  useEffect(() => {
+    if (!useBrowserView || !projectId) return
+
+    const manageSelectModeCSS = async () => {
+      if (selectModeEnabled) {
+        const css = `
+          /* Select Mode - Only show outline on hover */
+          .select-mode-hover {
+            outline: 2px dashed rgba(147, 51, 234, 0.7) !important;
+            outline-offset: 2px;
+            background: rgba(147, 51, 234, 0.06);
+            cursor: pointer;
+            position: relative;
+          }
+
+          /* Selected state - Green solid outline with checkmark */
+          .select-mode-selected {
+            outline: 2px solid rgba(34, 197, 94, 0.8) !important;
+            outline-offset: 2px;
+            background: rgba(34, 197, 94, 0.08);
+            position: relative;
+          }
+
+          /* Checkmark indicator for selected elements */
+          .select-mode-selected::after {
+            content: '✓';
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 18px;
+            height: 18px;
+            background: rgb(34, 197, 94);
+            border: 2px solid white;
+            border-radius: 50%;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(34, 197, 94, 0.4);
+            z-index: 10;
+            pointer-events: none;
+          }
+
+          /* Tooltip showing element type on hover */
+          .select-mode-tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            pointer-events: none;
+            z-index: 10000;
+            white-space: nowrap;
+          }
+        `
+
+        const jsCode = `
+          (function() {
+            // Cleanup existing
+            if (window._selectModeCleanup) {
+              window._selectModeCleanup();
+            }
+
+            // Track currently hovered element
+            let currentHoverEl = null;
+
+            // Create tooltip element
+            const tooltip = document.createElement('div');
+            tooltip.className = 'select-mode-tooltip';
+            tooltip.style.display = 'none';
+            document.body.appendChild(tooltip);
+
+            // Helper to generate unique CSS selector for an element
+            function getUniqueSelector(element) {
+              if (element.id) {
+                return '#' + element.id;
+              }
+              const path = [];
+              let current = element;
+              while (current && current !== document.body) {
+                let selector = current.tagName.toLowerCase();
+                if (current.className && typeof current.className === 'string') {
+                  const classes = current.className.trim().split(/\\s+/)
+                    .filter(c => c && !c.startsWith('select-mode'));
+                  if (classes.length > 0) {
+                    selector += '.' + classes.join('.');
+                  }
+                }
+                const parent = current.parentElement;
+                if (parent) {
+                  const siblings = Array.from(parent.children).filter(
+                    child => child.tagName === current.tagName
+                  );
+                  if (siblings.length > 1) {
+                    const index = siblings.indexOf(current) + 1;
+                    selector += ':nth-of-type(' + index + ')';
+                  }
+                }
+                path.unshift(selector);
+                current = parent;
+              }
+              return path.join(' > ');
+            }
+
+            // Check if element should be selectable
+            function isSelectableElement(el) {
+              if (!el || el === document.body || el === document.documentElement) return false;
+              if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'LINK' || el.tagName === 'META') return false;
+              if (el.classList.contains('select-mode-tooltip')) return false;
+
+              const style = window.getComputedStyle(el);
+              if (style.display === 'none' || style.visibility === 'hidden') return false;
+
+              const rect = el.getBoundingClientRect();
+              if (rect.width < 10 || rect.height < 10) return false;
+
+              // Skip full-page containers
+              const viewportWidth = window.innerWidth;
+              const viewportHeight = window.innerHeight;
+              if (rect.width >= viewportWidth * 0.95 && rect.height >= viewportHeight * 0.95) return false;
+
+              // Skip common layout wrapper elements
+              const className = (el.className || '').toString().toLowerCase();
+              const id = (el.id || '').toLowerCase();
+              if (id === 'root' || id === 'app' || id === '__next' || id === 'main') return false;
+              if (className.includes('app-container') || className.includes('root-container') || className.includes('layout-wrapper')) return false;
+
+              return true;
+            }
+
+            // Find the best selectable element at cursor position
+            function findSelectableElement(target) {
+              let el = target;
+              while (el && el !== document.body) {
+                if (isSelectableElement(el)) {
+                  return el;
+                }
+                el = el.parentElement;
+              }
+              return null;
+            }
+
+            // Hover handler - show outline only on hovered element
+            const hoverHandler = function(e) {
+              const el = findSelectableElement(e.target);
+
+              // Remove hover from previous element
+              if (currentHoverEl && currentHoverEl !== el) {
+                currentHoverEl.classList.remove('select-mode-hover');
+              }
+
+              if (el) {
+                // Don't show hover outline if already selected
+                if (!el.classList.contains('select-mode-selected')) {
+                  el.classList.add('select-mode-hover');
+                }
+                currentHoverEl = el;
+
+                const tagName = el.tagName.toLowerCase();
+                tooltip.textContent = 'Select ' + tagName;
+                tooltip.style.display = 'block';
+                tooltip.style.left = (e.clientX + 10) + 'px';
+                tooltip.style.top = (e.clientY + 10) + 'px';
+              } else {
+                currentHoverEl = null;
+                tooltip.style.display = 'none';
+              }
+            };
+
+            // Click handler for selection
+            const clickHandler = function(e) {
+              const el = findSelectableElement(e.target);
+              if (el) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const selector = getUniqueSelector(el);
+                const isSelected = el.classList.contains('select-mode-selected');
+
+                if (isSelected) {
+                  el.classList.remove('select-mode-selected');
+                } else {
+                  el.classList.remove('select-mode-hover');
+                  el.classList.add('select-mode-selected');
+                }
+
+                // Notify React
+                window.__selectModeData = {
+                  action: isSelected ? 'deselect' : 'select',
+                  selector: selector,
+                  elementType: el.tagName.toLowerCase(),
+                  textContent: (el.textContent || '').trim().substring(0, 50),
+                  className: el.className.replace(/select-mode[^\\s]*/g, '').trim(),
+                  id: el.id
+                };
+                window.__selectModeRequested = true;
+              }
+            };
+
+            document.addEventListener('mousemove', hoverHandler);
+            document.addEventListener('click', clickHandler, true);
+
+            // Cleanup function
+            window._selectModeCleanup = function() {
+              document.removeEventListener('mousemove', hoverHandler);
+              document.removeEventListener('click', clickHandler, true);
+              if (tooltip.parentNode) tooltip.remove();
+              document.querySelectorAll('.select-mode-hover, .select-mode-selected').forEach(el => {
+                el.classList.remove('select-mode-hover', 'select-mode-selected');
+              });
+            };
+          })();
+        `
+
+        try {
+          const previewExists = await window.electronAPI?.preview.waitForPreview(projectId, 5000)
+          if (!previewExists?.exists) {
+            console.warn('⚠️ Preview not ready for select mode injection, skipping')
+            return
+          }
+
+          await window.electronAPI?.preview.injectCSS(projectId, css)
+          await window.electronAPI?.preview.executeJavaScript(projectId, jsCode)
+        } catch (error) {
+          console.error('❌ Failed to inject select mode CSS/JS:', error)
+        }
+      } else {
+        // Remove CSS and event listeners when select mode is disabled
+        try {
+          const hasPreview = await window.electronAPI?.preview.hasPreview(projectId)
+          if (!hasPreview?.exists) {
+            return
+          }
+
+          await window.electronAPI?.preview.removeCSS(projectId)
+          await window.electronAPI?.preview.executeJavaScript(projectId, `
+            if (window._selectModeCleanup) {
+              window._selectModeCleanup();
+              delete window._selectModeCleanup;
+            }
+          `)
+        } catch (error) {
+          if (!error.message?.includes('Preview not found')) {
+            console.error('❌ Failed to remove select mode CSS/JS:', error)
+          }
+        }
+      }
+    }
+
+    manageSelectModeCSS()
+  }, [useBrowserView, projectId, selectModeEnabled])
+
+  // Poll for select mode events from BrowserView
+  useEffect(() => {
+    if (!useBrowserView || !projectId || !selectModeEnabled) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const result = await window.electronAPI?.preview.executeJavaScript(
+          projectId,
+          `
+            if (window.__selectModeRequested) {
+              const data = window.__selectModeData;
+              window.__selectModeRequested = false;
+              window.__selectModeData = null;
+              data;
+            } else {
+              null;
+            }
+          `
+        )
+
+        if (result?.result) {
+          const { action, selector, elementType, textContent, className, id } = result.result
+
+          if (action === 'select') {
+            // Request file location from backend
+            const locationResult = await window.electronAPI?.files.findElementLocation(
+              projectId,
+              { selector, elementType, className, id, textContent }
+            )
+
+            const element = {
+              selector,
+              elementType,
+              preview: textContent?.substring(0, 30) || elementType,
+              filePath: locationResult?.filePath || null,
+              lineRange: locationResult?.lineRange || null,
+              displayLabel: locationResult?.filePath && locationResult?.lineRange
+                ? `${locationResult.fileName}(${locationResult.lineRange})`
+                : elementType + (id ? `#${id}` : className ? `.${className.split(' ')[0]}` : '')
+            }
+
+            addSelectedElement(element)
+          } else {
+            // Deselect - remove by selector
+            removeSelectedElementBySelector(selector)
+          }
+        }
+      } catch (error) {
+        // Silently ignore - preview might not be ready
+      }
+    }, 100)
+
+    return () => clearInterval(pollInterval)
+  }, [useBrowserView, projectId, selectModeEnabled, addSelectedElement, removeSelectedElementBySelector])
+
+  // Sync visual selection state when pills are removed from the store
+  useEffect(() => {
+    if (!useBrowserView || !projectId || !selectModeEnabled) return
+
+    // Get current selectors from selectedElements
+    const currentSelectors = selectedElements.map(el => el.selector)
+
+    // Update the preview to reflect the current selection state
+    const syncSelectionState = async () => {
+      try {
+        await window.electronAPI?.preview.executeJavaScript(
+          projectId,
+          `
+            (function() {
+              const currentSelectors = ${JSON.stringify(currentSelectors)};
+              document.querySelectorAll('.select-mode-selected').forEach(el => {
+                // Get the selector for this element
+                function getUniqueSelector(element) {
+                  if (element.id) {
+                    return '#' + element.id;
+                  }
+                  const path = [];
+                  let current = element;
+                  while (current && current !== document.body) {
+                    let selector = current.tagName.toLowerCase();
+                    if (current.className && typeof current.className === 'string') {
+                      const classes = current.className.trim().split(/\\s+/)
+                        .filter(c => c && !c.startsWith('select-mode'));
+                      if (classes.length > 0) {
+                        selector += '.' + classes.join('.');
+                      }
+                    }
+                    const parent = current.parentElement;
+                    if (parent) {
+                      const siblings = Array.from(parent.children).filter(
+                        child => child.tagName === current.tagName
+                      );
+                      if (siblings.length > 1) {
+                        const index = siblings.indexOf(current) + 1;
+                        selector += ':nth-of-type(' + index + ')';
+                      }
+                    }
+                    path.unshift(selector);
+                    current = parent;
+                  }
+                  return path.join(' > ');
+                }
+
+                const elSelector = getUniqueSelector(el);
+                if (!currentSelectors.includes(elSelector)) {
+                  el.classList.remove('select-mode-selected');
+                }
+              });
+            })();
+          `
+        )
+      } catch (error) {
+        // Silently ignore
+      }
+    }
+
+    syncSelectionState()
+  }, [useBrowserView, projectId, selectModeEnabled, selectedElements])
 
   const handleOpenInBrowser = () => {
     if (port) {

@@ -437,3 +437,204 @@ ipcMain.handle('files:rename', async (_event, filePath: string, newName: string)
     };
   }
 });
+
+/**
+ * Find element location in source files
+ * Returns file path and line range for a DOM element based on its selector/attributes
+ */
+ipcMain.handle('files:find-element-location', async (_event, projectId: string, elementInfo: {
+  selector: string;
+  elementType: string;
+  className?: string;
+  id?: string;
+  textContent?: string;
+}) => {
+  try {
+    // Get project from database
+    const project = databaseService.getProjectById(projectId);
+    if (!project) {
+      return { success: false, error: 'Project not found' };
+    }
+
+    const searchDirs = ['src', 'app', 'pages', 'components', 'views', 'lib', 'frontend', 'client'];
+    const validExtensions = ['.js', '.jsx', '.ts', '.tsx', '.vue', '.svelte', '.html'];
+
+    // Build search patterns based on element info (most specific first)
+    const searchPatterns: string[] = [];
+
+    // Search by ID (most specific)
+    if (elementInfo.id) {
+      searchPatterns.push(`id="${elementInfo.id}"`);
+      searchPatterns.push(`id='${elementInfo.id}'`);
+      searchPatterns.push(`id={["']${elementInfo.id}["']}`);
+    }
+
+    // Search by className
+    if (elementInfo.className) {
+      // Get the first meaningful class (skip select-mode classes)
+      const classes = elementInfo.className.split(' ')
+        .filter(c => c && !c.startsWith('select-mode'));
+      if (classes.length > 0) {
+        const firstClass = classes[0];
+        searchPatterns.push(`className="${firstClass}`);
+        searchPatterns.push(`className='${firstClass}`);
+        searchPatterns.push(`class="${firstClass}`);
+        searchPatterns.push(`class='${firstClass}`);
+      }
+    }
+
+    // Search by tag with text content
+    if (elementInfo.textContent && elementInfo.textContent.length > 3) {
+      const shortText = elementInfo.textContent.substring(0, 30).trim();
+      if (shortText) {
+        searchPatterns.push(shortText);
+      }
+    }
+
+    // Try each search pattern
+    for (const pattern of searchPatterns) {
+      const result = await searchFilesForPattern(project.path, pattern, searchDirs, validExtensions);
+      if (result) {
+        const relativePath = path.relative(project.path, result.filePath);
+        const fileName = path.basename(result.filePath);
+        return {
+          success: true,
+          filePath: relativePath,
+          fileName,
+          lineRange: result.endLine ? `${result.lineNumber}-${result.endLine}` : `${result.lineNumber}`
+        };
+      }
+    }
+
+    // If no match found, return success but with null values
+    return { success: true, filePath: null, fileName: null, lineRange: null };
+  } catch (error) {
+    console.error('❌ [FileHandlers] Error finding element location:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to find element location'
+    };
+  }
+});
+
+/**
+ * Search files for a specific pattern and return the file path and line number
+ */
+async function searchFilesForPattern(
+  projectPath: string,
+  pattern: string,
+  searchDirs: string[],
+  validExtensions: string[]
+): Promise<{ filePath: string; lineNumber: number; endLine?: number } | null> {
+  // Search in specified directories
+  for (const dir of searchDirs) {
+    const dirPath = path.join(projectPath, dir);
+    try {
+      await fs.access(dirPath);
+      const result = await searchDirectoryForPattern(dirPath, pattern, validExtensions);
+      if (result) {
+        return result;
+      }
+    } catch {
+      // Directory doesn't exist, skip it
+    }
+  }
+
+  // Also search root-level files
+  try {
+    const rootFiles = await fs.readdir(projectPath);
+    for (const file of rootFiles) {
+      const filePath = path.join(projectPath, file);
+      const stat = await fs.stat(filePath);
+      if (stat.isFile() && validExtensions.includes(path.extname(file))) {
+        const result = await findPatternInFile(filePath, pattern);
+        if (result) {
+          return result;
+        }
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  return null;
+}
+
+/**
+ * Recursively search directory for pattern
+ */
+async function searchDirectoryForPattern(
+  dirPath: string,
+  pattern: string,
+  validExtensions: string[]
+): Promise<{ filePath: string; lineNumber: number; endLine?: number } | null> {
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+
+      // Skip node_modules and other common ignore directories
+      if (entry.isDirectory()) {
+        if (['node_modules', '.git', 'dist', 'build', '.next', 'out'].includes(entry.name)) {
+          continue;
+        }
+        const result = await searchDirectoryForPattern(fullPath, pattern, validExtensions);
+        if (result) {
+          return result;
+        }
+      } else if (entry.isFile() && validExtensions.includes(path.extname(entry.name))) {
+        const result = await findPatternInFile(fullPath, pattern);
+        if (result) {
+          return result;
+        }
+      }
+    }
+  } catch (error) {
+    // Ignore errors
+  }
+
+  return null;
+}
+
+/**
+ * Find pattern in a file and return line number
+ */
+async function findPatternInFile(
+  filePath: string,
+  pattern: string
+): Promise<{ filePath: string; lineNumber: number; endLine?: number } | null> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const lines = content.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes(pattern)) {
+        // Found the pattern, now try to determine the end of the element
+        // Look for closing tag within next few lines
+        let endLine = i + 1;
+        const tagMatch = lines[i].match(/<(\w+)/);
+        if (tagMatch) {
+          const tagName = tagMatch[1];
+          // Look for closing tag
+          for (let j = i; j < Math.min(i + 20, lines.length); j++) {
+            if (lines[j].includes(`</${tagName}`) || lines[j].includes('/>')) {
+              endLine = j + 1;
+              break;
+            }
+          }
+        }
+
+        return {
+          filePath,
+          lineNumber: i + 1, // 1-indexed
+          endLine: endLine !== i + 1 ? endLine : undefined
+        };
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  return null;
+}

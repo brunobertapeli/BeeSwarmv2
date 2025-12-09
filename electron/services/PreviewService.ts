@@ -116,7 +116,7 @@ class PreviewService extends EventEmitter {
       }
 
       // For character keys, check if user is typing first
-      const charKeys = ['g', 'e', 'p'];
+      const charKeys = ['g', 'e', 's', 'p'];
       if (charKeys.includes(input.key.toLowerCase()) && !input.meta && !input.control && !input.alt) {
         // Check if user is typing in a form field
         const typing = await isUserTyping();
@@ -132,6 +132,8 @@ class PreviewService extends EventEmitter {
           this.mainWindow?.webContents.send('github-sheet-toggle-requested');
         } else if (input.key.toLowerCase() === 'e') {
           this.mainWindow?.webContents.send('edit-mode-toggle-requested');
+        } else if (input.key.toLowerCase() === 's') {
+          this.mainWindow?.webContents.send('select-mode-toggle-requested');
         } else if (input.key.toLowerCase() === 'p') {
           this.mainWindow?.webContents.send('screenshot-requested');
         }

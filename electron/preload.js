@@ -20,6 +20,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('edit-mode-toggle-requested', listener)
     return () => ipcRenderer.removeListener('edit-mode-toggle-requested', listener)
   },
+  onSelectModeToggleRequested: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('select-mode-toggle-requested', listener)
+    return () => ipcRenderer.removeListener('select-mode-toggle-requested', listener)
+  },
   onScreenshotRequested: (callback) => {
     const listener = () => callback()
     ipcRenderer.on('screenshot-requested', listener)
@@ -508,7 +513,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     replaceTextBySelector: (projectId, elementInfo, originalText, newText) => ipcRenderer.invoke('files:replace-text-by-selector', projectId, elementInfo, originalText, newText),
     readFileAsBase64: (filePath) => ipcRenderer.invoke('files:read-as-base64', filePath),
     saveBase64Image: (filePath, base64Data) => ipcRenderer.invoke('files:save-base64-image', filePath, base64Data),
-    renameFile: (filePath, newName) => ipcRenderer.invoke('files:rename', filePath, newName)
+    renameFile: (filePath, newName) => ipcRenderer.invoke('files:rename', filePath, newName),
+    findElementLocation: (projectId, elementInfo) => ipcRenderer.invoke('files:find-element-location', projectId, elementInfo)
   },
 
   // Analytics methods

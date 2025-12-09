@@ -16,6 +16,16 @@ interface TextContent {
   preview: string
 }
 
+interface SelectedElement {
+  id: string
+  selector: string
+  elementType: string
+  preview: string
+  filePath: string | null
+  lineRange: string | null
+  displayLabel: string
+}
+
 interface ContentEditableInputProps {
   value: string
   onChange: (value: string) => void
@@ -23,6 +33,8 @@ interface ContentEditableInputProps {
   onRemoveImageReference: (id: string) => void
   textContents: TextContent[]
   onRemoveTextContent: (id: string) => void
+  selectedElements?: SelectedElement[]
+  onRemoveSelectedElement?: (id: string) => void
   placeholder?: string
   disabled?: boolean
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
@@ -43,7 +55,7 @@ export interface ContentEditableInputRef {
 /**
  * ContentEditableInput
  *
- * A textarea input with image reference pills on the left.
+ * A textarea input with reference pills displayed above (inside the textarea area).
  * Text content from large pastes shows as plain text markers inline.
  */
 const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditableInputProps>(
@@ -55,6 +67,8 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
       onRemoveImageReference,
       textContents,
       onRemoveTextContent,
+      selectedElements = [],
+      onRemoveSelectedElement,
       placeholder = 'Type a message...',
       disabled = false,
       onKeyDown,
@@ -168,11 +182,21 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
       setTimeout(() => textareaRef.current?.focus(), 0)
     }
 
+    const handleSelectedElementRemove = (id: string) => {
+      onRemoveSelectedElement?.(id)
+      setTimeout(() => textareaRef.current?.focus(), 0)
+    }
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      // If backspace at start and there are image pills, remove last one
-      if (e.key === 'Backspace' && value === '' && imageReferences.length > 0) {
-        e.preventDefault()
-        onRemoveImageReference(imageReferences[imageReferences.length - 1].id)
+      // If backspace at start and there are pills, remove last one
+      if (e.key === 'Backspace' && value === '') {
+        if (selectedElements.length > 0 && onRemoveSelectedElement) {
+          e.preventDefault()
+          onRemoveSelectedElement(selectedElements[selectedElements.length - 1].id)
+        } else if (imageReferences.length > 0) {
+          e.preventDefault()
+          onRemoveImageReference(imageReferences[imageReferences.length - 1].id)
+        }
       }
 
       onKeyDown?.(e)
@@ -181,8 +205,8 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
       requestAnimationFrame(() => syncScroll())
     }
 
-    // Calculate if we need padding for pills
-    const hasPills = imageReferences.length > 0
+    // Check if we have any pills to display above
+    const hasPills = imageReferences.length > 0 || selectedElements.length > 0
 
     // Create highlighted text for display behind textarea
     const getHighlightedText = () => {
@@ -226,72 +250,104 @@ const ContentEditableInput = forwardRef<ContentEditableInputRef, ContentEditable
     }
 
     return (
-      <div className={`${className} flex items-center`}>
-        {/* Image reference pills (purple) */}
-        {imageReferences.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 items-center pl-3.5 pr-2 py-2.5 pointer-events-auto">
+      <div className={`${className} relative`}>
+        {/* Pills displayed above textarea (absolute positioned inside) */}
+        {hasPills && (
+          <div className="absolute left-[12px] top-[7px] flex gap-1 z-[5] pointer-events-auto max-w-[calc(100%-50px)] overflow-x-auto overflow-y-hidden scrollbar-hide">
+            {/* Image reference pills (purple) */}
             {imageReferences.map((ref) => (
               <div
                 key={ref.id}
-                className="inline-flex items-center gap-1.5 px-2 py-1 bg-purple-500/10 border border-purple-500/20 rounded text-xs text-purple-300 group pointer-events-auto whitespace-nowrap"
+                className="relative bg-purple-500/20 border border-purple-500/30 rounded-full px-1.5 py-px flex items-center gap-0.5 group hover:bg-purple-500/30 transition-colors flex-shrink-0"
               >
                 <img
                   src={ref.src}
                   alt={ref.name}
-                  className="w-4 h-4 object-cover rounded flex-shrink-0"
+                  className="w-2.5 h-2.5 rounded-full object-cover flex-shrink-0"
                 />
-                <span className="font-medium max-w-[100px] truncate">{ref.name}</span>
+                <span className="text-[9px] text-purple-200 max-w-[100px] truncate">
+                  {ref.name}
+                </span>
                 <button
                   onClick={() => handleImagePillRemove(ref.id)}
-                  className="hover:bg-purple-500/20 rounded p-0.5 transition-colors opacity-60 group-hover:opacity-100 flex-shrink-0"
+                  className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
                   disabled={disabled}
                 >
-                  <X className="w-3 h-3" />
+                  <X size={8} className="text-purple-300 hover:text-red-400" />
                 </button>
+              </div>
+            ))}
+
+            {/* Selected element pills (green) */}
+            {selectedElements.map((el) => (
+              <div
+                key={el.id}
+                className="relative bg-green-500/20 border border-green-500/30 rounded-full px-1.5 py-px flex items-center gap-0.5 group hover:bg-green-500/30 transition-colors flex-shrink-0"
+                title={el.selector}
+              >
+                <span className="text-[9px] text-green-200 font-mono max-w-[130px] truncate">
+                  {el.displayLabel}
+                </span>
+                {onRemoveSelectedElement && (
+                  <button
+                    onClick={() => handleSelectedElementRemove(el.id)}
+                    className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                    disabled={disabled}
+                  >
+                    <X size={8} className="text-green-300 hover:text-red-400" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
         )}
 
-        {/* Textarea with highlight overlay */}
-        <div className="flex-1 relative">
-          {/* Placeholder when empty */}
-          {!value && (
-            <div
-              className={`absolute inset-0 pointer-events-none text-gray-500 ${hasPills ? 'pl-2 py-2.5' : 'px-3.5 py-2.5'}`}
-              style={{
-                lineHeight: '24px',
-              }}
-            >
-              {placeholder}
-            </div>
-          )}
-
-          {/* Highlight layer - hidden, kept for potential future use */}
-
-          {/* Actual textarea on top */}
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => handleChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={onFocus}
-            onBlur={onBlur}
-            onPaste={onPaste}
-            onDragOver={onDragOver}
-            onDrop={onDrop}
-            onScroll={handleScroll}
-            disabled={disabled}
-            className={`relative bg-transparent border-none outline-none resize-none ${hasPills ? 'pl-2 py-2.5' : 'px-3.5 py-2.5'} w-full text-white`}
-            rows={3}
+        {/* Placeholder when empty */}
+        {!value && !hasPills && (
+          <div
+            className="absolute inset-0 pointer-events-none text-gray-500 px-3.5 py-2.5"
             style={{
               lineHeight: '24px',
-              height: '77px',
-              overflow: 'auto',
-              caretColor: 'white',
             }}
-          />
-        </div>
+          >
+            {placeholder}
+          </div>
+        )}
+
+        {/* Placeholder when has pills but no value */}
+        {!value && hasPills && (
+          <div
+            className="absolute left-[12px] top-[30px] pointer-events-none text-gray-500"
+            style={{
+              lineHeight: '24px',
+            }}
+          >
+            {placeholder}
+          </div>
+        )}
+
+        {/* Actual textarea */}
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => handleChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          onPaste={onPaste}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          onScroll={handleScroll}
+          disabled={disabled}
+          className={`relative bg-transparent border-none outline-none resize-none px-3 w-full text-white ${hasPills ? 'pt-[30px] pb-2' : 'py-2.5'}`}
+          rows={3}
+          style={{
+            lineHeight: '24px',
+            height: '77px',
+            overflow: 'auto',
+            caretColor: 'white',
+          }}
+        />
       </div>
     )
   }

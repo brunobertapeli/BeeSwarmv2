@@ -164,6 +164,7 @@ export interface ElectronAPI {
   invoke: (channel: string, ...args: any[]) => Promise<any>
   onDependencyProgress: (callback: (data: string) => void) => void
   onEditModeToggleRequested: (callback: () => void) => () => void
+  onSelectModeToggleRequested: (callback: () => void) => () => void
   onScreenshotRequested: (callback: () => void) => () => void
   onGitHubSheetToggleRequested: (callback: () => void) => () => void
 
@@ -1213,6 +1214,19 @@ export interface ElectronAPI {
     readFileAsBase64: (filePath: string) => Promise<string>
     saveBase64Image: (filePath: string, base64Data: string) => Promise<{ success: boolean; error?: string }>
     renameFile: (filePath: string, newName: string) => Promise<{ success: boolean; newPath?: string; error?: string }>
+    findElementLocation: (projectId: string, elementInfo: {
+      selector: string
+      elementType: string
+      className?: string
+      id?: string
+      textContent?: string
+    }) => Promise<{
+      success: boolean
+      filePath?: string | null
+      fileName?: string
+      lineRange?: string | null
+      error?: string
+    }>
   }
 
   analytics: {

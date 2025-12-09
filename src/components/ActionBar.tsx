@@ -27,7 +27,8 @@ import {
   MessageSquare,
   RefreshCw,
   Shapes,
-  Wand2
+  Wand2,
+  MousePointerSquareDashed
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '../store/appStore'
@@ -86,7 +87,7 @@ function ActionBar({
   deployServices = []
 }: ActionBarProps) {
   const { viewMode, setViewMode } = useAppStore()
-  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, chatWidgetEnabled, setChatWidgetEnabled, iconsWidgetEnabled, setIconsWidgetEnabled, backgroundRemoverWidgetEnabled, setBackgroundRemoverWidgetEnabled, setStatusSheetExpanded, bringWidgetToFront, setPreviewHidden } = useLayoutStore()
+  const { layoutState, isActionBarVisible, editModeEnabled, setEditModeEnabled, selectModeEnabled, setSelectModeEnabled, selectedElements, removeSelectedElement, clearSelectedElements, imageReferences, removeImageReference, clearImageReferences, textContents, addTextContent, removeTextContent, clearTextContents, prefilledMessage, setPrefilledMessage, kanbanEnabled, setKanbanEnabled, addStickyNote, analyticsWidgetEnabled, setAnalyticsWidgetEnabled, projectAssetsWidgetEnabled, setProjectAssetsWidgetEnabled, whiteboardWidgetEnabled, setWhiteboardWidgetEnabled, chatWidgetEnabled, setChatWidgetEnabled, iconsWidgetEnabled, setIconsWidgetEnabled, backgroundRemoverWidgetEnabled, setBackgroundRemoverWidgetEnabled, setStatusSheetExpanded, bringWidgetToFront, setPreviewHidden } = useLayoutStore()
   const toast = useToast()
   const [isVisible, setIsVisible] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeStatus>('idle')
@@ -435,6 +436,14 @@ function ActionBar({
         }
       }
 
+      // S - Toggle Select Mode (only in DEFAULT mode, and not when modal is open)
+      if (e.key.toLowerCase() === 's' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
+        if (layoutState === 'DEFAULT') {
+          e.preventDefault()
+          toggleSelectMode()
+        }
+      }
+
       // P - Take Screenshot (only in DEFAULT mode, and not when modal is open)
       if (e.key.toLowerCase() === 'p' && !e.metaKey && !e.ctrlKey && !e.altKey ) {
         if (layoutState === 'DEFAULT') {
@@ -502,7 +511,7 @@ function ActionBar({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, whiteboardWidgetEnabled, chatWidgetEnabled, backgroundRemoverWidgetEnabled, editModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setWhiteboardWidgetEnabled, setChatWidgetEnabled, setBackgroundRemoverWidgetEnabled, setEditModeEnabled])
+  }, [layoutState, kanbanEnabled, analyticsWidgetEnabled, projectAssetsWidgetEnabled, whiteboardWidgetEnabled, chatWidgetEnabled, backgroundRemoverWidgetEnabled, editModeEnabled, selectModeEnabled, setKanbanEnabled, setAnalyticsWidgetEnabled, setProjectAssetsWidgetEnabled, setWhiteboardWidgetEnabled, setChatWidgetEnabled, setBackgroundRemoverWidgetEnabled, setEditModeEnabled, setSelectModeEnabled])
 
   // Listen for global shortcuts from Electron main process
   useEffect(() => {
@@ -521,6 +530,19 @@ function ActionBar({
       }
     })
 
+    // Listen for select mode toggle (S key)
+    const unsubSelectMode = window.electronAPI.onSelectModeToggleRequested?.(() => {
+      // Only trigger if not typing in an input/textarea
+      const activeElement = document.activeElement
+      if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      if (layoutState === 'DEFAULT') {
+        toggleSelectMode()
+      }
+    })
+
     // Listen for screenshot request (P key)
     const unsubScreenshot = window.electronAPI.onScreenshotRequested?.(() => {
       // Only trigger if not typing in an input/textarea
@@ -536,9 +558,10 @@ function ActionBar({
 
     return () => {
       unsubEditMode?.()
+      unsubSelectMode?.()
       unsubScreenshot?.()
     }
-  }, [layoutState, editModeEnabled, setEditModeEnabled])
+  }, [layoutState, editModeEnabled, setEditModeEnabled, selectModeEnabled, setSelectModeEnabled])
 
 
   // Auto-send message for website import
@@ -593,6 +616,17 @@ function ActionBar({
         prompt = `I'd like to modify the following image(s):\n\n${imageContext}\n\n${prompt}`
       }
 
+      // Prepend selected elements context if any exist
+      if (selectedElements.length > 0) {
+        const elementsContext = selectedElements
+          .map(
+            (el) =>
+              `- ${el.elementType}${el.filePath ? ` in ${el.filePath}` : ''}${el.lineRange ? ` (lines ${el.lineRange})` : ''}\n  Selector: ${el.selector}${el.preview ? `\n  Content: "${el.preview}"` : ''}`
+          )
+          .join('\n')
+        prompt = `I'm referencing the following UI element(s):\n\n${elementsContext}\n\n${prompt}`
+      }
+
       const currentAttachments = [...attachments] // Copy attachments before clearing
       const usePlanMode = planModeToggle // Capture plan mode state before clearing
 
@@ -602,10 +636,16 @@ function ActionBar({
       setPlanModeToggle(false) // Reset toggle for next message
       clearImageReferences() // Clear image references after sending
       clearTextContents() // Clear text content pills after sending
+      clearSelectedElements() // Clear selected elements after sending
 
       // Disable edit mode when sending a message to Claude
       if (editModeEnabled) {
         setEditModeEnabled(false)
+      }
+
+      // Disable select mode when sending a message to Claude
+      if (selectModeEnabled) {
+        setSelectModeEnabled(false)
       }
 
       try {
@@ -880,10 +920,26 @@ function ActionBar({
   }
 
   const toggleEditMode = () => {
+    // Disable select mode if enabled (mutually exclusive)
+    if (selectModeEnabled) {
+      setSelectModeEnabled(false)
+    }
     setEditModeEnabled(!editModeEnabled)
     toast.info(
       editModeEnabled ? 'Edit mode disabled' : 'Edit mode enabled',
       editModeEnabled ? 'Images and text are no longer highlighted' : 'Click on images or text to edit'
+    )
+  }
+
+  const toggleSelectMode = () => {
+    // Disable edit mode if enabled (mutually exclusive)
+    if (editModeEnabled) {
+      setEditModeEnabled(false)
+    }
+    setSelectModeEnabled(!selectModeEnabled)
+    toast.info(
+      selectModeEnabled ? 'Select mode disabled' : 'Select mode enabled',
+      selectModeEnabled ? 'Elements are no longer highlighted' : 'Click elements to select. Click again to deselect.'
     )
   }
 
@@ -1328,6 +1384,8 @@ function ActionBar({
                 onRemoveImageReference={removeImageReference}
                 textContents={textContents}
                 onRemoveTextContent={removeTextContent}
+                selectedElements={selectedElements}
+                onRemoveSelectedElement={removeSelectedElement}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 onDragOver={handleDragOver}
@@ -1823,6 +1881,28 @@ function ActionBar({
               />
               <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
                 {editModeEnabled ? 'Disable Edit Mode (E)' : 'Enable Edit Mode (E)'}
+              </span>
+            </button>
+
+            <button
+              onClick={toggleSelectMode}
+              disabled={layoutState !== 'DEFAULT'}
+              className={`p-1.5 rounded-lg transition-all icon-button-group relative ${
+                layoutState !== 'DEFAULT'
+                  ? 'opacity-40 cursor-not-allowed'
+                  : 'hover:bg-dark-bg/50'
+              }`}
+            >
+              <MousePointerSquareDashed
+                size={15}
+                className={`transition-colors ${
+                  selectModeEnabled
+                    ? 'text-green-500'
+                    : 'text-gray-400'
+                } ${layoutState === 'DEFAULT' && !selectModeEnabled ? 'hover:text-gray-200' : ''}`}
+              />
+              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-dark-bg/95 backdrop-blur-sm border border-dark-border text-[10px] text-white px-2 py-1 rounded opacity-0 hover-tooltip transition-opacity whitespace-nowrap pointer-events-none z-[150]">
+                {selectModeEnabled ? 'Disable Select Mode (S)' : 'Enable Select Mode (S)'}
               </span>
             </button>
 
