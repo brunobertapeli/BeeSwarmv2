@@ -285,6 +285,11 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
+    fork: (id: string) => Promise<{
+      success: boolean
+      project?: Project
+      error?: string
+    }>
     saveEnvConfig: (id: string, envVars: Record<string, string>) => Promise<{
       success: boolean
       error?: string
@@ -916,7 +921,7 @@ export interface ElectronAPI {
       success: boolean
       error?: string
     }>
-    createInitializationBlock: (projectId: string, templateName: string, stages: Array<{ label: string; isComplete: boolean }>) => Promise<{
+    createInitializationBlock: (projectId: string, templateName: string, stages: Array<{ label: string; isComplete: boolean }>, sourceProjectName?: string) => Promise<{
       success: boolean
       blockId?: string
       error?: string

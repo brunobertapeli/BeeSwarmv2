@@ -309,6 +309,245 @@ class ProjectService {
   }
 
   /**
+   * Fork an existing project - creates a complete copy with new ID and name
+   * @param projectId - Source project ID to fork
+   * @param userId - User ID who owns the project
+   * @returns The newly created forked project
+   */
+  async forkProject(projectId: string, userId: string): Promise<Project> {
+    // Get source project
+    const sourceProject = databaseService.getProjectById(projectId)
+    if (!sourceProject) {
+      throw new Error('Source project not found')
+    }
+
+    // Validate source path exists
+    const validatedSourcePath = pathValidator.validateProjectPath(sourceProject.path, userId)
+    if (!fs.existsSync(validatedSourcePath)) {
+      throw new Error('Source project folder not found')
+    }
+
+    // Generate unique fork name
+    const forkName = this.generateForkName(sourceProject.name, userId)
+
+    // Generate new project ID
+    const newProjectId = `proj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+    // Get new project path
+    const newProjectPath = templateService.getProjectPath(newProjectId, userId)
+
+    // Copy source directory to new path (excluding .git, node_modules, and build artifacts)
+    this.copyDirectoryExcluding(validatedSourcePath, newProjectPath, [
+      '.git',
+      'node_modules',
+      '.pnpm',
+      'dist',
+      'build',
+      '.next',
+      '.nuxt',
+      '.cache'
+    ])
+
+    // Extra safety: remove any node_modules that might have been copied (handles edge cases)
+    this.removeNodeModulesRecursively(newProjectPath)
+
+    // Also remove package-lock.json files to avoid lock file conflicts
+    this.removeLockFilesRecursively(newProjectPath)
+
+    // Initialize fresh git repository
+    const { simpleGit } = await import('simple-git')
+    const { bundledBinaries } = await import('./BundledBinaries')
+    const git = simpleGit(newProjectPath, { binary: bundledBinaries.gitPath })
+    await git.init()
+
+    // Allocate new ports for the forked project
+    const deployServices = sourceProject.deployServices ? JSON.parse(sourceProject.deployServices) : ['netlify']
+    const strategy = DeploymentStrategyFactory.create(deployServices)
+    const ports = await strategy.allocatePorts(newProjectId)
+
+    // Update project configs with new ports (vite.config.ts, netlify.toml, etc.)
+    strategy.updateProjectConfigs(newProjectPath, ports)
+
+    // Create database record for forked project (basic fields only)
+    const forkedProject = databaseService.createProject({
+      userId: userId,
+      name: forkName,
+      path: newProjectPath,
+      templateId: sourceProject.templateId,
+      templateName: sourceProject.templateName,
+      techStack: sourceProject.techStack,
+      status: 'ready',
+      deployServices: sourceProject.deployServices,
+      envFiles: sourceProject.envFiles,
+      imagePath: sourceProject.imagePath,
+      websiteImportAutoPromptSent: null
+    })
+
+    // Copy widget states from source project (these aren't handled by createProject)
+    if (sourceProject.kanbanState) {
+      databaseService.saveKanbanState(forkedProject.id, JSON.parse(sourceProject.kanbanState))
+    }
+    if (sourceProject.stickyNotesState) {
+      databaseService.saveStickyNotesState(forkedProject.id, JSON.parse(sourceProject.stickyNotesState))
+    }
+    if (sourceProject.analyticsWidgetState) {
+      databaseService.saveAnalyticsWidgetState(forkedProject.id, JSON.parse(sourceProject.analyticsWidgetState))
+    }
+    if (sourceProject.projectAssetsWidgetState) {
+      databaseService.saveProjectAssetsWidgetState(forkedProject.id, JSON.parse(sourceProject.projectAssetsWidgetState))
+    }
+    if (sourceProject.whiteboardWidgetState) {
+      databaseService.saveWhiteboardWidgetState(forkedProject.id, JSON.parse(sourceProject.whiteboardWidgetState))
+    }
+    if (sourceProject.iconsWidgetState) {
+      databaseService.saveIconsWidgetState(forkedProject.id, JSON.parse(sourceProject.iconsWidgetState))
+    }
+
+    // Copy env vars if source has them
+    if (sourceProject.envVars) {
+      const envVars = JSON.parse(sourceProject.envVars)
+      databaseService.saveEnvConfig(forkedProject.id, envVars)
+    }
+
+    // Mark dependencies as NOT installed (since we excluded node_modules)
+    // User will need to install them when opening the project
+
+    // Create initial git commit
+    await git.add('.')
+    await git.commit('Initial commit (forked project)')
+
+    return {
+      ...forkedProject,
+      envVars: sourceProject.envVars,
+      dependenciesInstalled: false
+    }
+  }
+
+  /**
+   * Generate a unique fork name
+   * Tries "Fork of X", then "Fork 2 of X", "Fork 3 of X", etc.
+   */
+  private generateForkName(originalName: string, userId: string): string {
+    // Try "Fork of X" first
+    let forkName = `Fork of ${originalName}`
+    if (!databaseService.projectNameExists(forkName, userId)) {
+      return forkName
+    }
+
+    // Try "Fork N of X" starting from 2
+    let counter = 2
+    while (true) {
+      forkName = `Fork ${counter} of ${originalName}`
+      if (!databaseService.projectNameExists(forkName, userId)) {
+        return forkName
+      }
+      counter++
+      // Safety limit
+      if (counter > 100) {
+        throw new Error('Too many forks of this project')
+      }
+    }
+  }
+
+  /**
+   * Recursively find and remove all node_modules directories
+   * @private
+   */
+  private removeNodeModulesRecursively(dir: string): void {
+    if (!fs.existsSync(dir)) return
+
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name)
+
+      if (entry.name === 'node_modules') {
+        // Remove the entire node_modules directory
+        console.log(`🗑️ Removing node_modules at: ${fullPath}`)
+        try {
+          fs.rmSync(fullPath, { recursive: true, force: true })
+          console.log(`✓ Removed ${fullPath}`)
+        } catch (err) {
+          console.warn(`⚠️ Failed to remove ${fullPath}:`, err)
+        }
+      } else if (entry.isDirectory()) {
+        // Recursively check subdirectories
+        this.removeNodeModulesRecursively(fullPath)
+      }
+    }
+  }
+
+  /**
+   * Remove lock files to ensure fresh npm install
+   * @private
+   */
+  private removeLockFilesRecursively(dir: string): void {
+    if (!fs.existsSync(dir)) return
+
+    const lockFiles = ['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml']
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name)
+
+      if (lockFiles.includes(entry.name)) {
+        try {
+          fs.unlinkSync(fullPath)
+          console.log(`🗑️ Removed lock file: ${fullPath}`)
+        } catch (err) {
+          console.warn(`⚠️ Failed to remove lock file ${fullPath}:`, err)
+        }
+      } else if (entry.isDirectory() && entry.name !== 'node_modules') {
+        this.removeLockFilesRecursively(fullPath)
+      }
+    }
+  }
+
+  /**
+   * Recursively copy a directory, excluding specified folders
+   * @private
+   */
+  private copyDirectoryExcluding(src: string, dest: string, excludeFolders: string[]): void {
+    // Create destination directory
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true })
+    }
+
+    // Read source directory
+    const entries = fs.readdirSync(src, { withFileTypes: true })
+
+    for (const entry of entries) {
+      // Skip excluded folders (check name first, regardless of type)
+      if (excludeFolders.includes(entry.name)) {
+        continue
+      }
+
+      const srcPath = path.join(src, entry.name)
+      const destPath = path.join(dest, entry.name)
+
+      // Use fs.statSync to properly resolve symlinks and check if it's a directory
+      let isDir = false
+      try {
+        const stat = fs.statSync(srcPath)
+        isDir = stat.isDirectory()
+      } catch {
+        // If we can't stat (broken symlink, etc.), skip
+        continue
+      }
+
+      if (isDir) {
+        // Recursively copy subdirectory
+        this.copyDirectoryExcluding(srcPath, destPath, excludeFolders)
+      } else {
+        // Copy file (skip symlinks to avoid issues)
+        if (!entry.isSymbolicLink()) {
+          fs.copyFileSync(srcPath, destPath)
+        }
+      }
+    }
+  }
+
+  /**
    * Recursively copy a directory
    * @private
    */

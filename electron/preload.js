@@ -81,6 +81,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateLastOpened: (id) => ipcRenderer.invoke('project:update-last-opened', id),
     rename: (id, newName) => ipcRenderer.invoke('project:rename', id, newName),
     showInFinder: (id) => ipcRenderer.invoke('project:show-in-finder', id),
+    fork: (id) => ipcRenderer.invoke('project:fork', id),
     saveEnvConfig: (id, envVars) => ipcRenderer.invoke('project:save-env-config', id, envVars),
     getEnvConfig: (id) => ipcRenderer.invoke('project:get-env-config', id),
     readEnvFiles: (id) => ipcRenderer.invoke('project:read-env-files', id),
@@ -327,7 +328,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getHistory: (projectId, limit, offset) => ipcRenderer.invoke('chat:get-history', projectId, limit, offset),
     getBlock: (blockId) => ipcRenderer.invoke('chat:get-block', blockId),
     deleteHistory: (projectId) => ipcRenderer.invoke('chat:delete-history', projectId),
-    createInitializationBlock: (projectId, templateName, stages) => ipcRenderer.invoke('chat:create-initialization-block', projectId, templateName, stages),
+    createInitializationBlock: (projectId, templateName, stages, sourceProjectName) => ipcRenderer.invoke('chat:create-initialization-block', projectId, templateName, stages, sourceProjectName),
     updateInitializationBlock: (projectId, stages, isComplete, commitHash) => ipcRenderer.invoke('chat:update-initialization-block', projectId, stages, isComplete, commitHash),
 
     // Chat event listeners

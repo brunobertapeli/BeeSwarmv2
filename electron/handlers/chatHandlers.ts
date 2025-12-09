@@ -263,24 +263,29 @@ export function registerChatHandlers(): void {
   });
 
   // Create initialization block
-  ipcMain.handle('chat:create-initialization-block', async (_event, projectId: string, templateName: string, stages: Array<{ label: string; isComplete: boolean }>) => {
+  ipcMain.handle('chat:create-initialization-block', async (_event, projectId: string, templateName: string, stages: Array<{ label: string; isComplete: boolean }>, sourceProjectName?: string) => {
     try {
       // SECURITY: Validate user owns this project
       validateProjectOwnership(projectId);
 
       // Create a special block with initialization data
       // Store stages as JSON in the 'actions' field (we can reuse this for initialization stages)
+      const blockPrompt = sourceProjectName
+        ? `Forking project from: ${sourceProjectName}`
+        : `Initializing project with template: ${templateName}`;
+
       const block = databaseService.createChatBlock(
         projectId,
-        `Initializing project with template: ${templateName}`,
+        blockPrompt,
         'initialization'
       );
 
-      // Store stages in a custom format
+      // Store stages in a custom format (include sourceProjectName for fork display)
       const initData = {
         type: 'initialization',
         templateName,
-        stages
+        stages,
+        ...(sourceProjectName && { sourceProjectName })
       };
 
       databaseService.updateChatBlock(block.id, {

@@ -1004,22 +1004,35 @@ function StatusSheet({ projectId, actionBarRef, onMouseEnter, onMouseLeave, onSt
 
                     // Render initialization block
                     if (block.type === 'initialization') {
+                      const isFork = !!block.sourceProjectName
                       return (
                         <div key={block.id} className="mb-6">
                           <div className="bg-white/[0.02] rounded-lg border border-white/10 p-4 relative">
-                            {/* STEP 1: Initiating new project */}
+                            {/* STEP 1: Initiating new project or Forked from */}
                             <div className="timeline-step">
                               <div className="step-track">
                                 <div className="step-icon step-icon-user">
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white opacity-90">
-                                    <path d="M12 5v14M5 12h14" />
-                                  </svg>
+                                  {isFork ? (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white opacity-90">
+                                      <circle cx="12" cy="18" r="3" />
+                                      <circle cx="6" cy="6" r="3" />
+                                      <circle cx="18" cy="6" r="3" />
+                                      <path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9" />
+                                      <path d="M12 12v3" />
+                                    </svg>
+                                  ) : (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white opacity-90">
+                                      <path d="M12 5v14M5 12h14" />
+                                    </svg>
+                                  )}
                                 </div>
                                 <div className="step-line"></div>
                               </div>
                               <div className="step-content">
                                 <div className="flex items-center gap-2 pt-1 pb-2">
-                                  <span className="text-[14px] font-semibold text-gray-100">Initiating new project</span>
+                                  <span className="text-[14px] font-semibold text-gray-100">
+                                    {isFork ? `Forked from ${block.sourceProjectName}` : 'Initiating new project'}
+                                  </span>
                                   {!block.isComplete && (
                                     <Loader2 size={12} className="text-primary animate-spin" />
                                   )}

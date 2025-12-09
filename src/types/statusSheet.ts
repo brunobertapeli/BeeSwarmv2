@@ -57,6 +57,7 @@ export interface ConversationBlock {
   deploymentStartTime?: number
   initializationStages?: DeploymentStage[]
   templateName?: string
+  sourceProjectName?: string // Present when this is a fork
   completedAt?: number
 }
 

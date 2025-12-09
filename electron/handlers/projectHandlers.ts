@@ -306,6 +306,36 @@ export function registerProjectHandlers() {
     }
   })
 
+  // Fork project - creates a complete copy with new ID and name
+  ipcMain.handle('project:fork', async (_event, projectId: string) => {
+    try {
+      // SECURITY: Validate user owns this project
+      const userId = requireAuth()
+      validateProjectOwnership(projectId)
+
+      const forkedProject = await projectService.forkProject(projectId, userId)
+
+      return {
+        success: true,
+        project: forkedProject
+      }
+    } catch (error) {
+      console.error('❌ Error forking project:', error)
+
+      if (error instanceof UnauthorizedError) {
+        return {
+          success: false,
+          error: 'Unauthorized'
+        }
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to fork project'
+      }
+    }
+  })
+
   // Save environment configuration
   ipcMain.handle('project:save-env-config', async (_event, projectId: string, envVars: Record<string, string>) => {
     try {

@@ -15,7 +15,8 @@ import {
   Edit3,
   Copy,
   Plus,
-  Check
+  Check,
+  GitFork
 } from 'lucide-react'
 import type { TechConfig } from './TemplateSelector'
 import { useAppStore } from '../store/appStore'
@@ -82,6 +83,8 @@ function ProjectSettings({
   const [installProgress, setInstallProgress] = useState<string[]>([])
   const [isEditingName, setIsEditingName] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isForking, setIsForking] = useState(false)
+  const [forkStatus, setForkStatus] = useState<string>('')
   const [envFiles, setEnvFiles] = useState<Array<{
     path: string
     label: string
@@ -391,6 +394,113 @@ function ProjectSettings({
     }
   }
 
+  const handleForkProject = async () => {
+    setIsForking(true)
+    setForkStatus('Copying project...')
+    try {
+      // Step 1: Fork the project (copies files, allocates ports, creates DB record)
+      const result = await window.electronAPI?.projects.fork(projectId)
+      if (!result?.success || !result.project) {
+        toast.error('Fork failed', result?.error || 'Could not fork project')
+        return
+      }
+
+      const forkedProject = result.project
+      const forkedProjectId = forkedProject.id
+
+      // Parse deploy services from the forked project
+      const deployServices = forkedProject.deployServices ? JSON.parse(forkedProject.deployServices) : ['netlify']
+      const isRailway = deployServices?.includes('railway')
+
+      // Get fork-specific initialization stages
+      const getForkSteps = (completed: {
+        clone?: boolean
+        install?: boolean
+        git?: boolean
+        backendServer?: boolean
+        frontendServer?: boolean
+        server?: boolean
+        ready?: boolean
+      }) => {
+        if (isRailway) {
+          return [
+            { label: 'Cloning codebase', isComplete: completed.clone ?? false },
+            { label: 'Installing dependencies (npm install)', isComplete: completed.install ?? false },
+            { label: 'Initiating new git repository', isComplete: completed.git ?? false },
+            { label: 'Starting backend server', isComplete: completed.backendServer ?? false },
+            { label: 'Starting frontend server', isComplete: completed.frontendServer ?? false },
+            { label: 'Your project is ready', isComplete: completed.ready ?? false }
+          ]
+        }
+        return [
+          { label: 'Cloning codebase', isComplete: completed.clone ?? false },
+          { label: 'Installing dependencies (npm install)', isComplete: completed.install ?? false },
+          { label: 'Initiating new git repository', isComplete: completed.git ?? false },
+          { label: 'Starting development server', isComplete: completed.server ?? false },
+          { label: 'Your project is ready', isComplete: completed.ready ?? false }
+        ]
+      }
+
+      // Step 2: Install dependencies BEFORE switching to the project
+      setForkStatus('Installing dependencies...')
+      const installResult = await window.electronAPI?.projects.installDependencies(forkedProjectId)
+      if (!installResult?.success) {
+        toast.error('Fork incomplete', 'Dependencies failed to install. You can try opening the project and running npm install manually.')
+        onProjectUpdated?.()
+        return
+      }
+
+      // Step 3: Start dev server BEFORE switching (so it's ready when user sees the project)
+      setForkStatus('Starting server...')
+      const serverResult = await window.electronAPI?.process.startDevServer(forkedProjectId)
+      if (!serverResult?.success) {
+        toast.error('Fork incomplete', 'Failed to start development server')
+        onProjectUpdated?.()
+        return
+      }
+
+      // Step 4: Get the initial commit hash
+      let commitHash: string | undefined
+      try {
+        const headResult = await window.electronAPI?.git.getHeadCommit(forkedProjectId)
+        if (headResult?.success && headResult.commitHash) {
+          commitHash = headResult.commitHash
+        }
+      } catch {
+        // Ignore
+      }
+
+      // Step 5: NOW switch to the forked project (everything is ready)
+      onProjectUpdated?.()
+      onClose()
+      onSelectProject?.(forkedProjectId)
+
+      // Step 6: Create initialization block (already complete)
+      await window.electronAPI?.chat.createInitializationBlock(
+        forkedProjectId,
+        forkedProject.templateName || 'Unknown',
+        getForkSteps({ clone: true, git: true, install: true, backendServer: true, frontendServer: true, server: true, ready: true }),
+        projectName // sourceProjectName - this makes it show "Forked from X"
+      )
+
+      // Mark as complete with commit hash
+      await window.electronAPI?.chat.updateInitializationBlock(
+        forkedProjectId,
+        getForkSteps({ clone: true, git: true, install: true, backendServer: true, frontendServer: true, server: true, ready: true }),
+        true,
+        commitHash
+      )
+
+      toast.success('Fork complete', `"${forkedProject.name}" is ready`)
+    } catch (error) {
+      console.error('Error forking project:', error)
+      toast.error('Fork failed', error instanceof Error ? error.message : 'Unknown error')
+    } finally {
+      setIsForking(false)
+      setForkStatus('')
+    }
+  }
+
   const handleDeleteProject = async () => {
     if (deleteConfirmation !== projectName) {
       toast.error('Incorrect confirmation', 'Please type the project name exactly')
@@ -444,11 +554,11 @@ function ProjectSettings({
         {/* Backdrop */}
         <div
           className={`absolute inset-0 bg-black/${isSetupMode ? '80' : '60'} backdrop-blur-sm animate-fadeIn`}
-          onClick={isSetupMode ? undefined : onClose}
+          onClick={(isSetupMode || isForking) ? undefined : onClose}
         />
 
         {/* Modal */}
-        <div className="relative w-[700px] max-h-[80vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden flex flex-col">
+        <div className="relative w-[700px] max-h-[90vh] bg-dark-card border border-dark-border rounded-xl shadow-2xl animate-scaleIn overflow-hidden flex flex-col">
           {/* Header */}
           <div className="border-b border-dark-border/50">
             <div className="flex items-center justify-between px-5 py-4">
@@ -460,7 +570,9 @@ function ProjectSettings({
               {!isSetupMode && (
                 <button
                   onClick={onClose}
-                  className="p-1.5 hover:bg-dark-bg/70 rounded-md transition-all"
+                  disabled={isForking}
+                  className={`p-1.5 hover:bg-dark-bg/70 rounded-md transition-all ${isForking ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  title={isForking ? 'Please wait while forking completes' : 'Close'}
                 >
                   <X size={16} className="text-gray-400" />
                 </button>
@@ -609,6 +721,40 @@ function ProjectSettings({
                       <ExternalLink size={12} />
                       Open
                     </button>
+                  </div>
+                </section>
+
+                {/* Fork Project */}
+                <section>
+                  <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                    <GitFork size={14} className="text-primary" />
+                    Fork Project
+                  </h3>
+                  <div className="p-4 bg-dark-bg/30 border border-dark-border/50 rounded-lg">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 mr-3">
+                        <p className="text-xs font-medium text-white">Create a copy of this project</p>
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          {isForking && forkStatus
+                            ? forkStatus
+                            : 'Fork creates a new project with the same files, settings, and widgets. Git history and chat history start fresh.'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleForkProject}
+                        disabled={isForking}
+                        className={`px-3 py-1.5 text-xs font-medium rounded transition-all flex items-center gap-1.5 min-w-[120px] justify-center ${
+                          isForking
+                            ? 'bg-primary/20 text-primary cursor-wait border border-primary/30'
+                            : 'bg-primary/10 hover:bg-primary/20 border border-primary/30 hover:border-primary/50 text-primary'
+                        }`}
+                      >
+                        {isForking && (
+                          <div className="w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                        )}
+                        {isForking ? (forkStatus || 'Forking...') : 'Fork Project'}
+                      </button>
+                    </div>
                   </div>
                 </section>
 
@@ -1188,7 +1334,8 @@ function ProjectSettings({
             {!isSetupMode && (
               <button
                 onClick={onClose}
-                className="px-4 py-2 bg-dark-bg/50 hover:bg-dark-bg text-gray-300 text-sm font-medium rounded-lg transition-all"
+                disabled={isForking}
+                className={`px-4 py-2 bg-dark-bg/50 hover:bg-dark-bg text-gray-300 text-sm font-medium rounded-lg transition-all ${isForking ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {hasUnsavedChanges ? 'Cancel' : 'Close'}
               </button>
@@ -1196,7 +1343,8 @@ function ProjectSettings({
             {!isSetupMode && hasUnsavedChanges && (
               <button
                 onClick={handleSaveChanges}
-                className="px-4 py-2 text-sm font-medium rounded-lg transition-all bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary"
+                disabled={isForking}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-all bg-primary/20 hover:bg-primary/30 border border-primary/50 text-primary ${isForking ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 Save Changes
               </button>

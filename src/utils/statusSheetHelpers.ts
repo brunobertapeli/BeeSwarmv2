@@ -232,6 +232,7 @@ export function transformBlock(block: any): ConversationBlock {
   let actions: Action[] | undefined
   let initializationStages: { label: string; isComplete: boolean }[] | undefined
   let templateName: string | undefined
+  let sourceProjectName: string | undefined
   let blockType: 'conversation' | 'initialization' | 'context_cleared' = 'conversation'
 
   // Check for context_cleared type first
@@ -247,6 +248,7 @@ export function transformBlock(block: any): ConversationBlock {
         blockType = 'initialization'
         templateName = parsedActions.templateName
         initializationStages = parsedActions.stages
+        sourceProjectName = parsedActions.sourceProjectName // For forked projects
       } else if (Array.isArray(parsedActions)) {
         actions = parsedActions
       }
@@ -267,6 +269,7 @@ export function transformBlock(block: any): ConversationBlock {
     actions,
     initializationStages,
     templateName,
+    sourceProjectName,
     interactionType: block.interactionType,
     completedAt: block.completedAt || undefined,
   }
