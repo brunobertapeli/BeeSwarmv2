@@ -615,7 +615,7 @@ class DeploymentService {
             const stateContent = JSON.parse(fs.readFileSync(stateJsonPath, 'utf-8'))
             if (stateContent.siteId) {
               siteId = stateContent.siteId
-              onProgress(`📎 Found existing Netlify site: ${siteId.substring(0, 8)}...`)
+              onProgress(`📎 Found existing Netlify site: ${stateContent.siteId.substring(0, 8)}...`)
             }
           } catch (e) {
             console.warn('⚠️ [NETLIFY] Could not read state.json:', e)

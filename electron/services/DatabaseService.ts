@@ -24,6 +24,7 @@ export interface Project {
   imagePath: string | null // Path to template images
   netlifyId: string | null // Netlify site ID for redeployment
   railwayId: string | null // Railway project ID for redeployment
+  vercelId: string | null // Vercel project ID for redeployment
   liveUrl: string | null // Last deployed live URL
   deployedCommit: string | null // Git commit hash of last deployment
   kanbanState: string | null // JSON string with { enabled, position, size }
@@ -32,6 +33,8 @@ export interface Project {
   projectAssetsWidgetState: string | null // JSON string with { enabled, position }
   whiteboardWidgetState: string | null // JSON string with { enabled, position, size }
   iconsWidgetState: string | null // JSON string with { enabled, position, size }
+  chatWidgetState: string | null // JSON string with { enabled, position, size }
+  backgroundRemoverWidgetState: string | null // JSON string with { enabled, position, size }
   createdAt: number
   lastOpenedAt: number | null
 }
@@ -503,6 +506,12 @@ class DatabaseService {
       const hasRailwayId = tableInfo.some(col => col.name === 'railwayId')
       if (!hasRailwayId) {
         this.db.exec('ALTER TABLE projects ADD COLUMN railwayId TEXT')
+      }
+
+      // Migration 26b: Add vercelId column if it doesn't exist
+      const hasVercelId = tableInfo.some(col => col.name === 'vercelId')
+      if (!hasVercelId) {
+        this.db.exec('ALTER TABLE projects ADD COLUMN vercelId TEXT')
       }
 
       // Migration 27: Add liveUrl column if it doesn't exist
@@ -1236,13 +1245,18 @@ class DatabaseService {
   /**
    * Save deployment ID for a provider
    */
-  saveDeploymentId(projectId: string, provider: 'netlify' | 'railway', deploymentId: string): void {
+  saveDeploymentId(projectId: string, provider: 'netlify' | 'railway' | 'vercel', deploymentId: string): void {
     if (!this.db) {
       console.warn('⚠️ Attempted to save deployment ID after database closed - ignoring')
       return
     }
 
-    const column = provider === 'netlify' ? 'netlifyId' : 'railwayId'
+    const columnMap: Record<string, string> = {
+      netlify: 'netlifyId',
+      railway: 'railwayId',
+      vercel: 'vercelId'
+    }
+    const column = columnMap[provider]
     const sql = `UPDATE projects SET ${column} = ? WHERE id = ?`
 
     try {
@@ -1256,7 +1270,7 @@ class DatabaseService {
   /**
    * Get deployment ID for a provider
    */
-  getDeploymentId(projectId: string, provider: 'netlify' | 'railway'): string | null {
+  getDeploymentId(projectId: string, provider: 'netlify' | 'railway' | 'vercel'): string | null {
     if (!this.db) {
       throw new Error('Database not initialized')
     }
@@ -1264,7 +1278,12 @@ class DatabaseService {
     const project = this.getProjectById(projectId)
     if (!project) return null
 
-    return provider === 'netlify' ? project.netlifyId : project.railwayId
+    const idMap: Record<string, string | null> = {
+      netlify: project.netlifyId,
+      railway: project.railwayId,
+      vercel: project.vercelId
+    }
+    return idMap[provider] ?? null
   }
 
   /**

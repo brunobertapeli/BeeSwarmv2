@@ -354,8 +354,8 @@ class PreviewService extends EventEmitter {
       this.mainWindow.contentView.removeChildView(view);
     }
 
-    // Destroy view's webContents
-    view.webContents.destroy();
+    // Close view's webContents
+    view.webContents.close();
 
     // Clean up
     this.webContentsViews.delete(projectId);

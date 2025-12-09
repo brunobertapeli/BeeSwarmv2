@@ -662,6 +662,14 @@ export interface ElectronAPI {
 
   image: {
     replace: (projectId: string, imagePath: string, imageData: string) => Promise<{ success: boolean; path?: string; error?: string }>
+    cropAndReplace: (projectId: string, imagePath: string, imageData: string, cropData: {
+      sourceX: number
+      sourceY: number
+      sourceWidth: number
+      sourceHeight: number
+      targetWidth: number
+      targetHeight: number
+    }) => Promise<{ success: boolean; path?: string; error?: string }>
   }
 
   terminal: {
@@ -1204,6 +1212,7 @@ export interface ElectronAPI {
     }>
     readFileAsBase64: (filePath: string) => Promise<string>
     saveBase64Image: (filePath: string, base64Data: string) => Promise<{ success: boolean; error?: string }>
+    renameFile: (filePath: string, newName: string) => Promise<{ success: boolean; newPath?: string; error?: string }>
   }
 
   analytics: {

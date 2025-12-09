@@ -61,7 +61,14 @@ class ProjectService {
         analyticsWidgetState: null,
         projectAssetsWidgetState: null,
         whiteboardWidgetState: null,
-        iconsWidgetState: null
+        iconsWidgetState: null,
+        chatWidgetState: null,
+        backgroundRemoverWidgetState: null,
+        netlifyId: null,
+        railwayId: null,
+        vercelId: null,
+        liveUrl: null,
+        deployedCommit: null
       })
 
       // Now that we have project ID, generate the real path using ID as folder name
@@ -380,7 +387,20 @@ class ProjectService {
       deployServices: sourceProject.deployServices,
       envFiles: sourceProject.envFiles,
       imagePath: sourceProject.imagePath,
-      websiteImportAutoPromptSent: null
+      websiteImportAutoPromptSent: null,
+      kanbanState: null,
+      stickyNotesState: null,
+      analyticsWidgetState: null,
+      projectAssetsWidgetState: null,
+      whiteboardWidgetState: null,
+      iconsWidgetState: null,
+      chatWidgetState: null,
+      backgroundRemoverWidgetState: null,
+      netlifyId: null,
+      railwayId: null,
+      vercelId: null,
+      liveUrl: null,
+      deployedCommit: null
     })
 
     // Copy widget states from source project (these aren't handled by createProject)
@@ -463,12 +483,10 @@ class ProjectService {
 
       if (entry.name === 'node_modules') {
         // Remove the entire node_modules directory
-        console.log(`🗑️ Removing node_modules at: ${fullPath}`)
         try {
           fs.rmSync(fullPath, { recursive: true, force: true })
-          console.log(`✓ Removed ${fullPath}`)
         } catch (err) {
-          console.warn(`⚠️ Failed to remove ${fullPath}:`, err)
+          console.warn(`⚠️ Failed to remove node_modules at ${fullPath}:`, err)
         }
       } else if (entry.isDirectory()) {
         // Recursively check subdirectories
@@ -493,7 +511,6 @@ class ProjectService {
       if (lockFiles.includes(entry.name)) {
         try {
           fs.unlinkSync(fullPath)
-          console.log(`🗑️ Removed lock file: ${fullPath}`)
         } catch (err) {
           console.warn(`⚠️ Failed to remove lock file ${fullPath}:`, err)
         }
