@@ -59,8 +59,8 @@ type ViewMode = 'desktop' | 'mobile'
 // Helper to get display name from model ID
 const getModelDisplayName = (modelId: string): string => {
   // Map full model IDs to display names (including correct snapshot dates)
+  if (modelId.includes('opus')) return 'Opus 4.5'
   if (modelId.includes('sonnet')) return 'Sonnet 4.5'
-  if (modelId.includes('opus')) return 'Opus 4.1'
   if (modelId.includes('haiku')) return 'Haiku 4.5'
   return modelId
 }

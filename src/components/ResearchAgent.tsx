@@ -49,8 +49,8 @@ const AGENT_TYPES = [
 
 // Helper to get display name from model ID
 const getModelDisplayName = (modelId: string): string => {
+  if (modelId.includes('opus')) return 'Opus 4.5'
   if (modelId.includes('sonnet')) return 'Sonnet 4.5'
-  if (modelId.includes('opus')) return 'Opus 4.1'
   if (modelId.includes('haiku')) return 'Haiku 4.5'
   return modelId
 }

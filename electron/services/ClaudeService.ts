@@ -600,8 +600,8 @@ class ClaudeService extends EventEmitter {
     // Return static list of current models
     // Using full model IDs for Claude 4.x series with correct snapshot dates
     return [
-      { value: 'claude-opus-4-5-20251101', displayName: 'Sonnet 4.5', description: 'Smartest model for daily use' },
       { value: 'claude-opus-4-5-20251101', displayName: 'Opus 4.5', description: 'Smartest model in the world' },
+      { value: 'claude-sonnet-4-5-20250929', displayName: 'Sonnet 4.5', description: 'Smartest model for daily use' },
       { value: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', description: 'Fastest model for simple tasks' }
     ];
   }

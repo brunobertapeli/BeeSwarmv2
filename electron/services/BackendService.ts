@@ -515,8 +515,6 @@ class BackendService {
       const isHttps = url.protocol === 'https:'
       const client = isHttps ? https : http
 
-      console.log(`[BG-REMOVER-SERVICE] Sending request to ${url.toString()}`)
-
       const options: https.RequestOptions = {
         method: 'POST',
         headers: {
@@ -529,14 +527,12 @@ class BackendService {
 
       const req = client.request(url, options, (res) => {
         let data = ''
-        console.log(`[BG-REMOVER-SERVICE] Response status: ${res.statusCode}`)
 
         res.on('data', (chunk) => {
           data += chunk
         })
 
         res.on('end', () => {
-          console.log(`[BG-REMOVER-SERVICE] Response received, length: ${data.length}`)
           try {
             const parsed = JSON.parse(data)
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
@@ -545,25 +541,21 @@ class BackendService {
               resolve({ success: false, error: parsed.error || `HTTP ${res.statusCode}` })
             }
           } catch (error) {
-            console.error(`[BG-REMOVER-SERVICE] JSON parse error:`, data.substring(0, 200))
             resolve({ success: false, error: 'Invalid JSON response' })
           }
         })
       })
 
       req.on('error', (error) => {
-        console.error(`[BG-REMOVER-SERVICE] Request error:`, error.message)
         resolve({ success: false, error: error.message })
       })
 
       req.on('timeout', () => {
-        console.error(`[BG-REMOVER-SERVICE] Request timeout`)
         req.destroy()
         resolve({ success: false, error: 'Request timeout' })
       })
 
       const body = JSON.stringify({ image: imageBase64 })
-      console.log(`[BG-REMOVER-SERVICE] Sending body, size: ${Math.round(body.length / 1024)}KB`)
       req.write(body)
       req.end()
     })

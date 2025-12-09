@@ -40,25 +40,17 @@ export function registerBackgroundRemoverHandlers(): void {
     projectId: string
   ) => {
     try {
-      const startTime = Date.now()
-      console.log(`[BG-REMOVER] Starting... image size: ${Math.round(imageBase64.length / 1024)}KB base64`)
-
       // Get project to determine correct assets path
       const project = databaseService.getProjectById(projectId)
       if (!project || !project.path) {
         throw new Error('Project not found')
       }
 
-      const backendStart = Date.now()
       const result = await backendService.removeBackground(imageBase64)
-      console.log(`[BG-REMOVER] Backend responded in ${Date.now() - backendStart}ms`, result.success ? `URL: ${result.imageUrl?.substring(0, 50)}...` : `Error: ${result.error}`)
 
       if (result.success && result.imageUrl) {
         // Download image directly from Replicate URL (much faster than going through backend)
-        const downloadStart = Date.now()
-        console.log(`[BG-REMOVER] Downloading from Replicate...`)
         const imageBuffer = await downloadImage(result.imageUrl)
-        console.log(`[BG-REMOVER] Download completed in ${Date.now() - downloadStart}ms, size: ${Math.round(imageBuffer.length / 1024)}KB`)
 
         // Save to assets/generations folder using project's imagePath
         const genDir = path.join(getAssetsFolder(project), 'generations')
@@ -73,8 +65,6 @@ export function registerBackgroundRemoverHandlers(): void {
         // Convert to base64 for display
         const base64 = imageBuffer.toString('base64')
 
-        console.log(`[BG-REMOVER] Total time: ${Date.now() - startTime}ms`)
-
         return {
           success: true,
           imageDataUrl: `data:image/png;base64,${base64}`,
@@ -85,7 +75,6 @@ export function registerBackgroundRemoverHandlers(): void {
 
       return result
     } catch (error: any) {
-      console.error('[BG-REMOVER] Error:', error)
       return { success: false, error: error.message || 'Background removal failed' }
     }
   })
@@ -100,7 +89,6 @@ export function registerBackgroundRemoverHandlers(): void {
       databaseService.saveBgRemoverImageState(projectId, state)
       return { success: true }
     } catch (error: any) {
-      console.error('[BG-REMOVER] Save state error:', error)
       return { success: false, error: error.message }
     }
   })
@@ -114,7 +102,6 @@ export function registerBackgroundRemoverHandlers(): void {
       const state = databaseService.getBgRemoverImageState(projectId)
       return { success: true, state }
     } catch (error: any) {
-      console.error('[BG-REMOVER] Load state error:', error)
       return { success: false, error: error.message }
     }
   })
