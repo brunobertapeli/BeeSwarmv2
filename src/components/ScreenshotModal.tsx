@@ -189,7 +189,7 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={handleClose} />
 
       {/* Modal */}
-      <div className="relative w-[700px] bg-dark-bg/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="relative w-[700px] max-h-[90vh] bg-dark-bg/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
           <div>
@@ -205,7 +205,7 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
         </div>
 
         {/* Content */}
-        <div className="p-5 space-y-4 flex flex-col h-full">
+        <div className="p-5 space-y-4 flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Screenshot Preview */}
           <div className="relative bg-black/20 rounded-xl border border-white/10 overflow-hidden flex-1 flex flex-col items-center justify-center p-4 min-h-0">
             <div className="relative inline-block shadow-2xl rounded-lg overflow-hidden max-h-full">
@@ -228,7 +228,7 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
           </div>
 
           {/* Tools - Centered Below Screenshot */}
-          <div className="flex items-center justify-center">
+          <div className="flex items-center justify-center flex-shrink-0">
             <div className="flex items-center gap-3 bg-dark-bg/40 border border-white/10 px-4 py-2 rounded-full shadow-sm">
               {/* Clear Button */}
               <button
@@ -287,7 +287,7 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
           </div>
 
           {/* Description Input */}
-          <div className="space-y-2">
+          <div className="space-y-2 flex-shrink-0">
             <label className="text-xs text-gray-400 font-medium uppercase tracking-wider ml-1">
               Instructions
             </label>
@@ -301,7 +301,7 @@ function ScreenshotModal({ isOpen, onClose, screenshotSrc }: ScreenshotModalProp
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-3 justify-end pt-1">
+          <div className="flex items-center gap-3 justify-end pt-1 flex-shrink-0">
             <button
               onClick={handleClose}
               className="px-4 py-2 bg-dark-bg hover:bg-dark-bg/70 text-gray-300 text-sm font-medium rounded-lg transition-all"

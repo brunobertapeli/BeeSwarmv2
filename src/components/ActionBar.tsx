@@ -14,7 +14,6 @@ import {
   Plus,
   Sliders,
   FileText,
-  X as CloseIcon,
   Edit2,
   StickyNote,
   Kanban,
@@ -36,7 +35,7 @@ import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import StatusSheet from './StatusSheet'
 import ContextBar from './ContextBar'
-import ContentEditableInput, { type ContentEditableInputRef } from './ContentEditableInput'
+import ContentEditableInput, { type ContentEditableInputRef, type Pill } from './ContentEditableInput'
 import ScreenshotModal from './ScreenshotModal'
 import type { ClaudeStatus, ClaudeContext, ClaudeModel } from '../types/electron'
 
@@ -592,17 +591,12 @@ function ActionBar({
       // Build the final prompt with all context
       let prompt = message.trim()
 
-      // Replace inline text content markers with actual content
-      // Format: [pasted 45 lines #123456]
-      for (const content of textContents) {
-        // Extract short ID from full content.id (TEXT_1234567890 -> 567890)
-        const shortId = content.id.replace('TEXT_', '').slice(-6)
-        const markerRegex = new RegExp(`\\[pasted (\\d+) lines #${shortId}\\]`, 'g')
-        if (prompt.match(markerRegex)) {
-          // Replace marker with formatted content in code block
-          const formattedContent = `\`\`\`\n${content.content}\n\`\`\``
-          prompt = prompt.replace(markerRegex, formattedContent)
-        }
+      // Append text content (pasted logs, schemas, etc.) if any exist
+      if (textContents.length > 0) {
+        const textContext = textContents
+          .map((tc) => `\`\`\`\n${tc.content}\n\`\`\``)
+          .join('\n\n')
+        prompt = `${prompt}\n\nPasted content:\n${textContext}`
       }
 
       // Prepend image references context if any exist
@@ -1116,6 +1110,73 @@ function ActionBar({
     }
   }
 
+  // Build unified pills array from all sources
+  const buildPills = (): Pill[] => {
+    const pills: Pill[] = []
+
+    // Add attachments (images and files)
+    attachments.forEach((att) => {
+      pills.push({
+        id: `attachment-${att.id}`,
+        type: att.type === 'image' ? 'attachment-image' : 'attachment-file',
+        label: att.name,
+        preview: att.preview,
+        tooltip: att.name,
+      })
+    })
+
+    // Add image references (from Edit Mode)
+    imageReferences.forEach((ref) => {
+      pills.push({
+        id: `imageref-${ref.id}`,
+        type: 'image-ref',
+        label: ref.name,
+        preview: ref.src,
+        tooltip: `${ref.path} (${ref.dimensions})`,
+      })
+    })
+
+    // Add selected elements (from Select Mode)
+    selectedElements.forEach((el) => {
+      pills.push({
+        id: `selected-${el.id}`,
+        type: 'selected-element',
+        label: el.displayLabel,
+        tooltip: el.selector,
+      })
+    })
+
+    // Add text content markers (from large pastes)
+    textContents.forEach((tc) => {
+      pills.push({
+        id: `text-${tc.id}`,
+        type: 'text-content',
+        label: `${tc.lineCount} lines`,
+        preview: tc.preview,
+        tooltip: tc.preview,
+      })
+    })
+
+    return pills
+  }
+
+  // Handle pill removal - route to correct handler based on prefix
+  const handleRemovePill = (id: string) => {
+    if (id.startsWith('attachment-')) {
+      const attId = id.replace('attachment-', '')
+      setAttachments(attachments.filter(a => a.id !== attId))
+    } else if (id.startsWith('imageref-')) {
+      const refId = id.replace('imageref-', '')
+      removeImageReference(refId)
+    } else if (id.startsWith('selected-')) {
+      const elId = id.replace('selected-', '')
+      removeSelectedElement(elId)
+    } else if (id.startsWith('text-')) {
+      const tcId = id.replace('text-', '')
+      removeTextContent(tcId)
+    }
+  }
+
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData.items
 
@@ -1147,31 +1208,14 @@ function ActionBar({
       const lineCount = text.split('\n').length
       const charCount = text.length
 
-      // Threshold: 200+ characters OR 5+ lines
+      // Threshold: 200+ characters OR 5+ lines - add as pill instead of inline
       if (charCount >= 200 || lineCount >= 5) {
         e.preventDefault()
 
-        // Generate unique short ID for this content
-        const timestamp = Date.now()
-        const shortId = timestamp.toString().slice(-6) // Last 6 digits
-        const contentId = `TEXT_${timestamp}`
+        // Generate unique ID for this content
+        const contentId = `TEXT_${Date.now()}`
 
-        // Insert inline marker at cursor position
-        const textarea = e.currentTarget
-        const cursorPos = textarea.selectionStart
-        const currentMessage = message
-
-        // Create simple marker: [pasted 45 lines #123456]
-        const marker = `[pasted ${lineCount} lines #${shortId}]`
-
-        const newMessage =
-          currentMessage.slice(0, cursorPos) +
-          marker +
-          currentMessage.slice(cursorPos)
-
-        setMessage(newMessage)
-
-        // Store content with full ID for later replacement
+        // Store content as pill (no inline marker needed anymore)
         addTextContent({
           id: contentId,
           content: text,
@@ -1179,10 +1223,9 @@ function ActionBar({
           preview: text.slice(0, 50).replace(/\n/g, ' ')
         })
 
-        // Move cursor after the marker
+        // Focus textarea after adding
         setTimeout(() => {
-          textarea.selectionStart = textarea.selectionEnd = cursorPos + marker.length
-          textarea.focus()
+          textareaRef.current?.focus()
         }, 0)
       }
     }
@@ -1336,56 +1379,14 @@ function ActionBar({
       >
         <div ref={actionBarRef} className="bg-dark-card border border-dark-border/80 shadow-2xl overflow-visible w-full h-full relative action-bar-container flex flex-col rounded-br-[10px]">
           {/* Top Row - Textarea with Send Icon Inside */}
-          <div className="px-3 pt-3 pb-2 flex-shrink-0">
-            <div className="relative flex items-start">
-              {/* Custom Plan Mode Placeholder */}
-              {planModeToggle && !message && attachments.length === 0 && !isTextareaFocused && (
-                <div className="absolute left-[14px] top-[10px] pointer-events-none text-sm text-gray-500 z-[5]">
-                  Describe the task you need Claude to plan ahead.
-                </div>
-              )}
-
-              {/* Attachment Chips - Inside textarea at top */}
-              {attachments.length > 0 && (
-                <div className="absolute left-[14px] top-[10px] flex gap-1.5 z-[5] pointer-events-auto max-w-[calc(100%-60px)] overflow-x-auto overflow-y-hidden scrollbar-hide">
-                  {attachments.map((attachment) => (
-                    <div
-                      key={attachment.id}
-                      className="relative bg-dark-bg/90 border border-dark-border/50 rounded-full px-2.5 py-1 flex items-center gap-1.5 group hover:bg-dark-bg transition-colors flex-shrink-0"
-                    >
-                      {attachment.type === 'image' && attachment.preview ? (
-                        <img
-                          src={attachment.preview}
-                          alt={attachment.name}
-                          className="w-3 h-3 rounded-full object-cover flex-shrink-0"
-                        />
-                      ) : (
-                        <FileText size={12} className="text-gray-400 flex-shrink-0" />
-                      )}
-                      <span className="text-[10px] text-gray-300 max-w-[60px] truncate">
-                        {attachment.name}
-                      </span>
-                      <button
-                        onClick={() => setAttachments(attachments.filter(a => a.id !== attachment.id))}
-                        className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity"
-                      >
-                        <CloseIcon size={10} className="text-gray-400 hover:text-red-400" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
+          <div className="pt-2.5 pb-2 flex-1 min-h-0">
+            <div className="relative flex items-start h-full mx-3">
               <ContentEditableInput
                 ref={textareaRef}
                 value={message}
                 onChange={(value) => setMessage(value)}
-                imageReferences={imageReferences}
-                onRemoveImageReference={removeImageReference}
-                textContents={textContents}
-                onRemoveTextContent={removeTextContent}
-                selectedElements={selectedElements}
-                onRemoveSelectedElement={removeSelectedElement}
+                pills={buildPills()}
+                onRemovePill={handleRemovePill}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 onDragOver={handleDragOver}
@@ -1394,15 +1395,15 @@ function ActionBar({
                 onBlur={() => setIsTextareaFocused(false)}
                 placeholder={
                   planModeToggle
-                    ? ""
+                    ? "Describe the task you need Claude to plan ahead."
                     : "Ask Claude to build..."
                 }
                 disabled={false}
-                className={`flex-1 border rounded-xl pr-11 text-sm outline-none transition-all overflow-y-auto ${
+                className={`flex-1 h-full border rounded-xl pr-11 text-sm outline-none transition-all overflow-hidden ${
                   planModeToggle
                     ? 'bg-dark-bg/50 text-white placeholder-gray-500 border-blue-400/50 focus:border-blue-400/70'
                     : 'bg-dark-bg/50 text-white placeholder-gray-500 border-dark-border/50 focus:border-primary/30'
-                } ${attachments.length > 0 ? 'pt-[38px]' : ''}`}
+                }`}
               />
               {isClaudeWorking ? (
                 <div className="absolute right-3 bottom-2.5">

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, forwardRef } from 'react'
-import { ChevronDown, ChevronUp, Send, Bug, Shield, Globe, FileCode, Lightbulb, Search, Loader, CheckCircle2, Archive } from 'lucide-react'
+import { ChevronDown, ChevronUp, Send, Bug, Shield, Globe, FileCode, Lightbulb, Search, Loader2 } from 'lucide-react'
+import ContentEditableInput, { type ContentEditableInputRef, type Pill } from './ContentEditableInput'
 
 interface ResearchAgentProps {
   projectId?: string
@@ -63,7 +64,9 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
   const [showAgentTypeDropdown, setShowAgentTypeDropdown] = useState(false)
   const [message, setMessage] = useState('')
   const [agents, setAgents] = useState<any[]>([])
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [attachments, setAttachments] = useState<Array<{id: string, type: 'image' | 'file', name: string, preview?: string}>>([])
+  const [isWorking, setIsWorking] = useState(false)
+  const textareaRef = useRef<ContentEditableInputRef>(null)
   const modelDropdownRef = useRef<HTMLDivElement>(null)
   const agentTypeDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -163,7 +166,9 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
   }, [showModelDropdown, showAgentTypeDropdown])
 
   const handleSend = async () => {
-    if (!message.trim() || !projectId) return
+    if (!message.trim() || !projectId || isWorking) return
+
+    setIsWorking(true)
 
     try {
       // Start research agent
@@ -176,8 +181,9 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
       )
 
       if (result?.success) {
-        // Clear message
+        // Clear message and attachments
         setMessage('')
+        setAttachments([])
 
         // Reload agents list
         const listResult = await window.electronAPI?.researchAgent.getList(projectId)
@@ -189,6 +195,8 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
       }
     } catch (error) {
       console.error('Error starting research agent:', error)
+    } finally {
+      setIsWorking(false)
     }
   }
 
@@ -196,6 +204,80 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
+    }
+  }
+
+  // Build unified pills array from attachments
+  const buildPills = (): Pill[] => {
+    return attachments.map((att) => ({
+      id: `attachment-${att.id}`,
+      type: att.type === 'image' ? 'attachment-image' : 'attachment-file',
+      label: att.name,
+      preview: att.preview,
+      tooltip: att.name,
+    }))
+  }
+
+  // Handle pill removal
+  const handleRemovePill = (id: string) => {
+    if (id.startsWith('attachment-')) {
+      const attId = id.replace('attachment-', '')
+      setAttachments(attachments.filter(a => a.id !== attId))
+    }
+  }
+
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData.items
+
+    // Check for images
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        e.preventDefault()
+        const blob = items[i].getAsFile()
+        if (blob) {
+          const reader = new FileReader()
+          reader.onload = (event) => {
+            const preview = event.target?.result as string
+            setAttachments([...attachments, {
+              id: Math.random().toString(36),
+              type: 'image',
+              name: blob.name || 'pasted-image.png',
+              preview
+            }])
+          }
+          reader.readAsDataURL(blob)
+        }
+        return
+      }
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLTextAreaElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = async (e: React.DragEvent<HTMLTextAreaElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const files = Array.from(e.dataTransfer.files)
+    const validImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
+    for (const file of files) {
+      if (validImageTypes.includes(file.type)) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const preview = event.target?.result as string
+          setAttachments(prev => [...prev, {
+            id: Math.random().toString(36),
+            type: 'image',
+            name: file.name,
+            preview
+          }])
+        }
+        reader.readAsDataURL(file)
+      }
     }
   }
 
@@ -213,36 +295,42 @@ const ResearchAgent = forwardRef<HTMLDivElement, ResearchAgentProps>(({ projectI
       >
         <div className="bg-dark-card border border-dark-border/80 shadow-2xl overflow-visible w-full h-full relative flex flex-col rounded-bl-[10px]">
           {/* Top Row - Textarea with Send Icon Inside */}
-          <div className="px-3 pt-3 pb-2 flex-shrink-0">
-            <div className="relative flex items-start">
-              <div className="flex-1 border rounded-xl text-sm outline-none transition-all overflow-y-auto bg-dark-bg/50 border-dark-border/50 focus-within:border-primary/30 flex items-center">
-                <div className="flex-1 relative">
-                  <textarea
-                    ref={textareaRef}
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={AGENT_TYPES.find(t => t.value === selectedAgentType)?.placeholder || 'Ask AI agent...'}
-                    className="relative bg-transparent border-none outline-none resize-none text-white placeholder-gray-500 px-3.5 py-2.5 w-full"
-                    rows={3}
-                    style={{
-                      lineHeight: '24px',
-                      height: '77px',
-                    }}
-                  />
+          <div className="pt-2.5 pb-2 flex-1 min-h-0">
+            <div className="relative flex items-start h-full mx-3">
+              <ContentEditableInput
+                ref={textareaRef}
+                value={message}
+                onChange={(value) => setMessage(value)}
+                pills={buildPills()}
+                onRemovePill={handleRemovePill}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                placeholder={AGENT_TYPES.find(t => t.value === selectedAgentType)?.placeholder || 'Ask AI agent...'}
+                disabled={false}
+                className="flex-1 h-full border rounded-xl pr-11 text-sm outline-none transition-all overflow-hidden bg-dark-bg/50 text-white placeholder-gray-500 border-dark-border/50 focus:border-primary/30"
+              />
+              {isWorking ? (
+                <div className="absolute right-3 bottom-2.5">
+                  <div className="relative w-[18px] h-[18px] overflow-hidden">
+                    <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+                    <Loader2 size={18} className="text-primary animate-spin relative z-10" />
+                  </div>
                 </div>
-              </div>
-              <button
-                onClick={handleSend}
-                disabled={!message.trim()}
-                className={`absolute right-3 bottom-2.5 ${
-                  message.trim()
-                    ? 'text-primary hover:text-primary-dark cursor-pointer'
-                    : 'text-gray-600 cursor-not-allowed'
-                }`}
-              >
-                <Send size={18} />
-              </button>
+              ) : (
+                <button
+                  onClick={handleSend}
+                  disabled={!message.trim() || isWorking}
+                  className={`absolute right-3 bottom-2.5 ${
+                    message.trim() && !isWorking
+                      ? 'text-primary hover:text-primary-dark cursor-pointer'
+                      : 'text-gray-600 cursor-not-allowed'
+                  }`}
+                >
+                  <Send size={18} />
+                </button>
+              )}
             </div>
           </div>
 
