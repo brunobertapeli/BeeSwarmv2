@@ -89,6 +89,8 @@
     "asarUnpack": [
       "node_modules/netlify-cli/**/*"
     ],
+    "npmRebuild": true,
+    "onlyModules": ["better-sqlite3", "node-pty"],
     "extraResources": [
       {
         "from": "resources/binaries/${platform}-${arch}",

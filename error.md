@@ -1,23 +1,8 @@
-✓ built in 38.81s
-vite v5.4.21 building for production...
-transforming...
-"open" is imported from external module "fs/promises" but never used in "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs".
-✓ 111 modules transformed.
-[plugin:vite:reporter] [plugin vite:reporter] 
-(!) D:/a/BeeSwarmv2/BeeSwarmv2/electron/services/BundledBinaries.ts is dynamically imported by D:/a/BeeSwarmv2/BeeSwarmv2/electron/services/ProjectService.ts but also statically imported by D:/a/BeeSwarmv2/BeeSwarmv2/electron/handlers/gitHandlers.ts, D:/a/BeeSwarmv2/BeeSwarmv2/electron/services/ClaudeCliService.ts, D:/a/BeeSwarmv2/BeeSwarmv2/electron/services/DependencyService.ts, D:/a/BeeSwarmv2/BeeSwarmv2/electron/services/ProcessManager.ts, D:/a/BeeSwarmv2/BeeSwarmv2/electron/services/TemplateService.ts, dynamic import will not move module into another chunk.
-
-[plugin:vite:reporter] [plugin vite:reporter] 
-(!) D:/a/BeeSwarmv2/BeeSwarmv2/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs is dynamically imported by D:/a/BeeSwarmv2/BeeSwarmv2/electron/services/ClaudeCliService.ts but also statically imported by D:/a/BeeSwarmv2/BeeSwarmv2/electron/services/ClaudeService.ts, D:/a/BeeSwarmv2/BeeSwarmv2/electron/services/ResearchAgentService.ts, dynamic import will not move module into another chunk.
-
-rendering chunks...
-computing gzip size...
-dist-electron/main.js  821.24 kB │ gzip: 180.36 kB
-✓ built in 1.89s
+built in 1.56s
   • electron-builder  version=24.13.3 os=10.0.26100
   • artifacts will be published if draft release exists  reason=CI detected
   • loaded configuration  file=package.json ("build" field)
   • @electron/rebuild not required if you use electron-builder, please consider to remove excess dependency from devDependencies
-
 To ensure your native dependencies are always matched electron version, simply add script `"postinstall": "electron-builder install-app-deps" to your `package.json`
   • rebuilding native dependencies  dependencies=better-sqlite3@12.5.0, canvas@3.2.0, node-pty@1.0.0, canvas@2.11.2, @parcel/watcher@2.5.1, unix-dgram@2.0.7 platform=win32 arch=x64
   • install prebuilt binary  name=better-sqlite3 version=12.5.0 platform=win32 arch=x64 napi=
@@ -28,21 +13,21 @@ To ensure your native dependencies are always matched electron version, simply a
     npm error command failed
     npm error command C:\Windows\system32\cmd.exe /d /s /c node-pre-gyp install --fallback-to-build --update-binary
     npm error Warning: Missing input files:
-    npm error C:\GTK\bin\libpango-1.0-0.dll
     npm error C:\GTK\bin\zlib1.dll
-    npm error C:\GTK\bin\libpangowin32-1.0-0.dll
-    npm error C:\GTK\bin\libcairo-2.dll
-    npm error C:\GTK\bin\libglib-2.0-0.dll
     npm error C:\GTK\bin\libintl-8.dll
-    npm error C:\GTK\bin\libgobject-2.0-0.dll
-    npm error C:\GTK\bin\libfontconfig-1.dll
-    npm error C:\GTK\bin\libpangoft2-1.0-0.dll
-    npm error C:\GTK\bin\libgmodule-2.0-0.dll
-    npm error C:\GTK\bin\libpangocairo-1.0-0.dll
+    npm error C:\GTK\bin\libglib-2.0-0.dll
     npm error C:\GTK\bin\libpng14-14.dll
-    npm error C:\GTK\bin\libgthread-2.0-0.dll
+    npm error C:\GTK\bin\libpangoft2-1.0-0.dll
+    npm error C:\GTK\bin\libpangowin32-1.0-0.dll
     npm error C:\GTK\bin\libfreetype-6.dll
     npm error C:\GTK\bin\libexpat-1.dll
+    npm error C:\GTK\bin\libcairo-2.dll
+    npm error C:\GTK\bin\libfontconfig-1.dll
+    npm error C:\GTK\bin\libgthread-2.0-0.dll
+    npm error C:\GTK\bin\libgobject-2.0-0.dll
+    npm error C:\GTK\bin\libpangocairo-1.0-0.dll
+    npm error C:\GTK\bin\libgmodule-2.0-0.dll
+    npm error C:\GTK\bin\libpango-1.0-0.dll
     npm error
     npm error   Backend.cc
     npm error D:\a\BeeSwarmv2\BeeSwarmv2\node_modules\fabric\node_modules\canvas\src\backend\Backend.h(3,10): error C1083: Cannot open include file: 'cairo.h': No such file or directory [D:\a\BeeSwarmv2\BeeSwarmv2\node_modules\fabric\node_modules\canvas\build\canvas.vcxproj]
@@ -132,7 +117,7 @@ To ensure your native dependencies are always matched electron version, simply a
     npm error node-pre-gyp ERR! node -v v20.19.5
     npm error node-pre-gyp ERR! node-pre-gyp -v v1.0.11
     npm error node-pre-gyp ERR! not ok
-    npm error A complete log of this run can be found in: C:\npm\cache\_logs\2025-12-10T20_57_59_960Z-debug-0.log
+    npm error A complete log of this run can be found in: C:\npm\cache\_logs\2025-12-10T21_11_13_266Z-debug-0.log
     
                     command='C:\hostedtoolcache\windows\node\20.19.5\x64\node.exe' 'C:\hostedtoolcache\windows\node\20.19.5\x64\node_modules\npm\bin\npm-cli.js' rebuild node-pty@1.0.0 canvas@2.11.2 @parcel/watcher@2.5.1 unix-dgram@2.0.7
                     workingDir=
