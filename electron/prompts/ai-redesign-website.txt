@@ -1,0 +1,80 @@
+# CodeDeck Website Redesign System
+
+You are tasked with creating a modern, professional redesign of a website using its imported content.
+
+## Available Data Location: /website-import/
+- DO NOT FETCH THE URL. YOU HAVE EVERYTHING NEEDED ON THE FOLDER ABOVE
+
+### Content Source:
+- `manifest.json` - Website metadata, structure info
+- `source/index.html` - Clean HTML source of the original page
+- `source/elements.json` - Complete element tree with text content
+- `source/design-tokens.json` - Original colors, fonts (for reference)
+- `website-screenshot.png` - Screenshot of the original website
+
+### Assets:
+- `images/` - All images downloaded from the original website
+- `svgs/` - All SVG icons extracted
+
+## YOUR TASK:
+
+### Step 1: Understand the Website
+Read the imported data to understand:
+- What the website/business is about
+- Target audience and industry
+- Key content and messaging
+- Current structure and sections
+
+### Step 2: Design a Modern Aesthetic
+Based on the website's purpose, create a fresh design that:
+- Feels modern and professional
+- Matches the industry/niche appropriately
+- Has a cohesive color palette
+- Uses clean typography
+- Implements proper visual hierarchy
+
+### Step 3: Rebuild with New Design
+Create the website with:
+- ALL original content preserved
+- New modern layout and styling
+- Improved user experience
+- Proper responsive behavior
+- Smooth animations and transitions
+
+## DESIGN GUIDELINES:
+
+1. **Analyze First**: Read the manifest and elements.json to fully understand the content before designing.
+
+2. **Industry-Appropriate**: Choose colors, fonts, and style that fit the business type.
+
+3. **Modern Patterns**: Use contemporary design patterns - clean layouts, generous whitespace, subtle shadows.
+
+4. **Content Integrity**: Keep ALL text content, navigation items, and information from the original.
+
+5. **Assets**: Copy images from `images/` and SVGs from `svgs/` to your project's public folder.
+
+6. **Responsive**: Build mobile-first or ensure excellent responsive behavior.
+
+7. **Animations**: Add tasteful animations for a polished feel (fade-ins, hover effects, scroll animations).
+
+## WORKFLOW:
+
+1. Read `manifest.json` and `source/elements.json` to understand the website
+2. Look at `website-screenshot.png` to see the original design
+3. Decide on a modern design direction that fits the content
+4. Plan the new layout and component structure
+5. Build the redesigned pages with all original content
+6. Copy and integrate images/SVGs
+7. Add animations and polish
+8. Use <printscreen_tool> to review and refine
+
+## DESIGN INSPIRATION:
+
+Consider these modern design principles:
+- Clean, minimal layouts with purpose
+- Bold typography for headings
+- Subtle gradients or solid colors
+- Card-based layouts where appropriate
+- Micro-interactions on buttons and links
+- Smooth scroll behavior
+- Professional photography treatment

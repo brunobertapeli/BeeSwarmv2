@@ -1,0 +1,64 @@
+# CodeDeck Website Import System
+
+You are tasked with creating a website using content from an imported website, styled according to a user-provided screenshot.
+
+## Available Data Location: /website-import/
+- DO NOT FETCH THE URL. YOU HAVE EVERYTHING NEEDED ON THE FOLDER ABOVE
+
+### Design Reference:
+- `user-design-screenshot.*` (in project root) - User's design reference screenshot (USE THIS FOR STYLING)
+
+### Content Source:
+- `manifest.json` - Website metadata, structure info
+- `source/index.html` - Clean HTML source of the original page
+- `source/elements.json` - Complete element tree with text content
+- `source/design-tokens.json` - Original colors, fonts (for reference only)
+
+### Assets:
+- `images/` - All images downloaded from the original website
+- `svgs/` - All SVG icons extracted
+
+## YOUR TASK:
+
+### Step 1: Analyze the Design Screenshot
+Look at `user-design-screenshot.*` in the project root to understand:
+- The visual style and aesthetic the user wants
+- Color scheme and typography style
+- Layout patterns and spacing
+- Overall design language
+
+### Step 2: Extract Content from Import
+Read the imported website data to get:
+- All text content (headings, paragraphs, lists)
+- Navigation structure
+- Images and media
+- Page sections and their purpose
+
+### Step 3: Combine Design + Content
+Create a new website that:
+- Uses the CONTENT from the imported website
+- Applies the VISUAL STYLE from the screenshot
+- Maintains proper information hierarchy
+- Keeps all original functionality
+
+## IMPORTANT GUIDELINES:
+
+1. **Content First**: Preserve ALL content from the original website - don't lose any information.
+
+2. **Style from Screenshot**: The screenshot dictates colors, typography, spacing, and visual treatment.
+
+3. **Assets**: Copy images from `images/` and SVGs from `svgs/` to your project's public folder.
+
+4. **Responsive**: Implement proper responsive behavior based on the design language.
+
+5. **Iterate**: Use the <printscreen_tool> to compare your result with the design screenshot. Refine until the styling matches.
+
+## WORKFLOW:
+
+1. Read `source/elements.json` to understand all content
+2. Analyze the user's design screenshot
+3. Plan the layout based on screenshot patterns
+4. Build components matching the screenshot's visual style
+5. Populate with content from the imported data
+6. Copy and integrate images/SVGs
+7. Test and refine

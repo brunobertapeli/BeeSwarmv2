@@ -28,6 +28,7 @@ export interface Template {
   screenshot?: string
   envFiles?: EnvFile[]
   deployServices?: string[]
+  starter?: boolean
 }
 
 export interface Project {
@@ -247,7 +248,7 @@ export interface ElectronAPI {
   }
 
   projects: {
-    create: (templateId: string, projectName: string, tempImportProjectId?: string, screenshotData?: string, importType?: 'template' | 'screenshot' | 'ai') => Promise<{
+    create: (templateId: string, projectName: string, tempImportProjectId?: string, screenshotData?: string, importType?: 'template' | 'screenshot' | 'ai' | 'clone') => Promise<{
       success: boolean
       project?: Project
       error?: string
@@ -1137,13 +1138,21 @@ export interface ElectronAPI {
     checkImportStatus: (projectId: string) => Promise<{
       success: boolean
       isImport?: boolean
-      importType?: 'template' | 'screenshot' | 'ai'
+      importType?: 'template' | 'screenshot' | 'ai' | 'clone'
       migrationCompleted?: boolean
       manifest?: any
       error?: string
     }>
     markMigrationComplete: (projectId: string) => Promise<{
       success: boolean
+      error?: string
+    }>
+  }
+
+  prompts: {
+    getImportAddendum: (importType: string) => Promise<{
+      success: boolean
+      content?: string
       error?: string
     }>
   }

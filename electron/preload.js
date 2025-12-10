@@ -470,6 +470,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     markMigrationComplete: (projectId) => ipcRenderer.invoke('website-import:mark-complete', projectId)
   },
 
+  // Prompts (for import addendums)
+  prompts: {
+    getImportAddendum: (importType) => ipcRenderer.invoke('prompts:get-import-addendum', importType)
+  },
+
   // Layout methods
   layout: {
     setState: (state, projectId) => ipcRenderer.invoke('layout:set-state', state, projectId),

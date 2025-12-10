@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 
 interface WebsiteImportConfig {
-  importType: 'template' | 'screenshot' | 'ai'
+  importType: 'template' | 'screenshot' | 'ai' | 'clone'
 }
 
 interface WebsiteImportManifest {
@@ -22,7 +22,7 @@ interface WebsiteImportManifest {
 
 interface UseWebsiteImportReturn {
   isWebsiteImport: boolean
-  importType: 'template' | 'screenshot' | 'ai' | null
+  importType: 'template' | 'screenshot' | 'ai' | 'clone' | null
   isFirstOpen: boolean
   projectPath: string | null
   manifest: WebsiteImportManifest | null
@@ -35,7 +35,7 @@ interface UseWebsiteImportReturn {
  */
 export function useWebsiteImport(projectId: string | null): UseWebsiteImportReturn {
   const [isWebsiteImport, setIsWebsiteImport] = useState(false)
-  const [importType, setImportType] = useState<'template' | 'screenshot' | 'ai' | null>(null)
+  const [importType, setImportType] = useState<'template' | 'screenshot' | 'ai' | 'clone' | null>(null)
   const [isFirstOpen, setIsFirstOpen] = useState(false)
   const [projectPath, setProjectPath] = useState<string | null>(null)
   const [manifest, setManifest] = useState<WebsiteImportManifest | null>(null)

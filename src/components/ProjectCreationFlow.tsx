@@ -308,7 +308,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null)
   const [keyValidation, setKeyValidation] = useState<Record<string, boolean>>({})
   const [importUrl, setImportUrl] = useState('')
-  const [importDesignOption, setImportDesignOption] = useState<'template' | 'screenshot' | 'ai' | null>(null)
+  const [importDesignOption, setImportDesignOption] = useState<'template' | 'screenshot' | 'ai' | 'clone' | null>(null)
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null)
   const [isImportFlow, setIsImportFlow] = useState(false)
   const [isFetchingWebsite, setIsFetchingWebsite] = useState(false)
@@ -415,10 +415,13 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
         const result = await window.electronAPI?.templates.fetch()
 
         if (result?.success && result.templates) {
-          // Filter out forbidden categories if in import flow
-          const filteredTemplates = isImportFlow
-            ? result.templates.filter(t => !FORBIDDEN_IMPORT_CATEGORIES.includes(t.category))
-            : result.templates
+          // Filter templates based on flow type
+          let filteredTemplates = result.templates
+
+          if (isImportFlow) {
+            // For import flow, show only starters (not full templates with required APIs)
+            filteredTemplates = result.templates.filter(t => t.starter === true)
+          }
 
           setTemplates(filteredTemplates)
         } else {
@@ -937,7 +940,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           <div>
             <h2 className="text-lg font-bold text-white" style={{ fontFamily: 'var(--tg-heading-font-family)' }}>
               {currentStep === 'category' && 'Create New Project'}
-              {currentStep === 'templates' && 'Choose a Template'}
+              {currentStep === 'templates' && (isImportFlow ? 'Choose a Starter' : 'Choose a Template')}
               {currentStep === 'details' && selectedTemplate?.name}
               {currentStep === 'configure' && 'Configure Your Project'}
               {currentStep === 'import-url' && 'Import Website'}
@@ -948,7 +951,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
             </h2>
             <p className="text-sm text-white/60 mt-1" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
               {currentStep === 'category' && 'Choose how you want to start'}
-              {currentStep === 'templates' && `${templates.length} templates available`}
+              {currentStep === 'templates' && (isImportFlow ? `${templates.length} starters available` : `${templates.length} templates available`)}
               {currentStep === 'details' && 'Review template details'}
               {currentStep === 'configure' && 'Set up your project settings'}
               {currentStep === 'import-url' && 'Enter your website URL to begin'}
@@ -1241,39 +1244,39 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 </div>
 
                 <div className="space-y-2.5">
-                  {/* Option 1: Select Template */}
+                  {/* Option 1: Clone Website */}
                   <button
                     onClick={() => {
-                      setImportDesignOption('template')
-                      // Fetch templates and navigate to template selection
+                      setImportDesignOption('clone')
+                      // Navigate to starter selection
                       setCurrentStep('templates')
                     }}
                     className={`w-full p-3.5 rounded-lg border-2 transition-all text-left group ${
-                      importDesignOption === 'template'
+                      importDesignOption === 'clone'
                         ? 'border-primary bg-primary/5'
                         : 'border-dark-border hover:border-primary/50 hover:bg-primary/5'
                     }`}
                   >
                     <div className="flex items-start gap-3">
                       <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
-                        importDesignOption === 'template' ? 'bg-primary/20' : 'bg-dark-border/30 group-hover:bg-primary/10'
+                        importDesignOption === 'clone' ? 'bg-primary/20' : 'bg-dark-border/30 group-hover:bg-primary/10'
                       }`}>
-                        <Sparkles className={`w-5 h-5 ${importDesignOption === 'template' ? 'text-primary' : 'text-gray-400 group-hover:text-primary'}`} />
+                        <Code className={`w-5 h-5 ${importDesignOption === 'clone' ? 'text-primary' : 'text-gray-400 group-hover:text-primary'}`} />
                       </div>
                       <div className="flex-1">
                         <h4 className="text-sm font-semibold text-white mb-0.5">
-                          Select a Template
+                          Clone Website
                         </h4>
                         <p className="text-xs text-gray-400 leading-relaxed">
-                          Choose from our professionally designed templates and we'll adapt your content to match
+                          AI will recreate the website exactly as it looks - same design, icons, animations, and layout
                         </p>
                       </div>
                       <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 mt-0.5 ${
-                        importDesignOption === 'template'
+                        importDesignOption === 'clone'
                           ? 'border-primary bg-primary'
                           : 'border-gray-600'
                       }`}>
-                        {importDesignOption === 'template' && (
+                        {importDesignOption === 'clone' && (
                           <div className="w-1.5 h-1.5 bg-white rounded-full" />
                         )}
                       </div>
@@ -1282,7 +1285,11 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
                   {/* Option 2: Upload Screenshot */}
                   <button
-                    onClick={() => setImportDesignOption('screenshot')}
+                    onClick={() => {
+                      setImportDesignOption('screenshot')
+                      // Navigate to starter selection
+                      setCurrentStep('templates')
+                    }}
                     className={`w-full p-3.5 rounded-lg border-2 transition-all text-left group ${
                       importDesignOption === 'screenshot'
                         ? 'border-primary bg-primary/5'
@@ -1315,46 +1322,13 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                     </div>
                   </button>
 
-                  {/* Screenshot upload area (shown when screenshot option is selected) */}
-                  {importDesignOption === 'screenshot' && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="ml-12 mr-7"
-                    >
-                      <label className="block w-full p-4 border-2 border-dashed border-dark-border rounded-lg hover:border-primary/50 transition-all cursor-pointer group">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)}
-                          className="hidden"
-                        />
-                        <div className="text-center">
-                          {screenshotFile ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <CheckCircle className="w-4 h-4 text-primary" />
-                              <span className="text-xs text-white">{screenshotFile.name}</span>
-                            </div>
-                          ) : (
-                            <>
-                              <Download className="w-6 h-6 text-gray-400 mx-auto mb-1.5 group-hover:text-primary transition-colors" />
-                              <p className="text-xs text-gray-400 group-hover:text-gray-300 transition-colors">
-                                Click to upload or drag and drop
-                              </p>
-                              <p className="text-[10px] text-gray-500 mt-0.5">
-                                PNG, JPG up to 10MB
-                              </p>
-                            </>
-                          )}
-                        </div>
-                      </label>
-                    </motion.div>
-                  )}
-
-                  {/* Option 3: AI Free Hand */}
+                  {/* Option 3: AI Redesign */}
                   <button
-                    onClick={() => setImportDesignOption('ai')}
+                    onClick={() => {
+                      setImportDesignOption('ai')
+                      // Navigate to starter selection
+                      setCurrentStep('templates')
+                    }}
                     className={`w-full p-3.5 rounded-lg border-2 transition-all text-left group ${
                       importDesignOption === 'ai'
                         ? 'border-primary bg-primary/5'
@@ -1369,7 +1343,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       </div>
                       <div className="flex-1">
                         <h4 className="text-sm font-semibold text-white mb-0.5">
-                          Let AI Design It
+                          Let AI Redesign It
                         </h4>
                         <p className="text-xs text-gray-400 leading-relaxed">
                           AI will analyze your content and create a modern, custom design automatically
@@ -1474,7 +1448,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
             )}
 
             {/* Step 3: Template Details */}
-            {currentStep === 'details' && (selectedTemplate || importDesignOption === 'screenshot' || importDesignOption === 'ai') && (
+            {currentStep === 'details' && (selectedTemplate || importDesignOption === 'screenshot' || importDesignOption === 'ai' || importDesignOption === 'clone') && (
               <motion.div
                 key="details"
                 initial={{ opacity: 0, x: 20 }}
@@ -1482,8 +1456,109 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 exit={{ opacity: 0, x: -20 }}
                 className="max-w-3xl mx-auto overflow-x-hidden"
               >
-                {/* Simplified view for screenshot/AI import */}
-                {(importDesignOption === 'screenshot' || importDesignOption === 'ai') && !selectedTemplate ? (
+                {/* Import flow - show import type info alongside starter details */}
+                {isImportFlow && selectedTemplate && (importDesignOption === 'clone' || importDesignOption === 'screenshot' || importDesignOption === 'ai') ? (
+                  <div className="space-y-5">
+                    {/* Starter Info */}
+                    <div className="flex items-start gap-4">
+                      {selectedTemplate.screenshot && (
+                        <img
+                          src={selectedTemplate.screenshot}
+                          alt={selectedTemplate.name}
+                          className="w-24 h-16 object-cover rounded-lg border border-dark-border"
+                        />
+                      )}
+                      <div>
+                        <h3 className="text-base font-semibold text-white mb-1">{selectedTemplate.name}</h3>
+                        <p className="text-xs text-gray-400">{selectedTemplate.description}</p>
+                      </div>
+                    </div>
+
+                    {/* Project Name Input */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-300 mb-1.5">
+                        Project Name
+                      </label>
+                      <input
+                        type="text"
+                        value={projectName}
+                        onChange={(e) => setProjectName(e.target.value)}
+                        placeholder="my-awesome-project"
+                        className="w-full px-3 py-2.5 bg-dark-bg/50 border border-dark-border rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary transition-colors"
+                        autoFocus
+                      />
+                    </div>
+
+                    {/* Clone Website Info */}
+                    {importDesignOption === 'clone' && (
+                      <div className="p-4 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/30 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 bg-blue-500/20 rounded-lg">
+                            <Code className="w-5 h-5 text-blue-400" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="text-sm font-semibold text-white mb-1">Clone Website</h4>
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                              AI will recreate the website exactly as it looks using the captured screenshot - same design, icons, animations, and layout.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Screenshot Upload */}
+                    {importDesignOption === 'screenshot' && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-300 mb-1.5">
+                          Upload Design Reference
+                        </label>
+                        <label className="block w-full p-4 border-2 border-dashed border-dark-border rounded-lg hover:border-primary/50 transition-all cursor-pointer group">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)}
+                            className="hidden"
+                          />
+                          <div className="text-center">
+                            {screenshotFile ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <CheckCircle className="w-4 h-4 text-primary" />
+                                <span className="text-xs text-white">{screenshotFile.name}</span>
+                              </div>
+                            ) : (
+                              <>
+                                <Download className="w-6 h-6 text-gray-400 mx-auto mb-1.5 group-hover:text-primary transition-colors" />
+                                <p className="text-xs text-gray-400 group-hover:text-gray-300 transition-colors">
+                                  Click to upload or drag and drop
+                                </p>
+                                <p className="text-[10px] text-gray-500 mt-0.5">
+                                  PNG, JPG up to 10MB
+                                </p>
+                              </>
+                            )}
+                          </div>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* AI Redesign Info */}
+                    {importDesignOption === 'ai' && (
+                      <div className="p-4 bg-gradient-to-br from-primary/10 to-purple-500/10 border border-primary/30 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 bg-primary/20 rounded-lg">
+                            <Sparkles className="w-5 h-5 text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="text-sm font-semibold text-white mb-1">AI-Powered Redesign</h4>
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                              AI will analyze the website content you imported and create a modern, custom design tailored to your needs.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (importDesignOption === 'screenshot' || importDesignOption === 'ai') && !selectedTemplate ? (
                   <div className="space-y-5">
                     <div>
                       <h3 className="text-base font-semibold text-white mb-1.5">Project Details</h3>

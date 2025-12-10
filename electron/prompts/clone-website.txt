@@ -1,0 +1,116 @@
+# CodeDeck Website Cloning System
+
+You are tasked with recreating a website EXACTLY as it appears - pixel perfect clone.
+
+## Available Data Location: /website-import/
+- DO NOT FETCH THE URL. YOU HAVE EVERYTHING NEEDED ON THE FOLDER ABOVE
+
+### Visual Reference:
+- `website-screenshot.png` - Full-page screenshot of the original website (USE THIS AS YOUR PRIMARY REFERENCE)
+
+### Source Code:
+- `source/index.html` - Clean HTML source of the page
+- `source/styles.css` - All CSS rules extracted from the page
+- `source/elements.json` - Complete element tree with:
+  - Exact pixel positions (x, y, width, height) at 1920x1080 viewport
+  - Computed styles (display, flex, grid, padding, margin, colors, fonts, etc.)
+  - Animation data (Framer Motion, AOS, CSS animations/transitions)
+  - Text content for each element
+- `source/design-tokens.json` - Color palette, fonts, and font sizes used
+
+### Assets:
+- `images/` - All images downloaded from the website
+- `svgs/` - All SVG icons extracted inline
+- `manifest.json` - Overview with metadata, structure info
+
+## CLONE PROCESS:
+
+### Step 1: Analyze the Screenshot
+First, look at `website-screenshot.png` to understand the exact visual target you need to achieve.
+
+### Step 2: Read the Element Structure
+Read `source/elements.json` to understand:
+- The exact layout hierarchy (header, sections, footer)
+- Flexbox/Grid layouts used
+- Exact spacing (padding, margin, gap)
+- Typography (font-family, font-size, font-weight, line-height)
+- Colors (background, text, borders)
+- Animations and transitions
+
+### Step 3: Extract Design Tokens
+Read `source/design-tokens.json` to get:
+- Color palette (use exact RGB values)
+- Font families (install Google Fonts if needed)
+- Font sizes for headings and body text
+
+### Step 4: Copy Assets
+Copy images from `images/` and SVGs from `svgs/` to your project's public folder.
+Update image paths in your code to reference the new locations.
+
+### Step 5: Recreate the Layout
+Build the page structure matching the exact:
+- Element hierarchy from elements.json
+- Positions and dimensions
+- Flexbox/Grid configurations
+- Responsive breakpoints (if detectable)
+
+### Step 6: Apply Styles
+Match exactly:
+- Colors (backgrounds, text, borders, shadows)
+- Typography (fonts, sizes, weights, line-heights)
+- Spacing (padding, margin, gap)
+- Border radius and shadows
+- Hover states and transitions
+
+### Step 7: Add Animations
+Look for animation data in elements.json:
+- `animation.framerMotion` - Use Framer Motion for these elements
+- `animation.aos` - Use AOS or similar scroll animations
+- `animation.css` - Recreate CSS animations
+- `animation.transition` - Apply CSS transitions
+
+## IMPORTANT GUIDELINES:
+
+1. **Pixel Perfect**: Match dimensions exactly. Use the rect values (x, y, width, height) from elements.json as reference.
+
+2. **Same Visual Output**: The final result should be visually indistinguishable from the screenshot.
+
+3. **Use Modern Stack**: Build with the starter template's technology (React, Next.js, etc.) but match the visual output exactly.
+
+4. **Preserve Animations**: If the source has animations (Framer Motion, AOS, CSS), recreate them.
+
+5. **Responsive**: While the extraction is at 1920x1080, implement reasonable responsive behavior.
+
+6. **Assets**: Always copy and use the downloaded images/SVGs rather than external URLs.
+
+7. **Iterate**: Use the <printscreen_tool> to compare your result with website-screenshot.png. Keep refining until they match exactly.
+
+## ELEMENT STRUCTURE FORMAT:
+
+Each element in elements.json has:
+```json
+{
+  "tag": "div",
+  "rect": { "x": 0, "y": 0, "width": 1920, "height": 800 },
+  "styles": {
+    "display": "flex",
+    "flexDirection": "column",
+    "justifyContent": "center",
+    "alignItems": "center",
+    "padding": "80px 120px",
+    "backgroundColor": "rgb(255, 255, 255)",
+    "color": "rgb(17, 24, 39)",
+    "fontSize": "16px",
+    "fontFamily": "Inter, sans-serif"
+  },
+  "attrs": { "class": "hero-section", "id": "hero" },
+  "animation": {
+    "framerMotion": true,
+    "transition": "all 0.3s ease"
+  },
+  "text": "Welcome to our website",
+  "children": [...]
+}
+```
+
+Use this data to recreate each element with exact styling.

@@ -17,7 +17,7 @@ import sizeOf from 'image-size'
 
 export function registerProjectHandlers() {
   // Create new project from template
-  ipcMain.handle('project:create', async (_event, templateId: string, projectName: string, tempImportProjectId?: string, screenshotData?: string, importType?: 'template' | 'screenshot' | 'ai') => {
+  ipcMain.handle('project:create', async (_event, templateId: string, projectName: string, tempImportProjectId?: string, screenshotData?: string, importType?: 'template' | 'screenshot' | 'ai' | 'clone') => {
     try {
       // SECURITY: Ensure user is authenticated
       const userId = requireAuth()

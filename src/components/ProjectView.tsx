@@ -184,60 +184,76 @@ function ProjectView() {
     }
   }, [showHelpChat, currentProjectId, layoutState, setPreviewHidden])
 
-  // Handle website import - auto-send prompt
+  // Handle website import - auto-send prompt and set system prompt addendum
   useEffect(() => {
     // Only run when we detect a first-time website import
     // The .migration-completed flag (checked via isFirstOpen) ensures this only runs once
-    if (websiteImport.isWebsiteImport && websiteImport.isFirstOpen && currentProjectId) {
-      // Generate the appropriate prompt based on import type
-      let prompt = ''
-      const manifestPath = '/website-import/manifest.json'
-      const imagesPath = '/website-import/images'
+    if (websiteImport.isWebsiteImport && websiteImport.isFirstOpen && currentProjectId && websiteImport.importType) {
+      const setupImport = async () => {
+        try {
+          const sourceUrl = websiteImport.manifest?.metadata?.sourceUrl || 'the imported website'
 
-      switch (websiteImport.importType) {
-        case 'template':
-          prompt = `I want to migrate all content from my old website into this codebase while preserving the current template's design and structure.
+          // Step 1: Load the system prompt addendum from file and save it to CLAUDE.md
+          // This is saved BEFORE the auto-message is sent so Claude sees it in the first message
+          const addendumResult = await window.electronAPI?.prompts?.getImportAddendum(websiteImport.importType!)
+          if (addendumResult?.success && addendumResult.content) {
+            // Save the addendum to the project's CLAUDE.md (like ContextBar does)
+            await window.electronAPI?.claudeMd?.saveAddendum(currentProjectId, addendumResult.content)
+          }
 
-My old website's data is located at: ${manifestPath} (contains all text content, sections, navigation, and footer data)
-Images from my old website are at: ${imagesPath}
+          // Step 2: Set the user prompt based on import type
+          let prompt = ''
 
-Please analyze the manifest.json to understand my content, then integrate it into the current template, use bash command to transfer the images from the old website to this codebase, replacing placeholder content while maintaining the template's design patterns and component structure.`
-          break
+          switch (websiteImport.importType) {
+            case 'clone':
+              prompt = `Claude please clone the design of ${sourceUrl} on my project using CodeDeck Website Cloning System.`
+              break
 
-        case 'screenshot':
-          prompt = `I want to create a new website using my old website's content and a design inspired by a screenshot I provided.
+            case 'screenshot':
+              prompt = `Claude please copy all content from ${sourceUrl} on my project using CodeDeck Website Import System.`
+              break
 
-- Design reference: Look for user-design-screenshot.* in the project root (use this as design inspiration)
-- Content data: ${manifestPath} (contains all text, sections, navigation)
-- Images: ${imagesPath}
+            case 'ai':
+              prompt = `Claude please copy all content from ${sourceUrl} and design a professional and sleek variation of it using CodeDeck Website Redesign System.`
+              break
 
-Please create a website that matches the design aesthetic from the screenshot while incorporating all the content from my old website. Use bash command to transfer the images from the old website to this codebase`
-          break
+            case 'template':
+              prompt = `Claude please migrate all content from ${sourceUrl} into the current template structure.`
+              break
+          }
 
-        case 'ai':
-          prompt = `I want you to create a modern, sleek website using content from my old website.
-
-- Content data: ${manifestPath} (analyze this to understand my website's purpose, industry, and content)
-- Images: ${imagesPath}
-
-Please read the manifest to understand what my website is about, then create an appropriate theme, color palette, and design style that fits my use case. Make it modern and professional. Use bash command to transfer the images from the old website to this codebase`
-          break
+          setWebsiteImportPrompt(prompt)
+        } catch (error) {
+          console.error('Failed to setup website import:', error)
+        }
       }
 
-      setWebsiteImportPrompt(prompt)
+      setupImport()
     }
 
     // Clean up state when switching projects
     return () => {
       setWebsiteImportPrompt(undefined)
     }
-  }, [websiteImport.isWebsiteImport, websiteImport.isFirstOpen, websiteImport.importType, currentProjectId])
+  }, [websiteImport.isWebsiteImport, websiteImport.isFirstOpen, websiteImport.importType, websiteImport.manifest, currentProjectId])
 
   // Handle marking migration as complete when auto-message is sent
   const handleWebsiteImportPromptSent = useCallback(async () => {
     try {
       await websiteImport.markMigrationComplete()
       setWebsiteImportPrompt(undefined) // Clear the prompt so it doesn't send again
+
+      // Remove the system prompt addendum after 5 seconds
+      // This ensures it's only used for the first automatic message
+      if (currentProjectId) {
+        setTimeout(async () => {
+          try {
+            await window.electronAPI?.claudeMd?.removeAddendum(currentProjectId)
+          } catch (error) {
+            console.error('Failed to remove addendum:', error)
+          }
+        }, 5000)
+      }
     } catch (error) {
       console.error('⭐ [WEBSITE IMPORT] Failed to mark migration complete:', error)
     }

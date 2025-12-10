@@ -27,7 +27,7 @@ class ProjectService {
     userEmail: string,
     tempImportProjectId?: string,
     screenshotData?: string,
-    importType?: 'template' | 'screenshot' | 'ai'
+    importType?: 'template' | 'screenshot' | 'ai' | 'clone'
   ): Promise<Project> {
     try {
       if (tempImportProjectId) {
@@ -157,6 +157,34 @@ class ProjectService {
             const imagesDest = path.join(importDataDir, 'images')
             if (fs.existsSync(imagesSrc)) {
               this.copyDirectory(imagesSrc, imagesDest)
+            }
+
+            // Copy SVGs folder
+            const svgsSrc = path.join(tempDir, 'svgs')
+            const svgsDest = path.join(importDataDir, 'svgs')
+            if (fs.existsSync(svgsSrc)) {
+              this.copyDirectory(svgsSrc, svgsDest)
+            }
+
+            // Copy source folder (HTML, CSS, elements.json, design-tokens.json)
+            const sourceSrc = path.join(tempDir, 'source')
+            const sourceDest = path.join(importDataDir, 'source')
+            if (fs.existsSync(sourceSrc)) {
+              this.copyDirectory(sourceSrc, sourceDest)
+            }
+
+            // Copy website screenshot (captured during analyze)
+            const websiteScreenshotSrc = path.join(tempDir, 'website-screenshot.png')
+            const websiteScreenshotDest = path.join(importDataDir, 'website-screenshot.png')
+            if (fs.existsSync(websiteScreenshotSrc)) {
+              fs.copyFileSync(websiteScreenshotSrc, websiteScreenshotDest)
+            }
+
+            // Copy clone instructions readme
+            const readmeSrc = path.join(tempDir, 'CLONE_README.md')
+            const readmeDest = path.join(importDataDir, 'CLONE_README.md')
+            if (fs.existsSync(readmeSrc)) {
+              fs.copyFileSync(readmeSrc, readmeDest)
             }
 
             // Clean up temp directory
