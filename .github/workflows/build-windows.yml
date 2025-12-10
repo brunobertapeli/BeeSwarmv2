@@ -24,6 +24,9 @@ jobs:
       - name: Download binaries
         run: npm run prebuild
 
+      - name: Wait for file handles to release
+        run: Start-Sleep -Seconds 5
+
       - name: Build Electron app
         run: npm run electron:build
         env:
