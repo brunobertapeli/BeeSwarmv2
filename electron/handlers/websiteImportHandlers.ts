@@ -382,7 +382,7 @@ export function registerWebsiteImportHandlers(): void {
           });
 
           // Check for animations (handle SVG className which is SVGAnimatedString)
-          const classNameStr = typeof el.className === 'string' ? el.className : (el.className?.baseVal || '');
+          const classNameStr = typeof el.className === 'string' ? el.className : ((el.className as any)?.baseVal || '');
           const hasFramerMotion = el.hasAttribute('data-framer-appear-id') ||
                                   classNameStr.includes('framer') ||
                                   el.hasAttribute('data-framer-component-type');

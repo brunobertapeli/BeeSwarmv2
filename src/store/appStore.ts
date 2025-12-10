@@ -3,6 +3,7 @@ import type { TechConfig } from '../components/TemplateSelector'
 import type { Device, DeviceType, Orientation } from '../types/devices'
 import { getDefaultDevice } from '../types/devices'
 import type { User } from '../types/auth'
+import type { ClaudeCliStatus } from '../types/electron'
 
 interface Project {
   id: string
@@ -64,6 +65,16 @@ interface AppState {
 
   // Computed property: Check if any overlay is blocking the preview
   hasOverlayOpen: () => boolean
+
+  // Claude CLI Auth State
+  claudeCliStatus: {
+    checked: boolean
+    installed: boolean
+    authenticated: boolean
+    email?: string
+    error?: string
+  } | null
+  setClaudeCliStatus: (status: AppState['claudeCliStatus']) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -135,6 +146,10 @@ export const useAppStore = create<AppState>((set) => ({
       state.showStatusSheet
     )
   },
+
+  // Claude CLI Auth State
+  claudeCliStatus: null,
+  setClaudeCliStatus: (status) => set({ claudeCliStatus: status }),
 }))
 
 // Export function to initialize auth (called from App.tsx after electronAPI is ready)

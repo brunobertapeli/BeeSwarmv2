@@ -67,6 +67,13 @@ export interface HealthCheckStatus {
 
 export type ClaudeStatus = 'idle' | 'starting' | 'running' | 'completed' | 'error'
 
+export interface ClaudeCliStatus {
+  installed: boolean
+  authenticated: boolean
+  email?: string
+  error?: string
+}
+
 export type LayoutState = 'DEFAULT' | 'TOOLS' | 'BROWSER_FULL'
 
 export enum InteractionType {
@@ -675,6 +682,15 @@ export interface ElectronAPI {
     }) => Promise<{ success: boolean; path?: string; error?: string }>
   }
 
+  audio: {
+    cropAudio: (options: {
+      inputPath: string
+      startTime: number
+      endTime: number
+      format: string
+    }) => Promise<{ success: boolean; outputPath?: string; error?: string }>
+  }
+
   terminal: {
     createSession: (projectId: string) => Promise<{
       success: boolean
@@ -1096,6 +1112,26 @@ export interface ElectronAPI {
         resultImagePath: string | null
       } | null
       error?: string
+    }>
+  }
+
+  // Claude CLI methods (installation/auth check)
+  claudeCli: {
+    checkStatus: () => Promise<{
+      success: boolean
+      status?: ClaudeCliStatus
+      error?: string
+    }>
+    isInstalled: () => Promise<{
+      success: boolean
+      installed: boolean
+    }>
+    login: () => Promise<{
+      success: boolean
+      error?: string
+    }>
+    openInstallUrl: () => Promise<{
+      success: boolean
     }>
   }
 

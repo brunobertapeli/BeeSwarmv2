@@ -5,6 +5,7 @@
 
 import path from 'path'
 import fs from 'fs'
+import os from 'os'
 import { app } from 'electron'
 
 class BundledBinaries {
@@ -114,6 +115,129 @@ class BundledBinaries {
    */
   isGhAvailable(): boolean {
     return fs.existsSync(this.ghPath)
+  }
+
+  /**
+   * Get path to bundled Claude Code CLI executable
+   */
+  get claudePath(): string {
+    const basePath = this.getBasePath()
+    const claudeBinary = process.platform === 'win32' ? 'claude.exe' : 'claude'
+    return path.join(basePath, claudeBinary)
+  }
+
+  /**
+   * Check if Claude Code CLI is available (bundled or system)
+   */
+  isClaudeAvailable(): boolean {
+    // First check bundled path
+    console.log('[BundledBinaries] Checking bundled Claude path:', this.claudePath)
+    if (fs.existsSync(this.claudePath)) {
+      console.log('[BundledBinaries] Found bundled Claude')
+      return true
+    }
+
+    // Check common installation locations
+    const systemClaudePath = this.findSystemClaudePath()
+    if (systemClaudePath) {
+      console.log('[BundledBinaries] Found Claude at:', systemClaudePath)
+      return true
+    }
+
+    console.log('[BundledBinaries] Claude not found')
+    return false
+  }
+
+  /**
+   * Find Claude CLI in common system locations
+   */
+  private findSystemClaudePath(): string | null {
+    const homeDir = os.homedir()
+    const possiblePaths: string[] = []
+
+    if (process.platform === 'win32') {
+      // Official Windows installation paths (from docs.claude.com)
+      possiblePaths.push(
+        // Native installer location
+        path.join(homeDir, 'AppData', 'Local', 'Microsoft', 'WindowsApps', 'claude.exe'),
+        path.join(homeDir, 'AppData', 'Local', 'Programs', 'claude-code', 'claude.exe'),
+        // npm global installations
+        path.join(homeDir, 'AppData', 'Roaming', 'npm', 'claude.cmd'),
+        path.join(homeDir, 'AppData', 'Roaming', 'npm', 'claude'),
+        path.join(homeDir, 'AppData', 'Local', 'pnpm', 'claude.cmd'),
+        // Program Files
+        'C:\\Program Files\\nodejs\\claude.cmd',
+        'C:\\Program Files\\ClaudeCode\\claude.exe',
+      )
+
+      // Check nvm-windows installations
+      const nvmWindowsDir = path.join(homeDir, 'AppData', 'Roaming', 'nvm')
+      if (fs.existsSync(nvmWindowsDir)) {
+        try {
+          const nodeVersions = fs.readdirSync(nvmWindowsDir).filter(v => v.startsWith('v'))
+          for (const version of nodeVersions) {
+            possiblePaths.push(path.join(nvmWindowsDir, version, 'claude.cmd'))
+            possiblePaths.push(path.join(nvmWindowsDir, version, 'claude'))
+          }
+        } catch {}
+      }
+    } else {
+      // macOS / Linux
+      possiblePaths.push(
+        '/usr/local/bin/claude',
+        '/opt/homebrew/bin/claude',
+        path.join(homeDir, '.local', 'bin', 'claude'),
+        // npm global locations
+        '/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js',
+        path.join(homeDir, '.npm-global', 'bin', 'claude'),
+      )
+
+      // Check nvm installations (macOS/Linux)
+      const nvmDir = path.join(homeDir, '.nvm', 'versions', 'node')
+      if (fs.existsSync(nvmDir)) {
+        try {
+          const nodeVersions = fs.readdirSync(nvmDir)
+          for (const version of nodeVersions) {
+            possiblePaths.push(path.join(nvmDir, version, 'bin', 'claude'))
+          }
+        } catch {}
+      }
+
+      // Check fnm installations (macOS)
+      const fnmDir = path.join(homeDir, 'Library', 'Application Support', 'fnm', 'node-versions')
+      if (fs.existsSync(fnmDir)) {
+        try {
+          const nodeVersions = fs.readdirSync(fnmDir)
+          for (const version of nodeVersions) {
+            possiblePaths.push(path.join(fnmDir, version, 'installation', 'bin', 'claude'))
+          }
+        } catch {}
+      }
+    }
+
+    for (const claudePath of possiblePaths) {
+      if (fs.existsSync(claudePath)) {
+        return claudePath
+      }
+    }
+
+    return null
+  }
+
+  /**
+   * Get the effective Claude CLI path (bundled or system)
+   */
+  getEffectiveClaudePath(): string {
+    if (fs.existsSync(this.claudePath)) {
+      return this.claudePath
+    }
+    // Check common installation locations
+    const systemPath = this.findSystemClaudePath()
+    if (systemPath) {
+      return systemPath
+    }
+    // Fallback to system claude (will be found via PATH)
+    return 'claude'
   }
 
   /**

@@ -402,6 +402,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     loadState: (projectId) => ipcRenderer.invoke('backgroundRemover:loadState', projectId)
   },
 
+  // Claude CLI methods (installation/auth check)
+  claudeCli: {
+    checkStatus: () => ipcRenderer.invoke('claude-cli:check-status'),
+    isInstalled: () => ipcRenderer.invoke('claude-cli:is-installed'),
+    login: () => ipcRenderer.invoke('claude-cli:login'),
+    openInstallUrl: () => ipcRenderer.invoke('claude-cli:open-install-url')
+  },
+
   // Git methods
   git: {
     checkGhCli: () => ipcRenderer.invoke('git:check-gh-cli'),

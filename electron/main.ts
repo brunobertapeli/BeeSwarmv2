@@ -28,6 +28,7 @@ import { registerFileHandlers } from './handlers/fileHandlers.js'
 import { registerAnalyticsHandlers } from './handlers/analyticsHandlers.js'
 import { registerChatWidgetHandlers, setChatWidgetWindow } from './handlers/chatWidgetHandlers.js'
 import { registerBackgroundRemoverHandlers } from './handlers/backgroundRemoverHandlers.js'
+import { registerClaudeCliHandlers } from './handlers/claudeCliHandlers.js'
 import { registerDeploymentHandlers, setDeploymentMainWindow } from './handlers/deploymentHandlers.js'
 import { databaseService } from './services/DatabaseService.js'
 import { analyticsService } from './services/AnalyticsService.js'
@@ -417,6 +418,7 @@ async function initializeApp() {
     registerWebsiteImportHandlers()
     registerChatWidgetHandlers()
     registerBackgroundRemoverHandlers()
+    registerClaudeCliHandlers()
     registerDeploymentHandlers()
 
     // App-level IPC handlers

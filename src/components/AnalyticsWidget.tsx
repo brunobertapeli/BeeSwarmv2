@@ -7,11 +7,7 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContaine
 // Mock data - will be replaced with real GA data
 const MOCK_DATA = {
   activeUsers: 127,
-  stats: {
-    today: { visitors: 1247, pageViews: 3891, avgTime: '3m 24s' },
-    week: { visitors: 8432, pageViews: 24891, avgTime: '3m 12s' },
-    month: { visitors: 34219, pageViews: 98234, avgTime: '3m 18s' }
-  },
+  stats: { visitors: 1247, pageViews: 3891, avgTime: '3m 24s' },
   trend: [
     { date: 'Jan 15', visitors: 820 },
     { date: 'Jan 16', visitors: 932 },
