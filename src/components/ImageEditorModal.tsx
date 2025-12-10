@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, ZoomIn, ZoomOut, RotateCcw, Maximize2, Crop, Palette, SlidersHorizontal, RotateCw, FlipHorizontal, FlipVertical, Sun, Contrast, Droplets, CircleDot, Link, Unlink, Check, Square, RectangleHorizontal, RectangleVertical, Smartphone, Move, Undo2, Scan, Trash2 } from 'lucide-react'
+import { X, ZoomIn, ZoomOut, RotateCcw, Maximize2, Crop, Palette, SlidersHorizontal, RotateCw, FlipHorizontal, FlipVertical, Sun, Contrast, Droplets, CircleDot, Link, Unlink, Check, Square, RectangleHorizontal, RectangleVertical, Move, Undo2, Scan, Trash2 } from 'lucide-react'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { ModalPortal } from './ModalPortal'
-import * as fabric from 'fabric'
+import Konva from 'konva'
 
 interface ImageEditorModalProps {
   isOpen: boolean
@@ -41,7 +41,6 @@ interface FilterValues {
   blur: number
   sharpen: boolean
   emboss: boolean
-  vintage: boolean
   warmth: number
 }
 
@@ -72,7 +71,6 @@ interface HistoryState {
   width?: number
   height?: number
   blurRegions?: BlurRegion[]
-  // Store image data URL for operations that modify the image pixels (like blur apply)
   imageDataURL?: string
   scaleX?: number
   scaleY?: number
@@ -92,7 +90,6 @@ const defaultFilters: FilterValues = {
   blur: 0,
   sharpen: false,
   emboss: false,
-  vintage: false,
   warmth: 0,
 }
 
@@ -102,14 +99,12 @@ function applyBoxBlur(imageData: ImageData, intensity: number): ImageData {
   const output = new ImageData(width, height)
   const outputData = output.data
 
-  // Blur radius based on intensity (1-50 pixels)
   const radius = Math.max(1, Math.min(50, Math.round(intensity / 2)))
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       let r = 0, g = 0, b = 0, a = 0, count = 0
 
-      // Sample pixels in the blur radius
       for (let dy = -radius; dy <= radius; dy++) {
         for (let dx = -radius; dx <= radius; dx++) {
           const nx = x + dx
@@ -141,43 +136,39 @@ function applyBoxBlur(imageData: ImageData, intensity: number): ImageData {
 interface CropOverlayProps {
   cropArea: CropArea
   setCropArea: (area: CropArea) => void
-  imageObject: fabric.FabricImage
-  canvas: fabric.Canvas | null
+  imageNode: Konva.Image
+  stage: Konva.Stage | null
   aspectRatioPreset: AspectRatioPreset
 }
 
-function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPreset }: CropOverlayProps) {
+function CropOverlay({ cropArea, setCropArea, imageNode, stage, aspectRatioPreset }: CropOverlayProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState<string | null>(null)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0, cropX: 0, cropY: 0, cropW: 0, cropH: 0 })
 
-  // Get the actual pixel-to-screen scale
-  // cropArea is in ORIGINAL image pixel coordinates (before any scaling)
   const getImageScreenBounds = useCallback(() => {
-    if (!canvas || !imageObject) return { left: 0, top: 0, scaleX: 1, scaleY: 1 }
+    if (!stage || !imageNode) return { left: 0, top: 0, scaleX: 1, scaleY: 1 }
 
-    const zoom = canvas.getZoom()
-    const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0]
+    const stageScale = stage.scaleX()
+    const stagePos = stage.position()
 
-    // Image position and scale
-    const imgLeft = imageObject.left || 0
-    const imgTop = imageObject.top || 0
-    const imgScaleX = imageObject.scaleX || 1
-    const imgScaleY = imageObject.scaleY || 1
-    const imgWidth = imageObject.width || 0
-    const imgHeight = imageObject.height || 0
+    const imgX = imageNode.x()
+    const imgY = imageNode.y()
+    const imgScaleX = imageNode.scaleX()
+    const imgScaleY = imageNode.scaleY()
+    const imgWidth = imageNode.width()
+    const imgHeight = imageNode.height()
+    const offsetX = imageNode.offsetX()
+    const offsetY = imageNode.offsetY()
 
-    // The image is centered (originX/Y = 'center'), so top-left corner is:
-    const imgTopLeftX = imgLeft - (imgWidth * imgScaleX) / 2
-    const imgTopLeftY = imgTop - (imgHeight * imgScaleY) / 2
+    const imgTopLeftX = imgX - offsetX * imgScaleX
+    const imgTopLeftY = imgY - offsetY * imgScaleY
 
-    // Apply canvas zoom and viewport transform
-    const screenLeft = imgTopLeftX * zoom + vpt[4]
-    const screenTop = imgTopLeftY * zoom + vpt[5]
+    const screenLeft = imgTopLeftX * stageScale + stagePos.x
+    const screenTop = imgTopLeftY * stageScale + stagePos.y
 
-    // Total scale from original pixels to screen pixels
-    const totalScaleX = imgScaleX * zoom
-    const totalScaleY = imgScaleY * zoom
+    const totalScaleX = imgScaleX * stageScale
+    const totalScaleY = imgScaleY * stageScale
 
     return {
       left: screenLeft,
@@ -185,9 +176,8 @@ function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPr
       scaleX: totalScaleX,
       scaleY: totalScaleY,
     }
-  }, [canvas, imageObject])
+  }, [stage, imageNode])
 
-  // Convert crop area (in original image coordinates) to screen coordinates
   const getCropScreenPosition = useCallback(() => {
     const bounds = getImageScreenBounds()
 
@@ -223,19 +213,16 @@ function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPr
     if (!isDragging && !isResizing) return
 
     const bounds = getImageScreenBounds()
-    const imgWidth = imageObject.width || 100
-    const imgHeight = imageObject.height || 100
+    const imgWidth = imageNode.width()
+    const imgHeight = imageNode.height()
 
-    // Convert screen delta to original image coordinates
     const deltaX = (e.clientX - dragStart.x) / bounds.scaleX
     const deltaY = (e.clientY - dragStart.y) / bounds.scaleY
 
     if (isDragging) {
-      // Move the crop area
       let newX = dragStart.cropX + deltaX
       let newY = dragStart.cropY + deltaY
 
-      // Clamp to image bounds
       newX = Math.max(0, Math.min(newX, imgWidth - cropArea.width))
       newY = Math.max(0, Math.min(newY, imgHeight - cropArea.height))
 
@@ -246,7 +233,6 @@ function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPr
       let newW = dragStart.cropW
       let newH = dragStart.cropH
 
-      // Handle resize based on which handle is being dragged
       const aspectRatio = getAspectRatioValue(aspectRatioPreset)
 
       if (isResizing.includes('e')) {
@@ -270,7 +256,6 @@ function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPr
         if (aspectRatio) newW = newH * aspectRatio
       }
 
-      // Clamp to image bounds
       newX = Math.max(0, newX)
       newY = Math.max(0, newY)
       newW = Math.min(newW, imgWidth - newX)
@@ -278,7 +263,7 @@ function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPr
 
       setCropArea({ x: newX, y: newY, width: newW, height: newH })
     }
-  }, [isDragging, isResizing, dragStart, cropArea, setCropArea, aspectRatioPreset, imageObject, getImageScreenBounds])
+  }, [isDragging, isResizing, dragStart, cropArea, setCropArea, aspectRatioPreset, imageNode, getImageScreenBounds])
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false)
@@ -311,7 +296,6 @@ function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPr
 
   return (
     <div className="absolute inset-0 pointer-events-none z-20">
-      {/* Dark overlay outside crop area */}
       <svg className="absolute inset-0 w-full h-full">
         <defs>
           <mask id="cropMask">
@@ -335,7 +319,6 @@ function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPr
         />
       </svg>
 
-      {/* Crop area with border */}
       <div
         className="absolute border-2 border-green-400 pointer-events-auto cursor-move"
         style={{
@@ -346,7 +329,6 @@ function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPr
         }}
         onMouseDown={(e) => handleMouseDown(e)}
       >
-        {/* Grid lines */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/30" />
           <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/30" />
@@ -354,42 +336,15 @@ function CropOverlay({ cropArea, setCropArea, imageObject, canvas, aspectRatioPr
           <div className="absolute top-2/3 left-0 right-0 h-px bg-white/30" />
         </div>
 
-        {/* Resize handles */}
-        {/* Corners */}
-        <div
-          className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border border-green-500 cursor-nw-resize"
-          onMouseDown={(e) => handleMouseDown(e, 'nw')}
-        />
-        <div
-          className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border border-green-500 cursor-ne-resize"
-          onMouseDown={(e) => handleMouseDown(e, 'ne')}
-        />
-        <div
-          className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border border-green-500 cursor-sw-resize"
-          onMouseDown={(e) => handleMouseDown(e, 'sw')}
-        />
-        <div
-          className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border border-green-500 cursor-se-resize"
-          onMouseDown={(e) => handleMouseDown(e, 'se')}
-        />
+        <div className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border border-green-500 cursor-nw-resize" onMouseDown={(e) => handleMouseDown(e, 'nw')} />
+        <div className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border border-green-500 cursor-ne-resize" onMouseDown={(e) => handleMouseDown(e, 'ne')} />
+        <div className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white border border-green-500 cursor-sw-resize" onMouseDown={(e) => handleMouseDown(e, 'sw')} />
+        <div className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border border-green-500 cursor-se-resize" onMouseDown={(e) => handleMouseDown(e, 'se')} />
 
-        {/* Edge handles */}
-        <div
-          className="absolute -top-1 left-1/2 -translate-x-1/2 w-6 h-2 bg-white border border-green-500 cursor-n-resize"
-          onMouseDown={(e) => handleMouseDown(e, 'n')}
-        />
-        <div
-          className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 h-2 bg-white border border-green-500 cursor-s-resize"
-          onMouseDown={(e) => handleMouseDown(e, 's')}
-        />
-        <div
-          className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-6 bg-white border border-green-500 cursor-w-resize"
-          onMouseDown={(e) => handleMouseDown(e, 'w')}
-        />
-        <div
-          className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-6 bg-white border border-green-500 cursor-e-resize"
-          onMouseDown={(e) => handleMouseDown(e, 'e')}
-        />
+        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-6 h-2 bg-white border border-green-500 cursor-n-resize" onMouseDown={(e) => handleMouseDown(e, 'n')} />
+        <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 h-2 bg-white border border-green-500 cursor-s-resize" onMouseDown={(e) => handleMouseDown(e, 's')} />
+        <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-6 bg-white border border-green-500 cursor-w-resize" onMouseDown={(e) => handleMouseDown(e, 'w')} />
+        <div className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-6 bg-white border border-green-500 cursor-e-resize" onMouseDown={(e) => handleMouseDown(e, 'e')} />
       </div>
     </div>
   )
@@ -399,7 +354,6 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
   const { currentProjectId } = useAppStore()
   const { layoutState, setPreviewHidden } = useLayoutStore()
 
-  // Hide/show preview when modal opens/closes
   useEffect(() => {
     if (!currentProjectId || layoutState !== 'DEFAULT') return
 
@@ -413,14 +367,13 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
   }, [isOpen, currentProjectId, layoutState, setPreviewHidden])
 
   const [selectedTool, setSelectedTool] = useState<EditorTool>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
-  const fabricCanvasRef = useRef<fabric.Canvas | null>(null)
-  const imageObjectRef = useRef<fabric.FabricImage | null>(null)
+  const stageRef = useRef<Konva.Stage | null>(null)
+  const layerRef = useRef<Konva.Layer | null>(null)
+  const imageNodeRef = useRef<Konva.Image | null>(null)
   const [isCanvasReady, setIsCanvasReady] = useState(false)
   const isDisposedRef = useRef(false)
 
-  // Editing state - "applied" values are committed, "pending" are for preview
   const [appliedAdjustments, setAppliedAdjustments] = useState<AdjustmentValues>(defaultAdjustments)
   const [pendingAdjustments, setPendingAdjustments] = useState<AdjustmentValues>(defaultAdjustments)
   const [appliedFilters, setAppliedFilters] = useState<FilterValues>(defaultFilters)
@@ -433,48 +386,40 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
   const [isSaving, setIsSaving] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(100)
 
-  // Crop state
   const [cropMode, setCropMode] = useState(false)
   const [cropArea, setCropArea] = useState<CropArea>({ x: 0, y: 0, width: 100, height: 100 })
   const [aspectRatioPreset, setAspectRatioPreset] = useState<AspectRatioPreset>('free')
 
-  // Store original image dimensions for reset
   const originalImageDimensions = useRef<{ width: number; height: number } | null>(null)
+  const originalImageSrc = useRef<string>('')
 
-  // Blur regions state
   const [blurRegions, setBlurRegions] = useState<BlurRegion[]>([])
   const [blurIntensity, setBlurIntensity] = useState(20)
   const [isDrawingBlur, setIsDrawingBlur] = useState(false)
   const [blurDrawStart, setBlurDrawStart] = useState<{ x: number; y: number } | null>(null)
   const [currentBlurRect, setCurrentBlurRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
 
-  // Undo history (last 5 states)
   const [history, setHistory] = useState<HistoryState[]>([])
   const MAX_HISTORY = 5
 
-  // Save current state to history (including image data for pixel-modifying operations)
   const saveToHistory = useCallback((captureImageData: boolean = false) => {
-    const img = imageObjectRef.current
-    const canvas = fabricCanvasRef.current
+    const img = imageNodeRef.current
+    const stage = stageRef.current
 
     let imageDataURL: string | undefined = undefined
 
-    // Capture image data URL for operations that modify pixels
-    if (captureImageData && img && canvas) {
-      // Create a temporary canvas to capture the current image state
+    if (captureImageData && img && stage) {
       const tempCanvas = document.createElement('canvas')
-      const imgWidth = img.width || 100
-      const imgHeight = img.height || 100
+      const imgWidth = img.width()
+      const imgHeight = img.height()
       tempCanvas.width = imgWidth
       tempCanvas.height = imgHeight
 
       const ctx = tempCanvas.getContext('2d')
       if (ctx) {
-        const sourceElement = img.getElement() as HTMLImageElement
+        const sourceElement = img.image() as HTMLImageElement
         if (sourceElement) {
-          const cropX = img.cropX || 0
-          const cropY = img.cropY || 0
-          ctx.drawImage(sourceElement, cropX, cropY, imgWidth, imgHeight, 0, 0, imgWidth, imgHeight)
+          ctx.drawImage(sourceElement, 0, 0, imgWidth, imgHeight)
           imageDataURL = tempCanvas.toDataURL('image/png')
         }
       }
@@ -487,19 +432,16 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
       rotation,
       flipX,
       flipY,
-      cropX: img?.cropX,
-      cropY: img?.cropY,
-      width: img?.width,
-      height: img?.height,
+      width: img?.width(),
+      height: img?.height(),
       blurRegions: [...blurRegions],
       imageDataURL,
-      scaleX: img?.scaleX,
-      scaleY: img?.scaleY,
+      scaleX: img?.scaleX(),
+      scaleY: img?.scaleY(),
     }
 
     setHistory(prev => {
       const newHistory = [...prev, currentState]
-      // Keep only the last MAX_HISTORY states
       if (newHistory.length > MAX_HISTORY) {
         return newHistory.slice(-MAX_HISTORY)
       }
@@ -507,16 +449,15 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
     })
   }, [appliedAdjustments, appliedFilters, resize, rotation, flipX, flipY, blurRegions])
 
-  // Undo to previous state
   const handleUndo = useCallback(async () => {
     if (history.length === 0) return
 
     const previousState = history[history.length - 1]
-    const canvas = fabricCanvasRef.current
+    const stage = stageRef.current
+    const layer = layerRef.current
 
-    if (!canvas) return
+    if (!stage || !layer) return
 
-    // Restore state - filters will be reapplied by useEffect
     setAppliedAdjustments(previousState.adjustments)
     setPendingAdjustments(previousState.adjustments)
     setAppliedFilters(previousState.filters)
@@ -527,209 +468,255 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
     setFlipY(previousState.flipY)
     setBlurRegions(previousState.blurRegions || [])
 
-    // If we have stored image data, restore the full image
     if (previousState.imageDataURL) {
-      const oldImg = imageObjectRef.current
-      const newImg = await fabric.FabricImage.fromURL(previousState.imageDataURL)
-
-      newImg.set({
-        left: oldImg?.left || canvas.width! / 2,
-        top: oldImg?.top || canvas.height! / 2,
-        originX: 'center',
-        originY: 'center',
-        scaleX: previousState.scaleX || 1,
-        scaleY: previousState.scaleY || 1,
-        angle: previousState.rotation,
-        flipX: previousState.flipX,
-        flipY: previousState.flipY,
-        selectable: oldImg?.selectable ?? true,
-        evented: oldImg?.evented ?? true,
-        hasControls: false,
-        hasBorders: false,
-        lockScalingX: true,
-        lockScalingY: true,
-        hoverCursor: 'grab',
-        moveCursor: 'grabbing',
-        cropX: previousState.cropX || 0,
-        cropY: previousState.cropY || 0,
-        width: previousState.width,
-        height: previousState.height,
-      })
-
-      // Remove old image and add new one
-      if (oldImg) canvas.remove(oldImg)
-      canvas.add(newImg)
-      canvas.setActiveObject(newImg)
-      imageObjectRef.current = newImg
-    } else {
-      // Just restore properties on existing image
-      const img = imageObjectRef.current
-      if (img) {
-        img.set({
-          angle: previousState.rotation,
-          flipX: previousState.flipX,
-          flipY: previousState.flipY,
+      const oldImg = imageNodeRef.current
+      const imageObj = new window.Image()
+      imageObj.crossOrigin = 'anonymous'
+      imageObj.onload = () => {
+        const newKonvaImg = new Konva.Image({
+          image: imageObj,
+          x: oldImg?.x() || stage.width() / 2,
+          y: oldImg?.y() || stage.height() / 2,
+          offsetX: imageObj.width / 2,
+          offsetY: imageObj.height / 2,
+          scaleX: previousState.scaleX || 1,
+          scaleY: previousState.scaleY || 1,
+          rotation: previousState.rotation,
+          draggable: !(selectedTool !== null || cropMode),
         })
 
-        // Restore scale (for resize undo)
-        if (previousState.scaleX !== undefined && previousState.scaleY !== undefined) {
-          img.set({
-            scaleX: previousState.scaleX,
-            scaleY: previousState.scaleY,
-          })
-        }
+        if (previousState.flipX) newKonvaImg.scaleX(-Math.abs(newKonvaImg.scaleX()))
+        if (previousState.flipY) newKonvaImg.scaleY(-Math.abs(newKonvaImg.scaleY()))
 
-        // Restore crop if it was set
-        if (previousState.width !== undefined && previousState.height !== undefined) {
-          img.set({
-            cropX: previousState.cropX || 0,
-            cropY: previousState.cropY || 0,
-            width: previousState.width,
-            height: previousState.height,
-          })
-        }
+        if (oldImg) oldImg.destroy()
+        layer.add(newKonvaImg)
+        imageNodeRef.current = newKonvaImg
+        layer.draw()
+      }
+      imageObj.src = previousState.imageDataURL
+    } else {
+      const img = imageNodeRef.current
+      if (img) {
+        img.rotation(previousState.rotation)
+        if (previousState.scaleX !== undefined) img.scaleX(previousState.flipX ? -Math.abs(previousState.scaleX) : previousState.scaleX)
+        if (previousState.scaleY !== undefined) img.scaleY(previousState.flipY ? -Math.abs(previousState.scaleY) : previousState.scaleY)
+        layer.draw()
       }
     }
 
-    canvas.renderAll()
-
-    // Remove the last history entry
     setHistory(prev => prev.slice(0, -1))
-  }, [history])
+  }, [history, selectedTool, cropMode])
 
-  // Initialize Fabric.js canvas
+  // Initialize Konva stage
   useEffect(() => {
-    if (!isOpen || !canvasRef.current) return
+    if (!isOpen || !canvasContainerRef.current) return
 
     isDisposedRef.current = false
 
-    // Create Fabric canvas
-    const canvas = new fabric.Canvas(canvasRef.current, {
-      backgroundColor: '#1a1a1a',
-      preserveObjectStacking: true,
-      selection: false, // Disable group selection
+    const container = canvasContainerRef.current
+    const containerW = container.offsetWidth || 800
+    const containerH = container.offsetHeight || 600
+
+    // Create a wrapper div for Konva to prevent React DOM conflicts
+    const konvaWrapper = document.createElement('div')
+    konvaWrapper.style.width = '100%'
+    konvaWrapper.style.height = '100%'
+    konvaWrapper.style.position = 'absolute'
+    konvaWrapper.style.top = '0'
+    konvaWrapper.style.left = '0'
+    container.appendChild(konvaWrapper)
+
+    const stage = new Konva.Stage({
+      container: konvaWrapper,
+      width: containerW,
+      height: containerH,
     })
+    stageRef.current = stage
 
-    fabricCanvasRef.current = canvas
+    const layer = new Konva.Layer()
+    stage.add(layer)
+    layerRef.current = layer
 
-    // Small delay to ensure container is properly sized by flexbox
-    const initTimeout = setTimeout(() => {
+    const imageObj = new window.Image()
+    imageObj.crossOrigin = 'anonymous'
+    imageObj.onload = () => {
       if (isDisposedRef.current) return
 
-      // Set initial canvas dimensions from the container ref
-      const container = canvasContainerRef.current
-      if (container) {
-        const width = container.offsetWidth || container.clientWidth || 800
-        const height = container.offsetHeight || container.clientHeight || 600
-        canvas.setWidth(width)
-        canvas.setHeight(height)
-      }
+      originalAspectRatio.current = imageObj.width / imageObj.height
+      originalImageDimensions.current = { width: imageObj.width, height: imageObj.height }
+      originalImageSrc.current = imageSrc
+      setResize({ width: imageObj.width, height: imageObj.height, lockAspectRatio: true })
 
-      // Load image
-      fabric.FabricImage.fromURL(imageSrc).then((img) => {
-        // Check if canvas was disposed during async load
-        if (isDisposedRef.current || !canvas || !img) return
+      const fitScale = Math.min(
+        (containerW * 0.9) / imageObj.width,
+        (containerH * 0.9) / imageObj.height,
+        1
+      )
 
-        imageObjectRef.current = img
-
-        // Store original aspect ratio and dimensions
-        originalAspectRatio.current = (img.width || 1) / (img.height || 1)
-        originalImageDimensions.current = { width: img.width || 0, height: img.height || 0 }
-        setResize({ width: img.width || 0, height: img.height || 0, lockAspectRatio: true })
-
-        // Calculate scale to fit image in canvas (max 100% of original size)
-        const fitScale = Math.min(
-          (canvas.width! * 0.9) / (img.width || 1),
-          (canvas.height! * 0.9) / (img.height || 1),
-          1 // Never scale up beyond original size
-        )
-
-        // Make image movable but hide controls
-        img.set({
-          left: canvas.width! / 2,
-          top: canvas.height! / 2,
-          originX: 'center',
-          originY: 'center',
-          scaleX: fitScale,
-          scaleY: fitScale,
-          selectable: true,
-          hasControls: false, // Hide resize handles
-          hasBorders: false, // Hide selection border
-          lockScalingX: true,
-          lockScalingY: true,
-          hoverCursor: 'grab',
-          moveCursor: 'grabbing',
-        })
-
-        canvas.add(img)
-        canvas.setActiveObject(img)
-        canvas.renderAll()
-
-        // Set zoom level to reflect the actual display scale
-        setZoomLevel(Math.round(fitScale * 100))
-        setIsCanvasReady(true)
+      const konvaImage = new Konva.Image({
+        image: imageObj,
+        x: containerW / 2,
+        y: containerH / 2,
+        offsetX: imageObj.width / 2,
+        offsetY: imageObj.height / 2,
+        scaleX: fitScale,
+        scaleY: fitScale,
+        draggable: true,
       })
-    }, 50) // Small delay for layout to settle
+
+      layer.add(konvaImage)
+      imageNodeRef.current = konvaImage
+      layer.draw()
+
+      setZoomLevel(Math.round(fitScale * 100))
+      setIsCanvasReady(true)
+    }
+    imageObj.src = imageSrc
 
     // Mouse wheel zoom
-    canvas.on('mouse:wheel', (opt) => {
-      const delta = opt.e.deltaY
-      let zoom = canvas.getZoom()
-      zoom *= 0.999 ** delta
-      if (zoom > 5) zoom = 5
-      if (zoom < 0.1) zoom = 0.1
+    stage.on('wheel', (e) => {
+      e.evt.preventDefault()
+      const oldScale = stage.scaleX()
+      const pointer = stage.getPointerPosition()
+      if (!pointer) return
 
-      // Zoom to mouse point
-      canvas.zoomToPoint(new fabric.Point(opt.e.offsetX, opt.e.offsetY), zoom)
-      setZoomLevel(Math.round(zoom * 100))
+      const mousePointTo = {
+        x: (pointer.x - stage.x()) / oldScale,
+        y: (pointer.y - stage.y()) / oldScale,
+      }
 
-      opt.e.preventDefault()
-      opt.e.stopPropagation()
+      const direction = e.evt.deltaY > 0 ? -1 : 1
+      const scaleBy = 1.1
+      let newScale = direction > 0 ? oldScale * scaleBy : oldScale / scaleBy
+      newScale = Math.max(0.1, Math.min(5, newScale))
+
+      stage.scale({ x: newScale, y: newScale })
+
+      const newPos = {
+        x: pointer.x - mousePointTo.x * newScale,
+        y: pointer.y - mousePointTo.y * newScale,
+      }
+      stage.position(newPos)
+
+      setZoomLevel(Math.round(newScale * 100))
     })
 
-    // Handle window resize
     const handleResize = () => {
-      if (isDisposedRef.current) return
-      const container = canvasContainerRef.current
-      if (container && canvas) {
-        canvas.setWidth(container.offsetWidth || container.clientWidth)
-        canvas.setHeight(container.offsetHeight || container.clientHeight)
-        canvas.renderAll()
-      }
+      if (isDisposedRef.current || !stageRef.current) return
+      const w = container.offsetWidth || container.clientWidth
+      const h = container.offsetHeight || container.clientHeight
+      stageRef.current.width(w)
+      stageRef.current.height(h)
     }
 
     window.addEventListener('resize', handleResize)
 
-    // Cleanup
     return () => {
       isDisposedRef.current = true
-      clearTimeout(initTimeout)
       window.removeEventListener('resize', handleResize)
-      canvas.dispose()
-      fabricCanvasRef.current = null
-      imageObjectRef.current = null
+      if (stageRef.current) {
+        stageRef.current.destroy()
+        stageRef.current = null
+        layerRef.current = null
+        imageNodeRef.current = null
+      }
+      // Clean up the wrapper div we created
+      if (konvaWrapper.parentNode) {
+        konvaWrapper.parentNode.removeChild(konvaWrapper)
+      }
       setIsCanvasReady(false)
     }
   }, [isOpen, imageSrc])
 
   // Disable image dragging when a tool is selected
   useEffect(() => {
-    const img = imageObjectRef.current
+    const img = imageNodeRef.current
     if (!img) return
 
     const toolActive = selectedTool !== null || cropMode
-    img.set({
-      selectable: !toolActive,
-      evented: !toolActive,
-      hoverCursor: toolActive ? 'default' : 'grab',
-      moveCursor: toolActive ? 'default' : 'grabbing',
-    })
-
-    fabricCanvasRef.current?.renderAll()
+    img.draggable(!toolActive)
   }, [selectedTool, cropMode])
 
+  // Apply filters using Konva's built-in filters
+  const applyFiltersToCanvas = useCallback(() => {
+    const img = imageNodeRef.current
+    const layer = layerRef.current
+    if (!img || !layer) return
+
+    const filters: Konva.Filter[] = []
+
+    // Brightness (Konva range is -1 to 1)
+    if (pendingAdjustments.brightness !== 0) {
+      filters.push(Konva.Filters.Brighten)
+      img.brightness(pendingAdjustments.brightness / 100)
+    }
+
+    // Contrast (Konva range is -100 to 100)
+    if (pendingAdjustments.contrast !== 0) {
+      filters.push(Konva.Filters.Contrast)
+      img.contrast(pendingAdjustments.contrast)
+    }
+
+    // Saturation (Konva HSL)
+    if (pendingAdjustments.saturation !== 0) {
+      filters.push(Konva.Filters.HSL)
+      img.saturation(pendingAdjustments.saturation / 100)
+    }
+
+    // Hue rotation
+    if (pendingAdjustments.hue !== 0) {
+      if (!filters.includes(Konva.Filters.HSL)) filters.push(Konva.Filters.HSL)
+      img.hue(pendingAdjustments.hue)
+    }
+
+    // Grayscale
+    if (pendingFilters.grayscale) {
+      filters.push(Konva.Filters.Grayscale)
+    }
+
+    // Sepia
+    if (pendingFilters.sepia) {
+      filters.push(Konva.Filters.Sepia)
+    }
+
+    // Invert
+    if (pendingFilters.invert) {
+      filters.push(Konva.Filters.Invert)
+    }
+
+    // Blur
+    if (pendingFilters.blur > 0) {
+      filters.push(Konva.Filters.Blur)
+      img.blurRadius(pendingFilters.blur / 10)
+    }
+
+    // Emboss
+    if (pendingFilters.emboss) {
+      filters.push(Konva.Filters.Emboss)
+      img.embossStrength(0.5)
+      img.embossWhiteLevel(0.5)
+      img.embossBlend(true)
+    }
+
+    img.filters(filters)
+    img.cache()
+    layer.batchDraw()
+  }, [pendingAdjustments, pendingFilters])
+
+  useEffect(() => {
+    if (isCanvasReady) {
+      applyFiltersToCanvas()
+    }
+  }, [pendingAdjustments, pendingFilters, isCanvasReady, applyFiltersToCanvas])
+
   const handleClose = () => {
-    // Reset all state for clean reopen
+    if (stageRef.current) {
+      stageRef.current.destroy()
+      stageRef.current = null
+      layerRef.current = null
+      imageNodeRef.current = null
+    }
+
     setSelectedTool(null)
     setCropMode(false)
     setAppliedAdjustments(defaultAdjustments)
@@ -749,171 +736,91 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
   }
 
   const handleZoomIn = () => {
-    const canvas = fabricCanvasRef.current
-    if (!canvas) return
-    const zoom = canvas.getZoom()
-    const newZoom = Math.min(zoom * 1.2, 5)
-    canvas.setZoom(newZoom)
-    setZoomLevel(Math.round(newZoom * 100))
+    const stage = stageRef.current
+    if (!stage) return
+    const oldScale = stage.scaleX()
+    const newScale = Math.min(oldScale * 1.2, 5)
+    stage.scale({ x: newScale, y: newScale })
+    setZoomLevel(Math.round(newScale * 100))
   }
 
   const handleZoomOut = () => {
-    const canvas = fabricCanvasRef.current
-    if (!canvas) return
-    const zoom = canvas.getZoom()
-    const newZoom = Math.max(zoom * 0.8, 0.1)
-    canvas.setZoom(newZoom)
-    setZoomLevel(Math.round(newZoom * 100))
+    const stage = stageRef.current
+    if (!stage) return
+    const oldScale = stage.scaleX()
+    const newScale = Math.max(oldScale * 0.8, 0.1)
+    stage.scale({ x: newScale, y: newScale })
+    setZoomLevel(Math.round(newScale * 100))
   }
 
   const handleResetZoom = () => {
-    const canvas = fabricCanvasRef.current
-    const img = imageObjectRef.current
-    if (!canvas || !img) return
+    const stage = stageRef.current
+    const img = imageNodeRef.current
+    if (!stage || !img) return
 
-    canvas.setZoom(1)
-    canvas.viewportTransform = [1, 0, 0, 1, 0, 0]
+    stage.scale({ x: 1, y: 1 })
+    stage.position({ x: 0, y: 0 })
     setZoomLevel(100)
 
     const scale = Math.min(
-      (canvas.width! * 0.8) / (img.width || 1),
-      (canvas.height! * 0.8) / (img.height || 1)
+      (stage.width() * 0.8) / img.width(),
+      (stage.height() * 0.8) / img.height()
     )
 
-    img.set({
-      left: canvas.width! / 2,
-      top: canvas.height! / 2,
-      scaleX: scale,
-      scaleY: scale,
-    })
+    img.x(stage.width() / 2)
+    img.y(stage.height() / 2)
+    img.scaleX(flipX ? -scale : scale)
+    img.scaleY(flipY ? -scale : scale)
 
-    canvas.renderAll()
+    layerRef.current?.draw()
   }
 
   const handleFitToScreen = () => {
-    const canvas = fabricCanvasRef.current
-    const img = imageObjectRef.current
-    if (!canvas || !img) return
+    const stage = stageRef.current
+    const img = imageNodeRef.current
+    if (!stage || !img) return
 
     const scale = Math.min(
-      (canvas.width! * 0.9) / (img.width || 1),
-      (canvas.height! * 0.9) / (img.height || 1)
+      (stage.width() * 0.9) / img.width(),
+      (stage.height() * 0.9) / img.height()
     )
 
-    img.set({
-      left: canvas.width! / 2,
-      top: canvas.height! / 2,
-      scaleX: scale,
-      scaleY: scale,
-    })
+    img.x(stage.width() / 2)
+    img.y(stage.height() / 2)
+    img.scaleX(flipX ? -scale : scale)
+    img.scaleY(flipY ? -scale : scale)
 
-    canvas.setZoom(1)
-    canvas.viewportTransform = [1, 0, 0, 1, 0, 0]
+    stage.scale({ x: 1, y: 1 })
+    stage.position({ x: 0, y: 0 })
     setZoomLevel(100)
-    canvas.renderAll()
+    layerRef.current?.draw()
   }
 
-  // Apply all filters to image
-  // Apply filters to canvas - uses pending values for live preview
-  const applyFiltersToCanvas = useCallback(() => {
-    const img = imageObjectRef.current
-    const canvas = fabricCanvasRef.current
-    if (!img || !canvas) return
-
-    img.filters = []
-
-    // Use pending values for live preview
-    if (pendingAdjustments.brightness !== 0) {
-      img.filters.push(new fabric.filters.Brightness({ brightness: pendingAdjustments.brightness / 100 }))
-    }
-
-    if (pendingAdjustments.contrast !== 0) {
-      img.filters.push(new fabric.filters.Contrast({ contrast: pendingAdjustments.contrast / 100 }))
-    }
-
-    if (pendingAdjustments.saturation !== 0) {
-      img.filters.push(new fabric.filters.Saturation({ saturation: pendingAdjustments.saturation / 100 }))
-    }
-
-    if (pendingAdjustments.hue !== 0) {
-      img.filters.push(new fabric.filters.HueRotation({ rotation: pendingAdjustments.hue / 360 }))
-    }
-
-    if (pendingFilters.grayscale) {
-      img.filters.push(new fabric.filters.Grayscale())
-    }
-
-    if (pendingFilters.sepia) {
-      img.filters.push(new fabric.filters.Sepia())
-    }
-
-    if (pendingFilters.invert) {
-      img.filters.push(new fabric.filters.Invert())
-    }
-
-    if (pendingFilters.blur > 0) {
-      img.filters.push(new fabric.filters.Blur({ blur: pendingFilters.blur / 100 }))
-    }
-
-    if (pendingFilters.sharpen) {
-      img.filters.push(new fabric.filters.Convolute({
-        matrix: [0, -1, 0, -1, 5, -1, 0, -1, 0]
-      }))
-    }
-
-    if (pendingFilters.emboss) {
-      img.filters.push(new fabric.filters.Convolute({
-        matrix: [-2, -1, 0, -1, 1, 1, 0, 1, 2]
-      }))
-    }
-
-    if (pendingFilters.warmth !== 0) {
-      // Warmth: positive = warmer (more red/yellow), negative = cooler (more blue)
-      const warmthMatrix = pendingFilters.warmth > 0
-        ? [1 + pendingFilters.warmth / 200, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1 - pendingFilters.warmth / 200, 0, 0, 0, 0, 0, 1, 0]
-        : [1 + pendingFilters.warmth / 200, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1 - pendingFilters.warmth / 200, 0, 0, 0, 0, 0, 1, 0]
-      img.filters.push(new fabric.filters.ColorMatrix({ matrix: warmthMatrix }))
-    }
-
-    img.applyFilters()
-    canvas.renderAll()
-  }, [pendingAdjustments, pendingFilters])
-
-  useEffect(() => {
-    if (isCanvasReady) {
-      applyFiltersToCanvas()
-    }
-  }, [pendingAdjustments, pendingFilters, isCanvasReady, applyFiltersToCanvas])
-
-  // Apply adjustments (commit pending to applied)
   const applyAdjustments = () => {
     saveToHistory()
     setAppliedAdjustments({ ...pendingAdjustments })
   }
 
-  // Apply filters (commit pending to applied)
   const applyFilters = () => {
     saveToHistory()
     setAppliedFilters({ ...pendingFilters })
   }
 
-  // Check if there are pending changes
   const hasUnappliedAdjustments = JSON.stringify(pendingAdjustments) !== JSON.stringify(appliedAdjustments)
   const hasUnappliedFilters = JSON.stringify(pendingFilters) !== JSON.stringify(appliedFilters)
 
   const handleRotate = (degrees: number) => {
-    const img = imageObjectRef.current
-    const canvas = fabricCanvasRef.current
-    if (!img || !canvas) return
+    const img = imageNodeRef.current
+    const layer = layerRef.current
+    if (!img || !layer) return
 
-    saveToHistory() // Save state before rotation
+    saveToHistory()
     const newRotation = (rotation + degrees) % 360
     setRotation(newRotation)
-    img.rotate(newRotation)
-    canvas.renderAll()
+    img.rotation(newRotation)
+    layer.draw()
   }
 
-  // Get output dimensions (accounting for rotation)
   const getOutputDimensions = () => {
     const currentRotation = (rotation % 360 + 360) % 360
     const isRotated90or270 = currentRotation === 90 || currentRotation === 270
@@ -922,14 +829,12 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
       : { width: resize.width, height: resize.height }
   }
 
-  // Crop tool functions
   const initCropArea = () => {
-    const img = imageObjectRef.current
+    const img = imageNodeRef.current
     if (!img) return
 
-    // Initialize crop area to center of image
-    const imgWidth = img.width || 100
-    const imgHeight = img.height || 100
+    const imgWidth = img.width()
+    const imgHeight = img.height()
     const cropWidth = imgWidth * 0.8
     const cropHeight = imgHeight * 0.8
 
@@ -945,7 +850,6 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
 
   const handleCropToolSelect = () => {
     if (selectedTool === 'crop') {
-      // Deselect crop tool, cancel crop mode
       setSelectedTool(null)
       setCropMode(false)
     } else {
@@ -955,45 +859,58 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
   }
 
   const applyCrop = () => {
-    const img = imageObjectRef.current
-    const canvas = fabricCanvasRef.current
-    if (!img || !canvas || !cropMode) return
+    const img = imageNodeRef.current
+    const layer = layerRef.current
+    const stage = stageRef.current
+    if (!img || !layer || !stage || !cropMode) return
 
-    saveToHistory() // Save state before crop
+    saveToHistory(true)
 
-    // Get current crop offset (in case image was already cropped)
-    const existingCropX = img.cropX || 0
-    const existingCropY = img.cropY || 0
+    // Create a temporary canvas to extract the cropped region
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = cropArea.width
+    tempCanvas.height = cropArea.height
+    const ctx = tempCanvas.getContext('2d')
+    if (!ctx) return
 
-    // Calculate new absolute crop position
-    // cropArea.x/y are relative to current visible image, so add to existing crop
-    const newCropX = existingCropX + cropArea.x
-    const newCropY = existingCropY + cropArea.y
+    const sourceImg = img.image() as HTMLImageElement
+    ctx.drawImage(
+      sourceImg,
+      cropArea.x, cropArea.y, cropArea.width, cropArea.height,
+      0, 0, cropArea.width, cropArea.height
+    )
 
-    // Update resize dimensions to match crop
-    setResize({
-      ...resize,
-      width: Math.round(cropArea.width),
-      height: Math.round(cropArea.height),
-    })
+    // Create new image from cropped data
+    const croppedImageObj = new window.Image()
+    croppedImageObj.onload = () => {
+      const newKonvaImg = new Konva.Image({
+        image: croppedImageObj,
+        x: stage.width() / 2,
+        y: stage.height() / 2,
+        offsetX: croppedImageObj.width / 2,
+        offsetY: croppedImageObj.height / 2,
+        scaleX: img.scaleX(),
+        scaleY: img.scaleY(),
+        rotation: img.rotation(),
+        draggable: true,
+      })
 
-    // Apply the crop using Fabric.js crop properties
-    img.set({
-      cropX: newCropX,
-      cropY: newCropY,
-      width: cropArea.width,
-      height: cropArea.height,
-    })
+      img.destroy()
+      layer.add(newKonvaImg)
+      imageNodeRef.current = newKonvaImg
 
-    // Recenter image
-    img.set({
-      left: canvas.width! / 2,
-      top: canvas.height! / 2,
-    })
+      // Update resize to match new dimensions
+      setResize({
+        ...resize,
+        width: Math.round(cropArea.width),
+        height: Math.round(cropArea.height),
+      })
 
-    canvas.renderAll()
-    setCropMode(false)
-    setSelectedTool(null)
+      layer.draw()
+      setCropMode(false)
+      setSelectedTool(null)
+    }
+    croppedImageObj.src = tempCanvas.toDataURL('image/png')
   }
 
   const cancelCrop = () => {
@@ -1004,11 +921,11 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
   const setAspectRatio = (preset: AspectRatioPreset) => {
     setAspectRatioPreset(preset)
 
-    const img = imageObjectRef.current
+    const img = imageNodeRef.current
     if (!img) return
 
-    const imgWidth = img.width || 100
-    const imgHeight = img.height || 100
+    const imgWidth = img.width()
+    const imgHeight = img.height()
 
     let newWidth = cropArea.width
     let newHeight = cropArea.height
@@ -1047,10 +964,9 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
         break
       case 'free':
       default:
-        return // Don't change dimensions for free
+        return
     }
 
-    // Center the new crop area
     const newX = Math.max(0, Math.min((imgWidth - newWidth) / 2, imgWidth - newWidth))
     const newY = Math.max(0, Math.min((imgHeight - newHeight) / 2, imgHeight - newHeight))
 
@@ -1063,25 +979,25 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
   }
 
   const handleFlipX = () => {
-    const img = imageObjectRef.current
-    const canvas = fabricCanvasRef.current
-    if (!img || !canvas) return
+    const img = imageNodeRef.current
+    const layer = layerRef.current
+    if (!img || !layer) return
 
-    saveToHistory() // Save state before flip
+    saveToHistory()
     setFlipX(!flipX)
-    img.set('flipX', !flipX)
-    canvas.renderAll()
+    img.scaleX(-img.scaleX())
+    layer.draw()
   }
 
   const handleFlipY = () => {
-    const img = imageObjectRef.current
-    const canvas = fabricCanvasRef.current
-    if (!img || !canvas) return
+    const img = imageNodeRef.current
+    const layer = layerRef.current
+    if (!img || !layer) return
 
-    saveToHistory() // Save state before flip
+    saveToHistory()
     setFlipY(!flipY)
-    img.set('flipY', !flipY)
-    canvas.renderAll()
+    img.scaleY(-img.scaleY())
+    layer.draw()
   }
 
   const handleResetAll = () => {
@@ -1092,34 +1008,44 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
     setRotation(0)
     setFlipX(false)
     setFlipY(false)
-    setHistory([]) // Clear undo history
-    setBlurRegions([]) // Clear blur regions
+    setHistory([])
+    setBlurRegions([])
 
-    const img = imageObjectRef.current
-    const canvas = fabricCanvasRef.current
-    if (!img || !canvas) return
+    const img = imageNodeRef.current
+    const layer = layerRef.current
+    const stage = stageRef.current
+    if (!img || !layer || !stage) return
 
-    // Reset crop to original dimensions
-    if (originalImageDimensions.current) {
-      img.set({
-        cropX: 0,
-        cropY: 0,
-        width: originalImageDimensions.current.width,
-        height: originalImageDimensions.current.height,
-      })
-      setResize({
-        width: originalImageDimensions.current.width,
-        height: originalImageDimensions.current.height,
-        lockAspectRatio: true,
-      })
+    // Reload original image
+    if (originalImageDimensions.current && originalImageSrc.current) {
+      const imageObj = new window.Image()
+      imageObj.crossOrigin = 'anonymous'
+      imageObj.onload = () => {
+        const newKonvaImg = new Konva.Image({
+          image: imageObj,
+          x: stage.width() / 2,
+          y: stage.height() / 2,
+          offsetX: imageObj.width / 2,
+          offsetY: imageObj.height / 2,
+          scaleX: Math.min((stage.width() * 0.9) / imageObj.width, (stage.height() * 0.9) / imageObj.height, 1),
+          scaleY: Math.min((stage.width() * 0.9) / imageObj.width, (stage.height() * 0.9) / imageObj.height, 1),
+          draggable: true,
+        })
+
+        img.destroy()
+        layer.add(newKonvaImg)
+        imageNodeRef.current = newKonvaImg
+
+        setResize({
+          width: originalImageDimensions.current!.width,
+          height: originalImageDimensions.current!.height,
+          lockAspectRatio: true,
+        })
+
+        layer.draw()
+      }
+      imageObj.src = originalImageSrc.current
     }
-
-    img.filters = []
-    img.applyFilters()
-    img.rotate(0)
-    img.set('flipX', false)
-    img.set('flipY', false)
-    handleFitToScreen()
   }
 
   // Blur tool functions
@@ -1143,39 +1069,28 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
     setBlurRegions([])
   }
 
-  // Apply blur regions permanently to the image
   const applyBlurRegions = async () => {
-    const img = imageObjectRef.current
-    const canvas = fabricCanvasRef.current
-    if (!img || !canvas || blurRegions.length === 0) return
+    const img = imageNodeRef.current
+    const layer = layerRef.current
+    const stage = stageRef.current
+    if (!img || !layer || !stage || blurRegions.length === 0) return
 
-    // Capture image data before applying blur so we can undo
     saveToHistory(true)
 
-    // Get the source element (the actual image)
-    const sourceElement = img.getElement() as HTMLImageElement
+    const sourceElement = img.image() as HTMLImageElement
     if (!sourceElement) return
 
-    // Create a temporary canvas to apply blur
     const tempCanvas = document.createElement('canvas')
-    const imgWidth = img.width || sourceElement.naturalWidth
-    const imgHeight = img.height || sourceElement.naturalHeight
+    const imgWidth = img.width()
+    const imgHeight = img.height()
     tempCanvas.width = imgWidth
     tempCanvas.height = imgHeight
 
     const ctx = tempCanvas.getContext('2d')
     if (!ctx) return
 
-    // Draw the current image (respecting cropX/cropY)
-    const cropX = img.cropX || 0
-    const cropY = img.cropY || 0
-    ctx.drawImage(
-      sourceElement,
-      cropX, cropY, imgWidth, imgHeight,
-      0, 0, imgWidth, imgHeight
-    )
+    ctx.drawImage(sourceElement, 0, 0, imgWidth, imgHeight)
 
-    // Apply blur to each region
     for (const region of blurRegions) {
       const rx = Math.max(0, Math.round(region.x))
       const ry = Math.max(0, Math.round(region.y))
@@ -1184,82 +1099,65 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
 
       if (rw <= 0 || rh <= 0) continue
 
-      // Extract region data
       const regionData = ctx.getImageData(rx, ry, rw, rh)
       const blurredData = applyBoxBlur(regionData, region.intensity)
       ctx.putImageData(blurredData, rx, ry)
     }
 
-    // Create new Fabric image from the blurred canvas
     const dataURL = tempCanvas.toDataURL('image/png')
-    const newImg = await fabric.FabricImage.fromURL(dataURL)
+    const newImageObj = new window.Image()
+    newImageObj.onload = () => {
+      const newKonvaImg = new Konva.Image({
+        image: newImageObj,
+        x: img.x(),
+        y: img.y(),
+        offsetX: newImageObj.width / 2,
+        offsetY: newImageObj.height / 2,
+        scaleX: img.scaleX(),
+        scaleY: img.scaleY(),
+        rotation: img.rotation(),
+        draggable: !(selectedTool !== null),
+      })
 
-    // Copy properties from old image
-    newImg.set({
-      left: img.left,
-      top: img.top,
-      originX: 'center',
-      originY: 'center',
-      scaleX: img.scaleX,
-      scaleY: img.scaleY,
-      angle: img.angle,
-      flipX: img.flipX,
-      flipY: img.flipY,
-      selectable: img.selectable,
-      evented: img.evented,
-      hasControls: false,
-      hasBorders: false,
-      lockScalingX: true,
-      lockScalingY: true,
-      hoverCursor: 'grab',
-      moveCursor: 'grabbing',
-    })
+      img.destroy()
+      layer.add(newKonvaImg)
+      imageNodeRef.current = newKonvaImg
 
-    // Copy filters
-    if (img.filters && img.filters.length > 0) {
-      newImg.filters = [...img.filters]
-      newImg.applyFilters()
+      setBlurRegions([])
+      setSelectedTool(null)
+      layer.draw()
     }
-
-    // Replace old image with new one
-    canvas.remove(img)
-    canvas.add(newImg)
-    canvas.setActiveObject(newImg)
-    imageObjectRef.current = newImg
-
-    // Clear blur regions and exit tool
-    setBlurRegions([])
-    setSelectedTool(null)
-    canvas.renderAll()
+    newImageObj.src = dataURL
   }
 
-  // Get image bounds for blur overlay positioning
   const getImageScreenBoundsForBlur = useCallback((): { left: number; top: number; scaleX: number; scaleY: number; imgWidth: number; imgHeight: number } => {
-    const canvas = fabricCanvasRef.current
-    const imageObject = imageObjectRef.current
-    if (!canvas || !imageObject) return { left: 0, top: 0, scaleX: 1, scaleY: 1, imgWidth: 0, imgHeight: 0 }
+    const stage = stageRef.current
+    const imageNode = imageNodeRef.current
+    if (!stage || !imageNode) return { left: 0, top: 0, scaleX: 1, scaleY: 1, imgWidth: 0, imgHeight: 0 }
 
-    const zoom = canvas.getZoom()
-    const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0]
+    const stageScale = stage.scaleX()
+    const stagePos = stage.position()
 
-    const imgLeft = imageObject.left || 0
-    const imgTop = imageObject.top || 0
-    const imgScaleX = imageObject.scaleX || 1
-    const imgScaleY = imageObject.scaleY || 1
-    const imgWidth = imageObject.width || 0
-    const imgHeight = imageObject.height || 0
+    const imgX = imageNode.x()
+    const imgY = imageNode.y()
+    const imgScaleX = Math.abs(imageNode.scaleX())
+    const imgScaleY = Math.abs(imageNode.scaleY())
+    const imgWidth = imageNode.width()
+    const imgHeight = imageNode.height()
+    const offsetX = imageNode.offsetX()
+    const offsetY = imageNode.offsetY()
 
-    const imgTopLeftX = imgLeft - (imgWidth * imgScaleX) / 2
-    const imgTopLeftY = imgTop - (imgHeight * imgScaleY) / 2
+    const imgTopLeftX = imgX - offsetX * imgScaleX
+    const imgTopLeftY = imgY - offsetY * imgScaleY
 
-    const screenLeft = imgTopLeftX * zoom + vpt[4]
-    const screenTop = imgTopLeftY * zoom + vpt[5]
+    const screenLeft = imgTopLeftX * stageScale + stagePos.x
+    const screenTop = imgTopLeftY * stageScale + stagePos.y
 
     return {
       left: screenLeft,
       top: screenTop,
-      scaleX: imgScaleX * zoom,
-      scaleY: imgScaleY * zoom,
+      scaleX: imgScaleX * stageScale,
+      scaleY: imgScaleY * stageScale,
       imgWidth,
       imgHeight,
     }
@@ -1271,15 +1169,12 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
     const bounds = getImageScreenBoundsForBlur()
     const rect = e.currentTarget.getBoundingClientRect()
 
-    // Get mouse position relative to canvas container
     const mouseX = e.clientX - rect.left
     const mouseY = e.clientY - rect.top
 
-    // Convert to image coordinates
     const imgX = (mouseX - bounds.left) / bounds.scaleX
     const imgY = (mouseY - bounds.top) / bounds.scaleY
 
-    // Check if within image bounds
     if (imgX >= 0 && imgX <= bounds.imgWidth && imgY >= 0 && imgY <= bounds.imgHeight) {
       setIsDrawingBlur(true)
       setBlurDrawStart({ x: imgX, y: imgY })
@@ -1299,11 +1194,9 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
     const imgX = (mouseX - bounds.left) / bounds.scaleX
     const imgY = (mouseY - bounds.top) / bounds.scaleY
 
-    // Clamp to image bounds
     const clampedX = Math.max(0, Math.min(imgX, bounds.imgWidth))
     const clampedY = Math.max(0, Math.min(imgY, bounds.imgHeight))
 
-    // Calculate rectangle (handle negative width/height for drawing in any direction)
     const x = Math.min(blurDrawStart.x, clampedX)
     const y = Math.min(blurDrawStart.y, clampedY)
     const width = Math.abs(clampedX - blurDrawStart.x)
@@ -1320,7 +1213,6 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
       return
     }
 
-    // Only add if the rectangle has a minimum size
     if (currentBlurRect.width >= 10 && currentBlurRect.height >= 10) {
       addBlurRegion({
         x: currentBlurRect.x,
@@ -1355,42 +1247,44 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
   }
 
   const applyResize = () => {
-    const img = imageObjectRef.current
-    const canvas = fabricCanvasRef.current
-    if (!img || !canvas) return
+    const img = imageNodeRef.current
+    const layer = layerRef.current
+    if (!img || !layer) return
 
-    const imgWidth = img.width || 1
-    const imgHeight = img.height || 1
+    const imgWidth = img.width()
+    const imgHeight = img.height()
 
-    // Validate resize values
     if (resize.width <= 0 || resize.height <= 0) return
 
-    saveToHistory() // Save state before resize
+    saveToHistory()
 
     const scaleX = resize.width / imgWidth
     const scaleY = resize.height / imgHeight
 
-    img.set({ scaleX, scaleY })
-    canvas.renderAll()
+    img.scaleX(flipX ? -scaleX : scaleX)
+    img.scaleY(flipY ? -scaleY : scaleY)
+    layer.draw()
   }
 
   const handleSave = async () => {
-    if (!imagePath || !imageObjectRef.current || !fabricCanvasRef.current) return
+    if (!imagePath || !imageNodeRef.current || !stageRef.current) return
 
     setIsSaving(true)
 
     try {
-      const img = imageObjectRef.current
+      const img = imageNodeRef.current
+      const layer = layerRef.current
 
-      // Calculate base dimensions from the image scale
-      const baseWidth = Math.round((img.width || 0) * Math.abs(img.scaleX || 1))
-      const baseHeight = Math.round((img.height || 0) * Math.abs(img.scaleY || 1))
+      // Clear filters temporarily for export
+      img.filters([])
+      img.clearCache()
 
-      // Check if rotation is 90 or 270 degrees (need to swap width/height)
+      const baseWidth = Math.round(img.width() * Math.abs(img.scaleX()))
+      const baseHeight = Math.round(img.height() * Math.abs(img.scaleY()))
+
       const currentRotation = (rotation % 360 + 360) % 360
       const isRotated90or270 = currentRotation === 90 || currentRotation === 270
 
-      // Swap dimensions if rotated 90 or 270 degrees
       const exportWidth = isRotated90or270 ? baseHeight : baseWidth
       const exportHeight = isRotated90or270 ? baseWidth : baseHeight
 
@@ -1398,47 +1292,32 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
       tempCanvas.width = exportWidth
       tempCanvas.height = exportHeight
 
-      const exportCanvas = new fabric.Canvas(tempCanvas, {
-        backgroundColor: 'transparent',
-        width: exportWidth,
-        height: exportHeight,
-      })
+      const ctx = tempCanvas.getContext('2d')
+      if (!ctx) throw new Error('Could not get canvas context')
 
-      // Clone the image and apply transformations for export
-      const clonedImg = await img.clone()
+      ctx.translate(exportWidth / 2, exportHeight / 2)
+      ctx.rotate((currentRotation * Math.PI) / 180)
+      if (flipX) ctx.scale(-1, 1)
+      if (flipY) ctx.scale(1, -1)
 
-      // Reset scale to 1 for export (we already accounted for it in canvas size)
-      // But keep the relative scale ratio if aspect ratio was changed
-      const scaleRatio = Math.abs(img.scaleX || 1) / Math.abs(img.scaleY || 1)
-
-      clonedImg.set({
-        left: exportWidth / 2,
-        top: exportHeight / 2,
-        originX: 'center',
-        originY: 'center',
-        // Scale to fit the export canvas
-        scaleX: isRotated90or270 ? exportHeight / (img.width || 1) : exportWidth / (img.width || 1),
-        scaleY: isRotated90or270 ? exportWidth / (img.height || 1) : exportHeight / (img.height || 1),
-        angle: currentRotation,
-        flipX: flipX,
-        flipY: flipY,
-      })
-
-      exportCanvas.add(clonedImg)
-      exportCanvas.renderAll()
+      const sourceImg = img.image() as HTMLImageElement
+      ctx.drawImage(
+        sourceImg,
+        -baseWidth / 2,
+        -baseHeight / 2,
+        baseWidth,
+        baseHeight
+      )
 
       const ext = imagePath.split('.').pop()?.toLowerCase()
       let format = 'image/png'
       if (ext === 'jpg' || ext === 'jpeg') format = 'image/jpeg'
       else if (ext === 'webp') format = 'image/webp'
 
-      const dataURL = exportCanvas.toDataURL({
-        format: format === 'image/jpeg' ? 'jpeg' : format === 'image/webp' ? 'webp' : 'png',
-        quality: 0.95,
-        multiplier: 1,
-      })
+      const dataURL = tempCanvas.toDataURL(format, 0.95)
 
-      exportCanvas.dispose()
+      // Restore filters
+      applyFiltersToCanvas()
 
       const result = await window.electronAPI?.files?.saveBase64Image?.(imagePath, dataURL)
 
@@ -1446,11 +1325,11 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
         onSave?.()
         handleClose()
       } else {
-        console.error('❌ Failed to save image:', result?.error)
+        console.error('Failed to save image:', result?.error)
         alert('Failed to save image: ' + (result?.error || 'Unknown error'))
       }
     } catch (error) {
-      console.error('❌ Error saving image:', error)
+      console.error('Error saving image:', error)
       alert('Error saving image')
     } finally {
       setIsSaving(false)
@@ -1477,7 +1356,6 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
           <div className="px-4 py-3 border-b border-dark-border bg-dark-bg/50 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold text-white">Image Editor</h2>
-              {/* Breadcrumb when tool is selected */}
               {(selectedTool || cropMode) && (
                 <>
                   <span className="text-gray-500">/</span>
@@ -1492,41 +1370,20 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
             </div>
 
             <div className="flex items-center gap-1">
-              {/* Zoom Controls */}
-              <button
-                onClick={handleZoomOut}
-                disabled={!isCanvasReady}
-                className="p-1.5 rounded hover:bg-dark-bg/80 text-gray-400 hover:text-white transition-colors disabled:opacity-40"
-                title="Zoom out"
-              >
+              <button onClick={handleZoomOut} disabled={!isCanvasReady} className="p-1.5 rounded hover:bg-dark-bg/80 text-gray-400 hover:text-white transition-colors disabled:opacity-40" title="Zoom out">
                 <ZoomOut size={16} />
               </button>
-              <span className="text-xs text-gray-400 min-w-[45px] text-center font-mono">
-                {zoomLevel}%
-              </span>
-              <button
-                onClick={handleZoomIn}
-                disabled={!isCanvasReady}
-                className="p-1.5 rounded hover:bg-dark-bg/80 text-gray-400 hover:text-white transition-colors disabled:opacity-40"
-                title="Zoom in"
-              >
+              <span className="text-xs text-gray-400 min-w-[45px] text-center font-mono">{zoomLevel}%</span>
+              <button onClick={handleZoomIn} disabled={!isCanvasReady} className="p-1.5 rounded hover:bg-dark-bg/80 text-gray-400 hover:text-white transition-colors disabled:opacity-40" title="Zoom in">
                 <ZoomIn size={16} />
               </button>
-              <button
-                onClick={handleResetZoom}
-                disabled={!isCanvasReady}
-                className="p-1.5 rounded hover:bg-dark-bg/80 text-gray-400 hover:text-white transition-colors disabled:opacity-40"
-                title="Reset"
-              >
+              <button onClick={handleResetZoom} disabled={!isCanvasReady} className="p-1.5 rounded hover:bg-dark-bg/80 text-gray-400 hover:text-white transition-colors disabled:opacity-40" title="Reset">
                 <RotateCcw size={14} />
               </button>
 
               <div className="w-px h-5 bg-dark-border mx-2" />
 
-              <button
-                onClick={handleClose}
-                className="p-1.5 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-colors"
-              >
+              <button onClick={handleClose} className="p-1.5 rounded hover:bg-red-500/20 text-gray-400 hover:text-red-400 transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -1546,10 +1403,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                         if (tool.id === 'crop') {
                           handleCropToolSelect()
                         } else {
-                          // Exit crop mode if switching to another tool
-                          if (cropMode) {
-                            cancelCrop()
-                          }
+                          if (cropMode) cancelCrop()
                           setSelectedTool(selectedTool === tool.id ? null : tool.id)
                         }
                       }}
@@ -1559,8 +1413,6 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                         }`}
                     >
                       <tool.icon size={20} className={`transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
-
-                      {/* Tooltip */}
                       <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">
                         {tool.label}
                       </div>
@@ -1570,64 +1422,32 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
               </div>
 
               <div className="bg-dark-bg/60 backdrop-blur-xl border border-white/10 p-2 rounded-2xl shadow-2xl flex flex-col gap-2">
-                {/* Transform buttons */}
-                <button
-                  onClick={() => handleRotate(90)}
-                  disabled={!isCanvasReady}
-                  className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/5 transition-all disabled:opacity-40 group relative"
-                >
+                <button onClick={() => handleRotate(90)} disabled={!isCanvasReady} className="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/5 transition-all disabled:opacity-40 group relative">
                   <RotateCw size={20} className="group-hover:rotate-90 transition-transform duration-300" />
-                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">
-                    Rotate
-                  </div>
+                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">Rotate</div>
                 </button>
-                <button
-                  onClick={handleFlipX}
-                  disabled={!isCanvasReady}
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 group relative ${flipX ? 'bg-primary/20 text-primary border border-primary/30' : 'text-gray-400 hover:text-white hover:bg-white/5'
-                    }`}
-                >
+                <button onClick={handleFlipX} disabled={!isCanvasReady} className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 group relative ${flipX ? 'bg-primary/20 text-primary border border-primary/30' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
                   <FlipHorizontal size={20} />
-                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">
-                    Flip Horizontal
-                  </div>
+                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">Flip Horizontal</div>
                 </button>
-                <button
-                  onClick={handleFlipY}
-                  disabled={!isCanvasReady}
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 group relative ${flipY ? 'bg-primary/20 text-primary border border-primary/30' : 'text-gray-400 hover:text-white hover:bg-white/5'
-                    }`}
-                >
+                <button onClick={handleFlipY} disabled={!isCanvasReady} className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 group relative ${flipY ? 'bg-primary/20 text-primary border border-primary/30' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}>
                   <FlipVertical size={20} />
-                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">
-                    Flip Vertical
-                  </div>
+                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">Flip Vertical</div>
                 </button>
 
                 <div className="h-px w-8 bg-white/10 mx-auto my-1" />
 
-                {/* Undo button */}
-                <button
-                  onClick={handleUndo}
-                  disabled={!isCanvasReady || history.length === 0}
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 group relative ${history.length > 0
-                    ? 'text-blue-400 hover:text-blue-300 hover:bg-blue-500/10'
-                    : 'text-gray-600'
-                    }`}
-                >
+                <button onClick={handleUndo} disabled={!isCanvasReady || history.length === 0} className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all disabled:opacity-40 group relative ${history.length > 0 ? 'text-blue-400 hover:text-blue-300 hover:bg-blue-500/10' : 'text-gray-600'}`}>
                   <Undo2 size={20} />
-                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">
-                    Undo ({history.length})
-                  </div>
+                  <div className="absolute left-full ml-3 px-2 py-1 bg-dark-bg/90 border border-white/10 rounded-md text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap backdrop-blur-md">Undo ({history.length})</div>
                 </button>
               </div>
             </div>
 
             {/* Center Area */}
             <div className="flex-1 flex flex-col relative">
-              {/* Tool Options Bar - Floating at top */}
-              <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 transition-all duration-300 ${(selectedTool || cropMode) ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'
-                }`}>
+              {/* Tool Options Bar */}
+              <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 transition-all duration-300 ${(selectedTool || cropMode) ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0 pointer-events-none'}`}>
                 <div className="bg-dark-bg/80 backdrop-blur-xl border border-white/10 px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-6 min-w-[300px] justify-center">
 
                   {/* Adjust Tool Options */}
@@ -1638,14 +1458,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                         <div className="flex flex-col gap-1">
                           <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Brightness</span>
                           <div className="flex items-center gap-2">
-                            <input
-                              type="range"
-                              min="-100"
-                              max="100"
-                              value={pendingAdjustments.brightness}
-                              onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, brightness: parseInt(e.target.value) })}
-                              className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-all"
-                            />
+                            <input type="range" min="-100" max="100" value={pendingAdjustments.brightness} onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, brightness: parseInt(e.target.value) })} className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500" />
                             <span className="text-xs font-mono text-gray-300 w-8 text-right">{pendingAdjustments.brightness}</span>
                           </div>
                         </div>
@@ -1658,14 +1471,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                         <div className="flex flex-col gap-1">
                           <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Contrast</span>
                           <div className="flex items-center gap-2">
-                            <input
-                              type="range"
-                              min="-100"
-                              max="100"
-                              value={pendingAdjustments.contrast}
-                              onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, contrast: parseInt(e.target.value) })}
-                              className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-all"
-                            />
+                            <input type="range" min="-100" max="100" value={pendingAdjustments.contrast} onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, contrast: parseInt(e.target.value) })} className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500" />
                             <span className="text-xs font-mono text-gray-300 w-8 text-right">{pendingAdjustments.contrast}</span>
                           </div>
                         </div>
@@ -1678,14 +1484,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                         <div className="flex flex-col gap-1">
                           <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Saturation</span>
                           <div className="flex items-center gap-2">
-                            <input
-                              type="range"
-                              min="-100"
-                              max="100"
-                              value={pendingAdjustments.saturation}
-                              onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, saturation: parseInt(e.target.value) })}
-                              className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-all"
-                            />
+                            <input type="range" min="-100" max="100" value={pendingAdjustments.saturation} onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, saturation: parseInt(e.target.value) })} className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500" />
                             <span className="text-xs font-mono text-gray-300 w-8 text-right">{pendingAdjustments.saturation}</span>
                           </div>
                         </div>
@@ -1698,14 +1497,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                         <div className="flex flex-col gap-1">
                           <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Hue</span>
                           <div className="flex items-center gap-2">
-                            <input
-                              type="range"
-                              min="0"
-                              max="360"
-                              value={pendingAdjustments.hue}
-                              onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, hue: parseInt(e.target.value) })}
-                              className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500 hover:accent-pink-400 transition-all"
-                            />
+                            <input type="range" min="0" max="360" value={pendingAdjustments.hue} onChange={(e) => setPendingAdjustments({ ...pendingAdjustments, hue: parseInt(e.target.value) })} className="w-24 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-pink-500" />
                             <span className="text-xs font-mono text-gray-300 w-10 text-right">{pendingAdjustments.hue}°</span>
                           </div>
                         </div>
@@ -1714,19 +1506,10 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                       <div className="w-px h-8 bg-white/10" />
 
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setPendingAdjustments(appliedAdjustments)}
-                          className="px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                        >
-                          Reset
-                        </button>
+                        <button onClick={() => setPendingAdjustments(appliedAdjustments)} className="px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">Reset</button>
                         {hasUnappliedAdjustments && (
-                          <button
-                            onClick={applyAdjustments}
-                            className="px-4 py-1.5 text-xs font-medium bg-pink-500 text-white rounded-lg shadow-lg shadow-pink-500/20 hover:bg-pink-400 hover:shadow-pink-500/40 transition-all flex items-center gap-1.5"
-                          >
-                            <Check size={14} />
-                            Apply
+                          <button onClick={applyAdjustments} className="px-4 py-1.5 text-xs font-medium bg-pink-500 text-white rounded-lg shadow-lg shadow-pink-500/20 hover:bg-pink-400 transition-all flex items-center gap-1.5">
+                            <Check size={14} />Apply
                           </button>
                         )}
                       </div>
@@ -1741,15 +1524,14 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                           { key: 'grayscale', label: 'Grayscale' },
                           { key: 'sepia', label: 'Sepia' },
                           { key: 'invert', label: 'Invert' },
-                          { key: 'sharpen', label: 'Sharpen' },
                           { key: 'emboss', label: 'Emboss' },
                         ].map((f) => (
                           <button
                             key={f.key}
                             onClick={() => setPendingFilters({ ...pendingFilters, [f.key]: !pendingFilters[f.key as keyof FilterValues] })}
                             className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${pendingFilters[f.key as keyof FilterValues]
-                              ? 'bg-orange-500/20 border-orange-500/50 text-orange-400 shadow-[0_0_10px_rgba(249,115,22,0.2)]'
-                              : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10 hover:border-white/20'
+                              ? 'bg-orange-500/20 border-orange-500/50 text-orange-400'
+                              : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
                               }`}
                           >
                             {f.label}
@@ -1760,53 +1542,20 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                       <div className="w-px h-8 bg-white/10" />
 
                       <div className="flex items-center gap-3 group">
-                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider group-hover:text-orange-400 transition-colors">Blur</span>
+                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Blur</span>
                         <div className="flex items-center gap-2">
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={pendingFilters.blur}
-                            onChange={(e) => setPendingFilters({ ...pendingFilters, blur: parseInt(e.target.value) })}
-                            className="w-20 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all"
-                          />
+                          <input type="range" min="0" max="100" value={pendingFilters.blur} onChange={(e) => setPendingFilters({ ...pendingFilters, blur: parseInt(e.target.value) })} className="w-20 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500" />
                           <span className="text-xs font-mono text-gray-300 w-8 text-right">{pendingFilters.blur}%</span>
                         </div>
                       </div>
 
                       <div className="w-px h-8 bg-white/10" />
 
-                      <div className="flex items-center gap-3 group">
-                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider group-hover:text-orange-400 transition-colors">Warmth</span>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="range"
-                            min="-100"
-                            max="100"
-                            value={pendingFilters.warmth}
-                            onChange={(e) => setPendingFilters({ ...pendingFilters, warmth: parseInt(e.target.value) })}
-                            className="w-20 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-orange-500 hover:accent-orange-400 transition-all"
-                          />
-                          <span className="text-xs font-mono text-gray-300 w-8 text-right">{pendingFilters.warmth}</span>
-                        </div>
-                      </div>
-
-                      <div className="w-px h-8 bg-white/10" />
-
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setPendingFilters(appliedFilters)}
-                          className="px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                        >
-                          Reset
-                        </button>
+                        <button onClick={() => setPendingFilters(appliedFilters)} className="px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">Reset</button>
                         {hasUnappliedFilters && (
-                          <button
-                            onClick={applyFilters}
-                            className="px-4 py-1.5 text-xs font-medium bg-orange-500 text-white rounded-lg shadow-lg shadow-orange-500/20 hover:bg-orange-400 hover:shadow-orange-500/40 transition-all flex items-center gap-1.5"
-                          >
-                            <Check size={14} />
-                            Apply
+                          <button onClick={applyFilters} className="px-4 py-1.5 text-xs font-medium bg-orange-500 text-white rounded-lg shadow-lg shadow-orange-500/20 hover:bg-orange-400 transition-all flex items-center gap-1.5">
+                            <Check size={14} />Apply
                           </button>
                         )}
                       </div>
@@ -1816,51 +1565,30 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                   {/* Resize Tool Options */}
                   {selectedTool === 'resize' && (
                     <>
-                      <div className="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 focus-within:border-blue-500/50 transition-colors">
+                      <div className="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
                         <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Width</span>
                         <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={resize.width}
-                            onChange={(e) => handleResizeWidth(parseInt(e.target.value) || 0)}
-                            className="w-16 bg-transparent text-sm font-mono text-white focus:outline-none text-right"
-                          />
+                          <input type="number" value={resize.width} onChange={(e) => handleResizeWidth(parseInt(e.target.value) || 0)} className="w-16 bg-transparent text-sm font-mono text-white focus:outline-none text-right" />
                           <span className="text-xs text-gray-500">px</span>
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => setResize({ ...resize, lockAspectRatio: !resize.lockAspectRatio })}
-                        className={`p-2 rounded-lg transition-all ${resize.lockAspectRatio
-                          ? 'text-blue-400 bg-blue-500/20 border border-blue-500/30'
-                          : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'
-                          }`}
-                        title={resize.lockAspectRatio ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
-                      >
+                      <button onClick={() => setResize({ ...resize, lockAspectRatio: !resize.lockAspectRatio })} className={`p-2 rounded-lg transition-all ${resize.lockAspectRatio ? 'text-blue-400 bg-blue-500/20 border border-blue-500/30' : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'}`}>
                         {resize.lockAspectRatio ? <Link size={16} /> : <Unlink size={16} />}
                       </button>
 
-                      <div className="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 focus-within:border-blue-500/50 transition-colors">
+                      <div className="flex items-center gap-3 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
                         <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Height</span>
                         <div className="flex items-center gap-1">
-                          <input
-                            type="number"
-                            value={resize.height}
-                            onChange={(e) => handleResizeHeight(parseInt(e.target.value) || 0)}
-                            className="w-16 bg-transparent text-sm font-mono text-white focus:outline-none text-right"
-                          />
+                          <input type="number" value={resize.height} onChange={(e) => handleResizeHeight(parseInt(e.target.value) || 0)} className="w-16 bg-transparent text-sm font-mono text-white focus:outline-none text-right" />
                           <span className="text-xs text-gray-500">px</span>
                         </div>
                       </div>
 
                       <div className="w-px h-8 bg-white/10" />
 
-                      <button
-                        onClick={applyResize}
-                        className="px-4 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg shadow-lg shadow-blue-500/20 hover:bg-blue-400 hover:shadow-blue-500/40 transition-all flex items-center gap-1.5"
-                      >
-                        <Check size={14} />
-                        Apply
+                      <button onClick={applyResize} className="px-4 py-1.5 text-xs font-medium bg-blue-500 text-white rounded-lg shadow-lg shadow-blue-500/20 hover:bg-blue-400 transition-all flex items-center gap-1.5">
+                        <Check size={14} />Apply
                       </button>
                     </>
                   )}
@@ -1894,24 +1622,13 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
 
                       <div className="w-px h-6 bg-dark-border" />
 
-                      <span className="text-xs text-gray-500">
-                        {Math.round(cropArea.width)} × {Math.round(cropArea.height)}px
-                      </span>
+                      <span className="text-xs text-gray-500">{Math.round(cropArea.width)} × {Math.round(cropArea.height)}px</span>
 
                       <div className="flex-1" />
 
-                      <button
-                        onClick={cancelCrop}
-                        className="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={applyCrop}
-                        className="px-3 py-1.5 text-xs bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-400 rounded-md transition-colors flex items-center gap-1"
-                      >
-                        <Check size={12} />
-                        Apply Crop
+                      <button onClick={cancelCrop} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition-colors">Cancel</button>
+                      <button onClick={applyCrop} className="px-3 py-1.5 text-xs bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-400 rounded-md transition-colors flex items-center gap-1">
+                        <Check size={12} />Apply Crop
                       </button>
                     </>
                   )}
@@ -1925,40 +1642,23 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
 
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-gray-400">Intensity</span>
-                        <input
-                          type="range"
-                          min="5"
-                          max="50"
-                          value={blurIntensity}
-                          onChange={(e) => setBlurIntensity(parseInt(e.target.value))}
-                          className="w-24 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer accent-purple-500"
-                        />
+                        <input type="range" min="5" max="50" value={blurIntensity} onChange={(e) => setBlurIntensity(parseInt(e.target.value))} className="w-24 h-1 bg-dark-border rounded-lg appearance-none cursor-pointer accent-purple-500" />
                         <span className="text-xs text-gray-500 w-8">{blurIntensity}</span>
                       </div>
 
                       <div className="w-px h-6 bg-dark-border" />
 
-                      <span className="text-xs text-gray-500">
-                        {blurRegions.length} region{blurRegions.length !== 1 ? 's' : ''}
-                      </span>
+                      <span className="text-xs text-gray-500">{blurRegions.length} region{blurRegions.length !== 1 ? 's' : ''}</span>
 
                       <div className="flex-1" />
 
                       {blurRegions.length > 0 && (
                         <>
-                          <button
-                            onClick={clearAllBlurRegions}
-                            className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md transition-colors flex items-center gap-1"
-                          >
-                            <Trash2 size={12} />
-                            Clear All
+                          <button onClick={clearAllBlurRegions} className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md transition-colors flex items-center gap-1">
+                            <Trash2 size={12} />Clear All
                           </button>
-                          <button
-                            onClick={applyBlurRegions}
-                            className="px-3 py-1.5 text-xs bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-400 rounded-md transition-colors flex items-center gap-1"
-                          >
-                            <Check size={12} />
-                            Apply
+                          <button onClick={applyBlurRegions} className="px-3 py-1.5 text-xs bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/50 text-purple-400 rounded-md transition-colors flex items-center gap-1">
+                            <Check size={12} />Apply
                           </button>
                         </>
                       )}
@@ -1976,15 +1676,9 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                 onMouseUp={handleBlurMouseUp}
                 onMouseLeave={handleBlurMouseUp}
               >
-                <div
-                  className="absolute inset-0 opacity-10 pointer-events-none"
-                  style={{
-                    backgroundImage: `repeating-conic-gradient(#808080 0% 25%, transparent 0% 50%) 50% / 20px 20px`
-                  }}
-                />
+                <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: `repeating-conic-gradient(#808080 0% 25%, transparent 0% 50%) 50% / 20px 20px` }} />
 
-                {/* Canvas element - Fabric.js will wrap this */}
-                <canvas ref={canvasRef} className="block" />
+                {/* Konva mounts here */}
 
                 {!isCanvasReady && (
                   <div className="absolute inset-0 flex items-center justify-center bg-dark-bg/50 z-10">
@@ -1998,12 +1692,12 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                 </div>
 
                 {/* Crop Overlay */}
-                {cropMode && isCanvasReady && imageObjectRef.current && (
+                {cropMode && isCanvasReady && imageNodeRef.current && (
                   <CropOverlay
                     cropArea={cropArea}
                     setCropArea={setCropArea}
-                    imageObject={imageObjectRef.current}
-                    canvas={fabricCanvasRef.current}
+                    imageNode={imageNodeRef.current}
+                    stage={stageRef.current}
                     aspectRatioPreset={aspectRatioPreset}
                   />
                 )}
@@ -2011,15 +1705,12 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                 {/* Blur Regions Overlay */}
                 {selectedTool === 'blur' && isCanvasReady && (
                   <div className="absolute inset-0 pointer-events-none z-20">
-                    {/* Existing blur regions */}
                     {blurRegions.map((region) => {
                       const bounds = getImageScreenBoundsForBlur()
                       const screenX = bounds.left + region.x * bounds.scaleX
                       const screenY = bounds.top + region.y * bounds.scaleY
                       const screenW = region.width * bounds.scaleX
                       const screenH = region.height * bounds.scaleY
-                      // Calculate CSS blur to match box blur: box blur radius = intensity/2,
-                      // then account for screen scale (avg of X and Y) and adjust for CSS vs box blur difference
                       const avgScale = (bounds.scaleX + bounds.scaleY) / 2
                       const cssBlur = Math.round((region.intensity / 2) * avgScale * 0.7)
 
@@ -2039,7 +1730,6 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                           <button
                             onClick={() => removeBlurRegion(region.id)}
                             className="absolute -top-3 -right-3 w-6 h-6 bg-red-500 hover:bg-red-400 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg transform hover:scale-110"
-                            title="Remove blur region"
                           >
                             <X size={14} className="text-white" />
                           </button>
@@ -2047,10 +1737,8 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
                       )
                     })}
 
-                    {/* Current drawing rectangle */}
                     {currentBlurRect && currentBlurRect.width > 0 && currentBlurRect.height > 0 && (() => {
                       const bounds = getImageScreenBoundsForBlur()
-                      // Match the same CSS blur formula as saved regions
                       const avgScale = (bounds.scaleX + bounds.scaleY) / 2
                       const cssBlur = Math.round((blurIntensity / 2) * avgScale * 0.7)
                       return (
@@ -2075,21 +1763,10 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
 
           {/* Footer */}
           <div className="relative z-10 px-6 py-4 border-t border-white/5 bg-dark-bg/80 backdrop-blur-xl flex items-center justify-between">
-            <span className="text-xs text-gray-500 font-medium">
-              Scroll to zoom • Drag to pan
-            </span>
+            <span className="text-xs text-gray-500 font-medium">Scroll to zoom • Drag to pan</span>
             <div className="flex items-center gap-3">
-              <button
-                onClick={handleClose}
-                className="px-4 py-2 bg-dark-bg hover:bg-dark-bg/70 text-gray-300 text-sm font-medium rounded-lg transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={isSaving || !isCanvasReady}
-                className="px-4 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <button onClick={handleClose} className="px-4 py-2 bg-dark-bg hover:bg-dark-bg/70 text-gray-300 text-sm font-medium rounded-lg transition-all">Cancel</button>
+              <button onClick={handleSave} disabled={isSaving || !isCanvasReady} className="px-4 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>

@@ -3,7 +3,7 @@ import { X, Wand2, Upload, Link2, ChevronDown, ChevronUp, Loader2, CheckCircle2,
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { ModalPortal } from './ModalPortal'
-import * as fabric from 'fabric'
+import Konva from 'konva'
 
 interface ImageEditModalProps {
   isOpen: boolean
@@ -46,29 +46,26 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
   // Check if original image is SVG (vector format - cannot be replaced with raster)
   const isSVG = imagePath?.toLowerCase().endsWith('.svg') || imageSrc?.startsWith('data:image/svg+xml')
 
-  // Crop tool state (Fabric.js based)
+  // Crop tool state (Konva based)
   const [cropMode, setCropMode] = useState(false)
   const [cropImage, setCropImage] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(100)
   const [isCanvasReady, setIsCanvasReady] = useState(false)
 
-  const canvasRef = useRef<HTMLCanvasElement>(null)
   const canvasContainerRef = useRef<HTMLDivElement>(null)
-  const fabricCanvasRef = useRef<fabric.Canvas | null>(null)
-  const imageObjectRef = useRef<fabric.FabricImage | null>(null)
+  const stageRef = useRef<Konva.Stage | null>(null)
+  const layerRef = useRef<Konva.Layer | null>(null)
+  const imageNodeRef = useRef<Konva.Image | null>(null)
   const isDisposedRef = useRef(false)
 
   const handleClose = () => {
-    // Dispose canvas BEFORE changing state to avoid React reconciliation conflicts
-    if (fabricCanvasRef.current) {
-      try {
-        fabricCanvasRef.current.dispose()
-      } catch (e) {
-        // Ignore
-      }
-      fabricCanvasRef.current = null
-      imageObjectRef.current = null
+    // Dispose Konva stage BEFORE changing state
+    if (stageRef.current) {
+      stageRef.current.destroy()
+      stageRef.current = null
+      layerRef.current = null
+      imageNodeRef.current = null
     }
 
     setSelectedTool(null)
@@ -235,35 +232,6 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
       setIsGenerating(true)
 
       // TODO: Implement AI generation
-      // This will:
-      // 1. Send prompt to backend API endpoint
-      // 2. Backend calls image generation AI (e.g., DALL-E, Midjourney, Stable Diffusion)
-      // 3. Receive generated image data
-      // 4. Send to Electron app
-      // 5. Enter crop mode with the generated image
-
-      // Example flow:
-      /*
-      fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: aiPrompt, width: imageWidth, height: imageHeight })
-      })
-      .then(res => res.json())
-      .then(data => {
-        setCropImageDimensions({ width: data.width, height: data.height })
-        setCropImage(data.imageDataUrl)
-        setCropMode(true)
-        setZoom(1)
-        setPosition({ x: 0, y: 0 })
-        setIsGenerating(false)
-      })
-      .catch(error => {
-        console.error('Failed to generate image:', error)
-        setIsGenerating(false)
-      })
-      */
-
       // For now, show not implemented message
       setIsGenerating(false)
       alert('AI image generation will be implemented soon!\n\nThis will connect to your backend to generate images.')
@@ -298,200 +266,179 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
     return { width, height }
   }
 
-  // Initialize Fabric.js canvas when crop mode is enabled
+  // Initialize Konva stage when crop mode is enabled
   useEffect(() => {
-    if (!cropMode || !cropImage || !canvasRef.current) return
+    if (!cropMode || !cropImage || !canvasContainerRef.current) return
 
     isDisposedRef.current = false
 
-    // Create Fabric canvas
-    const canvas = new fabric.Canvas(canvasRef.current, {
-      backgroundColor: '#1a1a1a',
-      preserveObjectStacking: true,
-      selection: false,
+    const container = canvasContainerRef.current
+    const containerW = container.offsetWidth || 800
+    const containerH = container.offsetHeight || 500
+
+    // Create a wrapper div for Konva to prevent React DOM conflicts
+    const konvaWrapper = document.createElement('div')
+    konvaWrapper.style.width = '100%'
+    konvaWrapper.style.height = '100%'
+    konvaWrapper.style.position = 'absolute'
+    konvaWrapper.style.top = '0'
+    konvaWrapper.style.left = '0'
+    container.appendChild(konvaWrapper)
+
+    // Create Konva Stage
+    const stage = new Konva.Stage({
+      container: konvaWrapper,
+      width: containerW,
+      height: containerH,
     })
+    stageRef.current = stage
 
-    fabricCanvasRef.current = canvas
+    // Create Layer
+    const layer = new Konva.Layer()
+    stage.add(layer)
+    layerRef.current = layer
 
-    // Small delay to ensure container is properly sized
-    const initTimeout = setTimeout(() => {
+    // Load image
+    const imageObj = new window.Image()
+    imageObj.crossOrigin = 'anonymous'
+    imageObj.onload = () => {
       if (isDisposedRef.current) return
 
-      const container = canvasContainerRef.current
-      if (container) {
-        const containerW = container.offsetWidth || container.clientWidth || 800
-        const containerH = container.offsetHeight || container.clientHeight || 500
-        canvas.setWidth(containerW)
-        canvas.setHeight(containerH)
-      }
+      const srcW = imageObj.width
+      const srcH = imageObj.height
 
-      // Load the crop image
-      fabric.FabricImage.fromURL(cropImage).then((img) => {
-        if (isDisposedRef.current || !canvas || !img) return
+      // Calculate the crop area dimensions on screen
+      const cropArea = getCropAreaDimensions(containerW, containerH)
 
-        imageObjectRef.current = img
+      // Calculate scale for 1:1 quality
+      const targetW = imageWidth || srcW
+      const targetH = imageHeight || srcH
 
-        const containerW = canvas.width!
-        const containerH = canvas.height!
-        const srcW = img.width || 1
-        const srcH = img.height || 1
+      const idealScaleX = cropArea.width / targetW
+      const idealScaleY = cropArea.height / targetH
+      let fitScale = Math.min(idealScaleX, idealScaleY)
 
-        // Calculate the crop area dimensions on screen
-        const cropArea = getCropAreaDimensions(containerW, containerH)
+      const minScaleToFillCrop = Math.max(
+        cropArea.width / srcW,
+        cropArea.height / srcH
+      )
+      fitScale = Math.max(fitScale, minScaleToFillCrop)
 
-        // IMPORTANT: Calculate scale so that the crop area captures exactly
-        // imageWidth × imageHeight pixels from the source image (1:1 quality)
-        //
-        // If source is larger than target: scale down so we can see more of the source
-        // If source is smaller than target: scale up (will cause quality loss - unavoidable)
-        //
-        // The scale should be: cropArea.width / imageWidth (for width dimension)
-        // This means: at this scale, the crop area on screen = imageWidth pixels of source
-
-        const targetW = imageWidth || srcW
-        const targetH = imageHeight || srcH
-
-        // Scale so the source image, when displayed, allows us to capture targetW × targetH pixels
-        // within the crop area at 1:1 ratio
-        const idealScaleX = cropArea.width / targetW
-        const idealScaleY = cropArea.height / targetH
-
-        // Use the smaller scale to ensure we can capture the full target area
-        // But also ensure the image is large enough to cover the crop area
-        let fitScale = Math.min(idealScaleX, idealScaleY)
-
-        // However, if the source image is smaller than target, we need to scale up
-        // to at least cover the crop area
-        const minScaleToFillCrop = Math.max(
-          cropArea.width / srcW,
-          cropArea.height / srcH
-        )
-
-        // Use the larger of: ideal 1:1 scale OR minimum to fill crop area
-        fitScale = Math.max(fitScale, minScaleToFillCrop)
-
-        img.set({
-          left: containerW / 2,
-          top: containerH / 2,
-          originX: 'center',
-          originY: 'center',
-          scaleX: fitScale,
-          scaleY: fitScale,
-          selectable: true,
-          hasControls: false,
-          hasBorders: false,
-          lockScalingX: true,
-          lockScalingY: true,
-          hoverCursor: 'grab',
-          moveCursor: 'grabbing',
-        })
-
-        canvas.add(img)
-        canvas.setActiveObject(img)
-        canvas.renderAll()
-
-        setZoomLevel(Math.round(fitScale * 100))
-        setIsCanvasReady(true)
+      // Create Konva Image
+      const konvaImage = new Konva.Image({
+        image: imageObj,
+        x: containerW / 2,
+        y: containerH / 2,
+        offsetX: srcW / 2,
+        offsetY: srcH / 2,
+        scaleX: fitScale,
+        scaleY: fitScale,
+        draggable: true,
       })
-    }, 50)
+
+      layer.add(konvaImage)
+      imageNodeRef.current = konvaImage
+      layer.draw()
+
+      setZoomLevel(Math.round(fitScale * 100))
+      setIsCanvasReady(true)
+    }
+    imageObj.src = cropImage
 
     // Mouse wheel zoom
-    canvas.on('mouse:wheel', (opt) => {
-      const delta = opt.e.deltaY
-      let zoom = canvas.getZoom()
-      zoom *= 0.999 ** delta
-      if (zoom > 5) zoom = 5
-      if (zoom < 0.1) zoom = 0.1
+    stage.on('wheel', (e) => {
+      e.evt.preventDefault()
+      const oldScale = stage.scaleX()
+      const pointer = stage.getPointerPosition()
+      if (!pointer) return
 
-      canvas.zoomToPoint(new fabric.Point(opt.e.offsetX, opt.e.offsetY), zoom)
-      setZoomLevel(Math.round(zoom * 100))
+      const mousePointTo = {
+        x: (pointer.x - stage.x()) / oldScale,
+        y: (pointer.y - stage.y()) / oldScale,
+      }
 
-      opt.e.preventDefault()
-      opt.e.stopPropagation()
+      const direction = e.evt.deltaY > 0 ? -1 : 1
+      const scaleBy = 1.1
+      let newScale = direction > 0 ? oldScale * scaleBy : oldScale / scaleBy
+      newScale = Math.max(0.1, Math.min(5, newScale))
+
+      stage.scale({ x: newScale, y: newScale })
+
+      const newPos = {
+        x: pointer.x - mousePointTo.x * newScale,
+        y: pointer.y - mousePointTo.y * newScale,
+      }
+      stage.position(newPos)
+
+      setZoomLevel(Math.round(newScale * 100))
     })
 
     // Handle window resize
     const handleResize = () => {
-      if (isDisposedRef.current) return
-      const container = canvasContainerRef.current
-      if (container && canvas) {
-        canvas.setWidth(container.offsetWidth || container.clientWidth)
-        canvas.setHeight(container.offsetHeight || container.clientHeight)
-        canvas.renderAll()
-      }
+      if (isDisposedRef.current || !stageRef.current) return
+      const w = container.offsetWidth || container.clientWidth
+      const h = container.offsetHeight || container.clientHeight
+      stageRef.current.width(w)
+      stageRef.current.height(h)
     }
 
     window.addEventListener('resize', handleResize)
 
     return () => {
       isDisposedRef.current = true
-      clearTimeout(initTimeout)
       window.removeEventListener('resize', handleResize)
-
-      // Store reference before cleanup
-      const canvasToDispose = fabricCanvasRef.current
-      fabricCanvasRef.current = null
-      imageObjectRef.current = null
-
-      // Defer disposal to next tick to avoid React reconciliation conflicts
-      // Fabric.js wraps the canvas in elements that conflict with React's DOM management
-      if (canvasToDispose) {
-        setTimeout(() => {
-          try {
-            canvasToDispose.dispose()
-          } catch (e) {
-            // Ignore disposal errors
-          }
-        }, 0)
+      if (stageRef.current) {
+        stageRef.current.destroy()
+        stageRef.current = null
+        layerRef.current = null
+        imageNodeRef.current = null
       }
+      // Clean up the wrapper div we created
+      if (konvaWrapper.parentNode) {
+        konvaWrapper.parentNode.removeChild(konvaWrapper)
+      }
+      setIsCanvasReady(false)
     }
   }, [cropMode, cropImage])
 
   // Zoom controls
   const handleZoomIn = () => {
-    const canvas = fabricCanvasRef.current
-    if (!canvas) return
-    const zoom = canvas.getZoom()
-    const newZoom = Math.min(zoom * 1.2, 5)
-    canvas.setZoom(newZoom)
-    setZoomLevel(Math.round(newZoom * 100))
+    const stage = stageRef.current
+    if (!stage) return
+    const oldScale = stage.scaleX()
+    const newScale = Math.min(oldScale * 1.2, 5)
+    stage.scale({ x: newScale, y: newScale })
+    setZoomLevel(Math.round(newScale * 100))
   }
 
   const handleZoomOut = () => {
-    const canvas = fabricCanvasRef.current
-    if (!canvas) return
-    const zoom = canvas.getZoom()
-    const newZoom = Math.max(zoom * 0.8, 0.1)
-    canvas.setZoom(newZoom)
-    setZoomLevel(Math.round(newZoom * 100))
+    const stage = stageRef.current
+    if (!stage) return
+    const oldScale = stage.scaleX()
+    const newScale = Math.max(oldScale * 0.8, 0.1)
+    stage.scale({ x: newScale, y: newScale })
+    setZoomLevel(Math.round(newScale * 100))
   }
 
   const handleResetZoom = () => {
-    const canvas = fabricCanvasRef.current
-    const img = imageObjectRef.current
-    if (!canvas || !img) return
+    const stage = stageRef.current
+    const img = imageNodeRef.current
+    if (!stage || !img) return
 
-    canvas.setZoom(1)
-    canvas.viewportTransform = [1, 0, 0, 1, 0, 0]
+    stage.scale({ x: 1, y: 1 })
+    stage.position({ x: 0, y: 0 })
     setZoomLevel(100)
 
-    const scale = Math.min(
-      (canvas.width! * 0.8) / (img.width || 1),
-      (canvas.height! * 0.8) / (img.height || 1)
-    )
-
-    img.set({
-      left: canvas.width! / 2,
-      top: canvas.height! / 2,
-      scaleX: scale,
-      scaleY: scale,
-    })
-
-    canvas.renderAll()
+    // Recenter image
+    const containerW = stage.width()
+    const containerH = stage.height()
+    img.x(containerW / 2)
+    img.y(containerH / 2)
+    layerRef.current?.draw()
   }
 
   const handleConfirmCrop = async () => {
-    if (!cropImage || !imageWidth || !imageHeight || !imagePath || !imageObjectRef.current || !fabricCanvasRef.current || !canvasContainerRef.current) {
+    if (!cropImage || !imageWidth || !imageHeight || !imagePath || !imageNodeRef.current || !stageRef.current || !canvasContainerRef.current) {
       console.error('Missing required data for crop')
       return
     }
@@ -499,8 +446,8 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
     setIsSaving(true)
 
     try {
-      const img = imageObjectRef.current
-      const canvas = fabricCanvasRef.current
+      const img = imageNodeRef.current
+      const stage = stageRef.current
       const container = canvasContainerRef.current
 
       // Get container dimensions
@@ -510,42 +457,35 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
       // Get the crop area dimensions on screen (the fixed overlay in the center)
       const cropAreaScreen = getCropAreaDimensions(containerWidth, containerHeight)
 
-      // Get canvas state
-      const canvasZoom = canvas.getZoom()
-      const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0]
+      // Get stage state
+      const stageScale = stage.scaleX()
+      const stagePos = stage.position()
 
       // Image properties
-      const imgLeft = img.left || 0
-      const imgTop = img.top || 0
-      const imgScaleX = img.scaleX || 1
-      const imgScaleY = img.scaleY || 1
-      const srcWidth = img.width || 1
-      const srcHeight = img.height || 1
+      const imgX = img.x()
+      const imgY = img.y()
+      const imgScaleX = img.scaleX()
+      const imgScaleY = img.scaleY()
+      const srcWidth = img.image()?.width || 1
+      const srcHeight = img.image()?.height || 1
+      const offsetX = img.offsetX()
+      const offsetY = img.offsetY()
 
-      // The total scale from original image pixels to screen pixels
-      // This includes: image scale (to fit canvas) * canvas zoom
-      const totalScaleX = imgScaleX * canvasZoom
-      const totalScaleY = imgScaleY * canvasZoom
+      // Total scale from original image pixels to screen pixels
+      const totalScaleX = imgScaleX * stageScale
+      const totalScaleY = imgScaleY * stageScale
 
-      // Calculate where the image is on screen (in screen/container coordinates)
-      // vpt[4] and vpt[5] are the pan offsets
-      const imgCenterScreenX = imgLeft * canvasZoom + vpt[4]
-      const imgCenterScreenY = imgTop * canvasZoom + vpt[5]
-
-      // Image bounds on screen
-      const imgScreenWidth = srcWidth * totalScaleX
-      const imgScreenHeight = srcHeight * totalScaleY
-      const imgScreenLeft = imgCenterScreenX - imgScreenWidth / 2
-      const imgScreenTop = imgCenterScreenY - imgScreenHeight / 2
+      // Calculate image position on screen
+      const imgScreenX = (imgX - offsetX * imgScaleX) * stageScale + stagePos.x
+      const imgScreenY = (imgY - offsetY * imgScaleY) * stageScale + stagePos.y
 
       // Crop area bounds on screen (always centered in container)
       const cropScreenLeft = (containerWidth - cropAreaScreen.width) / 2
       const cropScreenTop = (containerHeight - cropAreaScreen.height) / 2
 
       // Convert crop area from screen coordinates to original image pixel coordinates
-      // This is the KEY calculation for 1:1 quality preservation
-      const sourceX = (cropScreenLeft - imgScreenLeft) / totalScaleX
-      const sourceY = (cropScreenTop - imgScreenTop) / totalScaleY
+      const sourceX = (cropScreenLeft - imgScreenX) / totalScaleX
+      const sourceY = (cropScreenTop - imgScreenY) / totalScaleY
       const sourceWidth = cropAreaScreen.width / totalScaleX
       const sourceHeight = cropAreaScreen.height / totalScaleY
 
@@ -555,12 +495,11 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
       const clampedSourceWidth = Math.min(sourceWidth, srcWidth - clampedSourceX)
       const clampedSourceHeight = Math.min(sourceHeight, srcHeight - clampedSourceY)
 
-      // Get current project ID
       if (!currentProjectId) {
         throw new Error('No project is currently open')
       }
 
-      // Send to Sharp for high-quality cropping with Lanczos3 resampling
+      // Send to Sharp for high-quality cropping
       const result = await window.electronAPI?.image.cropAndReplace(
         currentProjectId,
         imagePath,
@@ -576,10 +515,8 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
       )
 
       if (result?.success) {
-        // Disable edit mode
         setEditModeEnabled(false)
 
-        // Refresh the preview
         if (currentProjectId) {
           await window.electronAPI?.preview.refresh(currentProjectId)
         }
@@ -598,15 +535,11 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
   }
 
   const handleCancelCrop = () => {
-    // Dispose canvas BEFORE changing state to avoid React reconciliation conflicts
-    if (fabricCanvasRef.current) {
-      try {
-        fabricCanvasRef.current.dispose()
-      } catch (e) {
-        // Ignore
-      }
-      fabricCanvasRef.current = null
-      imageObjectRef.current = null
+    if (stageRef.current) {
+      stageRef.current.destroy()
+      stageRef.current = null
+      layerRef.current = null
+      imageNodeRef.current = null
     }
 
     setCropMode(false)
@@ -649,7 +582,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
 
   if (!isOpen) return null
 
-  // Crop Mode View (Fabric.js based)
+  // Crop Mode View (Konva based)
   if (cropMode && cropImage) {
     return (
       <ModalPortal>
@@ -725,8 +658,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
                 }}
               />
 
-              {/* Fabric.js Canvas */}
-              <canvas ref={canvasRef} className="block" />
+              {/* Konva will mount here */}
 
               {/* Crop Area Overlay */}
               {isCanvasReady && canvasContainerRef.current && (() => {
@@ -803,7 +735,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
                   Scroll to zoom • Drag to reposition
                 </span>
                 <span className="text-[10px] text-amber-500/70">
-                  ⚠ Zooming may affect quality. For best results, keep the image at its original scale.
+                  Zooming may affect quality. For best results, keep the image at its original scale.
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -1136,7 +1068,7 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
                 }`}>
                   {isSVG ? (
                     <div>
-                      <p className="text-xs text-red-400 font-semibold mb-1">⚠️ SVG Image Detected</p>
+                      <p className="text-xs text-red-400 font-semibold mb-1">SVG Image Detected</p>
                       <p className="text-xs text-red-300/80 leading-relaxed">
                         This is an SVG (vector) image. It cannot be replaced with raster formats (PNG/JPG/WebP) as it would break your application. Please edit this SVG manually or use a vector graphics editor.
                       </p>
