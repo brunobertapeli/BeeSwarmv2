@@ -29,6 +29,7 @@ export interface Template {
   envFiles?: EnvFile[]
   deployServices?: string[]
   starter?: boolean
+  recommended?: boolean
 }
 
 export interface Project {

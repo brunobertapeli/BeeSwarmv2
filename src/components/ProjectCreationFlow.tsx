@@ -19,7 +19,10 @@ import {
   Globe,
   Eye,
   EyeOff,
-  Info
+  Info,
+  ChevronDown,
+  CreditCard,
+  Star
 } from 'lucide-react'
 import { Template } from '../types/electron'
 import TechIcon from './TechIcon'
@@ -28,7 +31,7 @@ import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import { ModalPortal } from './ModalPortal'
 
-type WizardStep = 'category' | 'templates' | 'details' | 'configure' | 'creating' | 'installing' | 'initializing' | 'complete' | 'error' | 'import-url' | 'import-design'
+type WizardStep = 'category' | 'templates' | 'details' | 'configure' | 'creating' | 'installing' | 'initializing' | 'complete' | 'error' | 'import-url' | 'import-design' | 'template-or-starter'
 
 interface ProjectCreationFlowProps {
   isOpen: boolean
@@ -311,6 +314,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
   const [importDesignOption, setImportDesignOption] = useState<'template' | 'screenshot' | 'ai' | 'clone' | null>(null)
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null)
   const [isImportFlow, setIsImportFlow] = useState(false)
+  const [isStarterFlow, setIsStarterFlow] = useState(false)
   const [isFetchingWebsite, setIsFetchingWebsite] = useState(false)
   const [fetchComplete, setFetchComplete] = useState(false)
   const [tempImportProjectId, setTempImportProjectId] = useState<string | null>(null)
@@ -321,34 +325,40 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
   }>({ stage: 'fetching', message: 'Starting...', progress: 0 })
   const [showSkipWarning, setShowSkipWarning] = useState(false)
 
+  // Template filters
+  const [filterType, setFilterType] = useState<'all' | 'frontend' | 'fullstack'>('all')
+  const [filterDeployService, setFilterDeployService] = useState<string>('all')
+  const [filterStripe, setFilterStripe] = useState<'all' | 'yes' | 'no'>('all')
+  const [filterRecommended, setFilterRecommended] = useState(false)
+
   const categories: ProjectCategory[] = [
     {
       id: 'templates',
       name: 'Templates',
-      description: 'Ready-made websites you can customize',
+      description: 'Beautiful pre-built websites ready to customize',
       icon: <Sparkles className="w-8 h-8" />,
       available: true
     },
     {
       id: 'import',
-      name: 'Website Import',
-      description: 'Bring your existing website into a modern design',
+      name: 'Scrape a Website',
+      description: 'Copy content and design from any website',
       icon: <Download className="w-8 h-8" />,
       available: true
     },
     {
       id: 'starter',
       name: 'Starter Kits',
-      description: 'Start completely fresh with a blank canvas',
+      description: 'Clean slate to build from scratch',
       icon: <FileCode className="w-8 h-8" />,
       available: true
     }
   ]
 
   const categoryDetailedDescriptions: Record<string, string> = {
-    templates: 'Browse our collection of professionally designed, production-ready templates. Each template comes with modern UI, responsive design, and optional integrations for authentication, payments, and databases. Simply pick a template, customize the branding, connect your services, and deploy.',
-    import: 'Have an existing website? Import your current site and we\'ll automatically analyze its structure, extract the content, and rebuild it with a modern, responsive design. Perfect for updating outdated websites or migrating to a new tech stack while preserving your existing content.',
-    starter: 'For developers who want complete control. Start with a clean, minimal boilerplate and build your application from the ground up. Choose your preferred framework, add only the dependencies you need, and architect your project exactly how you want it.'
+    templates: 'Pick from our collection of beautiful, ready-to-use templates. Each one comes with modern design, works on all devices, and can connect to services like payments and databases. Just choose one, make it yours, and launch!',
+    import: 'Found a website you love? We\'ll grab its content, images, and structure for you. Then you can either copy its exact look, use a different design style, or let AI create something fresh. Great for recreating sites or getting inspired.',
+    starter: 'Want total freedom? Start with just the basics - a clean setup with your favorite framework. No extra stuff, no pre-made designs. Build exactly what you have in mind, your way.'
   }
 
   // Check if user can access selected template (recalculates when user or selectedTemplate changes)
@@ -394,6 +404,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
       setError(null)
       setLoading(false)
       setIsImportFlow(false)
+      setIsStarterFlow(false)
       setImportUrl('')
       setImportDesignOption(null)
       setScreenshotFile(null)
@@ -418,9 +429,12 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
           // Filter templates based on flow type
           let filteredTemplates = result.templates
 
-          if (isImportFlow) {
-            // For import flow, show only starters (not full templates with required APIs)
+          if (isStarterFlow) {
+            // Starter flow: show only starter=true templates (new card UI)
             filteredTemplates = result.templates.filter(t => t.starter === true)
+          } else {
+            // Regular templates or Import flow with Templates: show full templates (NOT starter)
+            filteredTemplates = result.templates.filter(t => !t.starter)
           }
 
           setTemplates(filteredTemplates)
@@ -436,7 +450,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
     }
 
     fetchTemplates()
-  }, [currentStep, isImportFlow])
+  }, [currentStep, isImportFlow, isStarterFlow])
 
   // Cleanup handler - cleans up temp data and closes wizard
   const handleCancel = async () => {
@@ -622,16 +636,53 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
     if (category.id === 'import') {
       setIsImportFlow(true)
+      setIsStarterFlow(false)
       setCurrentStep('import-url')
+    } else if (category.id === 'starter') {
+      setIsImportFlow(false)
+      setIsStarterFlow(true)
+      setCurrentStep('templates')
     } else {
       setIsImportFlow(false)
+      setIsStarterFlow(false)
       setCurrentStep('templates')
     }
   }
 
   const handleTemplateSelect = (template: Template) => {
     setSelectedTemplate(template)
-    setCurrentStep('details')
+    // In import flow, go directly to configure (skip details)
+    if (isImportFlow) {
+      // Build env variables from template's requiredServices
+      const requiredEnvVars: EnvVariable[] = []
+      template.requiredServices.forEach((variantId) => {
+        const variant = SERVICE_IDENTIFIERS[variantId]
+        if (variant) {
+          variant.required.forEach((keyName) => {
+            const keyConfig = KEY_CONFIGS[keyName]
+            requiredEnvVars.push({
+              key: keyName,
+              value: '',
+              description: keyConfig?.description || '',
+              isRequired: true
+            })
+          })
+          variant.optional.forEach((keyName) => {
+            const keyConfig = KEY_CONFIGS[keyName]
+            requiredEnvVars.push({
+              key: keyName,
+              value: '',
+              description: keyConfig?.description || '',
+              isRequired: false
+            })
+          })
+        }
+      })
+      setEnvVariables(requiredEnvVars)
+      setCurrentStep('configure')
+    } else {
+      setCurrentStep('details')
+    }
   }
 
   const handleContinueToConfig = () => {
@@ -916,8 +967,39 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
 
   if (!isOpen) return null
 
-  // Get unique categories from templates
-  const templateCategories = Array.from(new Set(templates.map(t => t.category)))
+  // Get unique deploy services from all templates for filter dropdown
+  const allDeployServices = Array.from(
+    new Set(templates.flatMap(t => t.deployServices || []))
+  ).sort()
+
+  // Stripe-related service identifiers
+  const STRIPE_SERVICES = ['stripe_secure', 'stripe_webhooks', 'stripe_simple']
+
+  // Apply filters to templates
+  const filteredTemplates = templates.filter(template => {
+    // Type filter
+    if (filterType !== 'all' && template.type !== filterType) return false
+
+    // Deploy service filter
+    if (filterDeployService !== 'all') {
+      if (!template.deployServices?.includes(filterDeployService)) return false
+    }
+
+    // Stripe filter
+    if (filterStripe !== 'all') {
+      const hasStripe = template.requiredServices?.some(s => STRIPE_SERVICES.includes(s)) || false
+      if (filterStripe === 'yes' && !hasStripe) return false
+      if (filterStripe === 'no' && hasStripe) return false
+    }
+
+    // Recommended filter
+    if (filterRecommended && !template.recommended) return false
+
+    return true
+  })
+
+  // Get unique categories from filtered templates
+  const templateCategories = Array.from(new Set(filteredTemplates.map(t => t.category)))
 
   return (
     <ModalPortal>
@@ -933,41 +1015,145 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="relative w-full max-w-4xl h-[64vh] bg-dark-card border border-dark-border rounded-lg shadow-2xl mx-4 overflow-hidden flex flex-col"
+        className={`relative w-full bg-dark-card border border-dark-border rounded-lg shadow-2xl mx-4 overflow-hidden flex flex-col ${
+          currentStep === 'category'
+            ? 'max-w-4xl h-[64vh]'
+            : 'max-w-6xl h-[85vh]'
+        }`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-dark-border">
-          <div>
-            <h2 className="text-lg font-bold text-white" style={{ fontFamily: 'var(--tg-heading-font-family)' }}>
-              {currentStep === 'category' && 'Create New Project'}
-              {currentStep === 'templates' && (isImportFlow ? 'Choose a Starter' : 'Choose a Template')}
-              {currentStep === 'details' && selectedTemplate?.name}
-              {currentStep === 'configure' && 'Configure Your Project'}
-              {currentStep === 'import-url' && 'Import Website'}
-              {currentStep === 'import-design' && 'Choose Design Style'}
-              {(currentStep === 'creating' || currentStep === 'installing' || currentStep === 'initializing') && `Creating ${projectName}`}
-              {currentStep === 'complete' && 'Project Ready!'}
-              {currentStep === 'error' && 'Setup Failed'}
-            </h2>
-            <p className="text-sm text-white/60 mt-1" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
-              {currentStep === 'category' && 'Choose how you want to start'}
-              {currentStep === 'templates' && (isImportFlow ? `${templates.length} starters available` : `${templates.length} templates available`)}
-              {currentStep === 'details' && 'Review template details'}
-              {currentStep === 'configure' && 'Set up your project settings'}
-              {currentStep === 'import-url' && 'Enter your website URL to begin'}
-              {currentStep === 'import-design' && 'Select how to style your imported content'}
-              {(currentStep === 'creating' || currentStep === 'installing' || currentStep === 'initializing') && 'Setting up your project...'}
-              {currentStep === 'complete' && 'Your project is ready to use'}
-              {currentStep === 'error' && 'Something went wrong'}
-            </p>
+        <div className="px-6 py-4 border-b border-dark-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white" style={{ fontFamily: 'var(--tg-heading-font-family)' }}>
+                {currentStep === 'category' && 'Create New Project'}
+                {currentStep === 'template-or-starter' && 'Pick Your Base'}
+                {currentStep === 'templates' && (isStarterFlow ? 'Starter Kits' : 'Choose a Template')}
+                {currentStep === 'details' && (isImportFlow && importDesignOption === 'screenshot' ? 'Upload Design' : selectedTemplate?.name)}
+                {currentStep === 'configure' && 'Almost There!'}
+                {currentStep === 'import-url' && 'Scrape a Website'}
+                {currentStep === 'import-design' && 'What Next?'}
+                {(currentStep === 'creating' || currentStep === 'installing' || currentStep === 'initializing') && `Creating ${projectName}`}
+                {currentStep === 'complete' && 'You\'re All Set!'}
+                {currentStep === 'error' && 'Oops!'}
+              </h2>
+              <p className="text-sm text-white/60 mt-1" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
+                {currentStep === 'category' && 'How do you want to start?'}
+                {currentStep === 'template-or-starter' && 'Template or blank canvas?'}
+                {currentStep === 'templates' && (isStarterFlow ? `${filteredTemplates.length} starter kits to choose from` : `${filteredTemplates.length} templates to choose from`)}
+                {currentStep === 'details' && (isImportFlow && importDesignOption === 'screenshot' ? 'Show us a design you like' : 'Check out the details')}
+                {currentStep === 'configure' && 'Name your project and add any API keys'}
+                {currentStep === 'import-url' && 'Paste a URL and we\'ll grab everything'}
+                {currentStep === 'import-design' && 'Choose what to do with the scraped content'}
+                {(currentStep === 'creating' || currentStep === 'installing' || currentStep === 'initializing') && 'Hang tight, we\'re setting things up...'}
+                {currentStep === 'complete' && 'Your project is ready to rock!'}
+                {currentStep === 'error' && 'Something went wrong'}
+              </p>
+            </div>
+            {(currentStep === 'complete' || currentStep === 'error' || currentStep === 'category') && (
+              <button
+                onClick={handleCancel}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X size={18} className="text-white/70" />
+              </button>
+            )}
           </div>
-          {(currentStep === 'complete' || currentStep === 'error' || currentStep === 'category') && (
-            <button
-              onClick={handleCancel}
-              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-            >
-              <X size={18} className="text-white/70" />
-            </button>
+
+          {/* Filters - Show in templates step for both templates and starters */}
+          {currentStep === 'templates' && (
+            <div className="flex items-center gap-3 mt-4">
+              {/* Type Filter */}
+              <div className="relative">
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value as 'all' | 'frontend' | 'fullstack')}
+                  className="appearance-none bg-dark-bg border border-dark-border rounded-lg px-3 py-1.5 pr-8 text-sm text-white focus:outline-none focus:border-primary/50 cursor-pointer hover:border-white/30 transition-colors"
+                >
+                  <option value="all">All Types</option>
+                  <option value="frontend">Frontend</option>
+                  <option value="fullstack">Fullstack</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+              </div>
+
+              {/* Deploy Service Filter */}
+              <div className="relative">
+                <select
+                  value={filterDeployService}
+                  onChange={(e) => setFilterDeployService(e.target.value)}
+                  className="appearance-none bg-dark-bg border border-dark-border rounded-lg px-3 py-1.5 pr-8 text-sm text-white focus:outline-none focus:border-primary/50 cursor-pointer hover:border-white/30 transition-colors"
+                >
+                  <option value="all">All Deploys</option>
+                  {allDeployServices.map((service) => (
+                    <option key={service} value={service}>
+                      {service.charAt(0).toUpperCase() + service.slice(1)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+              </div>
+
+              {/* Stripe Payment Filter - Only for templates, not starters */}
+              {!isStarterFlow && (
+                <div className="relative">
+                  <select
+                    value={filterStripe}
+                    onChange={(e) => setFilterStripe(e.target.value as 'all' | 'yes' | 'no')}
+                    className="appearance-none bg-dark-bg border border-dark-border rounded-lg px-3 py-1.5 pr-8 text-sm text-white focus:outline-none focus:border-primary/50 cursor-pointer hover:border-white/30 transition-colors"
+                  >
+                    <option value="all">Stripe: Any</option>
+                    <option value="yes">With Stripe</option>
+                    <option value="no">Without Stripe</option>
+                  </select>
+                  <CreditCard size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="w-px h-6 bg-dark-border" />
+
+              {/* Recommended Filter - Checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={filterRecommended}
+                    onChange={(e) => setFilterRecommended(e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center ${
+                    filterRecommended
+                      ? 'bg-amber-500 border-amber-500'
+                      : 'bg-dark-bg border-dark-border group-hover:border-white/30'
+                  }`}>
+                    {filterRecommended && (
+                      <Star size={10} className="text-white fill-white" />
+                    )}
+                  </div>
+                </div>
+                <span className="text-sm text-white/80 group-hover:text-white transition-colors flex items-center gap-1.5">
+                  <Star size={12} className="text-amber-500" />
+                  Recommended
+                </span>
+              </label>
+
+              {/* Active Filters Count & Clear */}
+              {(filterType !== 'all' || filterDeployService !== 'all' || (!isStarterFlow && filterStripe !== 'all') || filterRecommended) && (
+                <button
+                  onClick={() => {
+                    setFilterType('all')
+                    setFilterDeployService('all')
+                    setFilterStripe('all')
+                    setFilterRecommended(false)
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-primary hover:text-primary/80 hover:bg-primary/10 rounded-lg transition-colors"
+                >
+                  <X size={12} />
+                  Clear filters
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -1051,10 +1237,10 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                     <Globe className="w-7 h-7 text-primary" />
                   </div>
                   <h3 className="text-base font-semibold text-white mb-1.5">
-                    Import Your Website
+                    Scrape a Website
                   </h3>
                   <p className="text-xs text-gray-400">
-                    Enter the URL of your existing website to migrate it into a modern design
+                    Enter any website URL and we'll grab its content, images, and structure
                   </p>
                 </div>
 
@@ -1073,7 +1259,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                             handleStartFetch()
                           }
                         }}
-                        placeholder="Enter your website URL"
+                        placeholder="https://example.com"
                         className="flex-1 bg-dark-bg/50 border border-dark-border rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-500 outline-none focus:border-primary/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         autoFocus
                         disabled={isFetchingWebsite}
@@ -1094,17 +1280,17 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                         {fetchComplete ? (
                           <>
                             <CheckCircle size={16} />
-                            Ready
+                            Done
                           </>
                         ) : isFetchingWebsite ? (
                           <>
                             <RefreshCw size={16} className="animate-spin" />
-                            Analyzing
+                            Scraping
                           </>
                         ) : (
                           <>
                             <Download size={16} />
-                            Analyze
+                            Scrape
                           </>
                         )}
                       </button>
@@ -1198,8 +1384,8 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                         <div className="flex items-center gap-2.5">
                           <CheckCircle size={16} className="text-primary flex-shrink-0" />
                           <div>
-                            <p className="text-xs font-medium text-primary">Analysis Complete!</p>
-                            <p className="text-[10px] text-primary/70 mt-0.5">Found content, images, and structure. Ready to proceed.</p>
+                            <p className="text-xs font-medium text-primary">Scraping Complete!</p>
+                            <p className="text-[10px] text-primary/70 mt-0.5">Got the content, images, and structure. Let's continue!</p>
                           </div>
                         </div>
                       </motion.div>
@@ -1211,11 +1397,11 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       <div className="flex items-start gap-2.5">
                         <Info size={14} className="text-primary flex-shrink-0 mt-0.5" />
                         <div className="text-[11px] text-gray-400 leading-relaxed">
-                          <p className="mb-1.5">We'll analyze your website and extract:</p>
+                          <p className="mb-1.5">We'll grab everything from the website:</p>
                           <ul className="space-y-0.5 ml-3 list-disc">
-                            <li>All text content and structure</li>
-                            <li>Images and media files</li>
-                            <li>Navigation and sections</li>
+                            <li>All the text and how it's organized</li>
+                            <li>Images and other media</li>
+                            <li>Menu links and page sections</li>
                           </ul>
                         </div>
                       </div>
@@ -1236,10 +1422,10 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
               >
                 <div className="mb-4">
                   <h3 className="text-base font-semibold text-white mb-1">
-                    Choose Your Design Approach
+                    What do you want to do with it?
                   </h3>
                   <p className="text-xs text-gray-400">
-                    Select how you'd like to style your imported website
+                    Choose how to use the scraped content
                   </p>
                 </div>
 
@@ -1248,8 +1434,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   <button
                     onClick={() => {
                       setImportDesignOption('clone')
-                      // Navigate to starter selection
-                      setCurrentStep('templates')
+                      setCurrentStep('template-or-starter')
                     }}
                     className={`w-full p-3.5 rounded-lg border-2 transition-all text-left group ${
                       importDesignOption === 'clone'
@@ -1265,10 +1450,10 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       </div>
                       <div className="flex-1">
                         <h4 className="text-sm font-semibold text-white mb-0.5">
-                          Clone Website
+                          Clone the Design
                         </h4>
                         <p className="text-xs text-gray-400 leading-relaxed">
-                          AI will recreate the website exactly as it looks - same design, icons, animations, and layout
+                          Copy the exact look - same colors, layout, style, everything. Like a pixel-perfect replica.
                         </p>
                       </div>
                       <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 mt-0.5 ${
@@ -1287,8 +1472,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   <button
                     onClick={() => {
                       setImportDesignOption('screenshot')
-                      // Navigate to starter selection
-                      setCurrentStep('templates')
+                      setCurrentStep('details')
                     }}
                     className={`w-full p-3.5 rounded-lg border-2 transition-all text-left group ${
                       importDesignOption === 'screenshot'
@@ -1304,10 +1488,10 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       </div>
                       <div className="flex-1">
                         <h4 className="text-sm font-semibold text-white mb-0.5">
-                          Provide a Screenshot
+                          Use a Different Design
                         </h4>
                         <p className="text-xs text-gray-400 leading-relaxed">
-                          Upload a design reference and AI will recreate your content using that style
+                          Upload a screenshot of a design you like, and we'll style your content to match it.
                         </p>
                       </div>
                       <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 mt-0.5 ${
@@ -1326,8 +1510,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   <button
                     onClick={() => {
                       setImportDesignOption('ai')
-                      // Navigate to starter selection
-                      setCurrentStep('templates')
+                      setCurrentStep('template-or-starter')
                     }}
                     className={`w-full p-3.5 rounded-lg border-2 transition-all text-left group ${
                       importDesignOption === 'ai'
@@ -1343,10 +1526,10 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       </div>
                       <div className="flex-1">
                         <h4 className="text-sm font-semibold text-white mb-0.5">
-                          Let AI Redesign It
+                          Let AI Design Something New
                         </h4>
                         <p className="text-xs text-gray-400 leading-relaxed">
-                          AI will analyze your content and create a modern, custom design automatically
+                          AI will take your content and create a fresh, modern design from scratch.
                         </p>
                       </div>
                       <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all flex-shrink-0 mt-0.5 ${
@@ -1358,6 +1541,78 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                           <div className="w-1.5 h-1.5 bg-white rounded-full" />
                         )}
                       </div>
+                    </div>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Template or Starter Selection (Import Flow) */}
+            {currentStep === 'template-or-starter' && (
+              <motion.div
+                key="template-or-starter"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="max-w-2xl mx-auto"
+              >
+                <div className="text-center mb-6">
+                  <h3 className="text-base font-semibold text-white mb-2">
+                    Pick Your Base
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Start with a beautiful template or a clean slate
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Templates Option */}
+                  <button
+                    onClick={() => {
+                      setIsStarterFlow(false)
+                      setCurrentStep('templates')
+                    }}
+                    className="p-5 rounded-xl border-2 border-dark-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2.5 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors">
+                        <Sparkles className="w-5 h-5 text-primary" />
+                      </div>
+                      <h4 className="text-sm font-semibold text-white group-hover:text-primary transition-colors">
+                        Templates
+                      </h4>
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed mb-3">
+                      Beautiful pre-made designs with pages and components. Just add your content!
+                    </p>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <CheckCircle size={12} className="text-primary" />
+                      <span>Ready to customize</span>
+                    </div>
+                  </button>
+
+                  {/* Starter Kits Option */}
+                  <button
+                    onClick={() => {
+                      setIsStarterFlow(true)
+                      setCurrentStep('templates')
+                    }}
+                    className="p-5 rounded-xl border-2 border-dark-border hover:border-primary/50 hover:bg-primary/5 transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2.5 bg-blue-500/10 rounded-lg group-hover:bg-blue-500/20 transition-colors">
+                        <FileCode className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <h4 className="text-sm font-semibold text-white group-hover:text-primary transition-colors">
+                        Starter Kits
+                      </h4>
+                    </div>
+                    <p className="text-xs text-gray-400 leading-relaxed mb-3">
+                      Just the basics - pick your framework and build everything yourself.
+                    </p>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <CheckCircle size={12} className="text-blue-400" />
+                      <span>Blank canvas</span>
                     </div>
                   </button>
                 </div>
@@ -1376,29 +1631,33 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   <div className="flex items-center justify-center py-20">
                     <div className="text-center">
                       <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                      <p className="text-xs text-gray-400">Loading templates...</p>
+                      <p className="text-xs text-gray-400">{isStarterFlow ? 'Loading starter kits...' : 'Loading templates...'}</p>
                     </div>
                   </div>
-                ) : (
+                ) : isStarterFlow ? (
+                  /* Starter Kits UI - Professional Design */
                   <div className="space-y-6">
-                    {templateCategories.map((category) => {
-                      const categoryTemplates = templates.filter((t) => t.category === category)
-                      return (
-                        <div key={category}>
-                          <h3 className="text-sm font-semibold text-white/70 uppercase tracking-wider mb-3" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
-                            {category}
-                          </h3>
-                          <div className="overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-dark-border/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-primary/40 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-primary/60 [&::-webkit-scrollbar-thumb]:transition-colors">
-                            <div className="flex gap-4 min-w-min">
-                            {categoryTemplates.map((template) => (
+                    {/* Frontend Starters */}
+                    {filteredTemplates.filter(t => t.type === 'frontend').length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className="p-1.5 bg-blue-500/10 rounded-lg">
+                            <Code className="w-4 h-4 text-blue-400" />
+                          </div>
+                          <h3 className="text-sm font-semibold text-white">Frontend</h3>
+                          <span className="text-xs text-gray-500">Client-side only</span>
+                        </div>
+                        <div className="overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-dark-border/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-primary/40 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-primary/60">
+                          <div className="flex gap-4" style={{ width: 'max-content' }}>
+                            {filteredTemplates.filter(t => t.type === 'frontend').map((template) => (
                               <div
                                 key={template.id}
                                 onClick={() => handleTemplateSelect(template)}
-                                className="flex-shrink-0 w-72 rounded-lg border border-dark-border hover:border-primary/50 hover:bg-primary/5 transition-all group cursor-pointer overflow-hidden"
+                                className="w-[calc((100vw-theme(spacing.16)-theme(spacing.8)*2-theme(spacing.4)*2)/3)] max-w-[320px] min-w-[280px] flex-shrink-0 rounded-xl border border-dark-border hover:border-primary/50 hover:bg-primary/5 transition-all group cursor-pointer overflow-hidden"
                               >
                                 {/* Screenshot Thumbnail */}
-                                {template.screenshot && (
-                                  <div className="w-full h-36 bg-dark-bg/50 overflow-hidden">
+                                {template.screenshot ? (
+                                  <div className="w-full h-40 bg-dark-bg/50 overflow-hidden relative">
                                     <img
                                       src={template.screenshot}
                                       alt={template.name}
@@ -1407,36 +1666,293 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                                         e.currentTarget.style.display = 'none'
                                       }}
                                     />
+                                    {/* Type Badge Overlay */}
+                                    <span className="absolute top-2 right-2 inline-flex items-center bg-blue-500/90 rounded px-1.5 py-0.5 text-[9px] font-semibold text-white uppercase tracking-wide shadow-lg">
+                                      Frontend
+                                    </span>
+                                    {/* Recommended Star */}
+                                    {template.recommended && (
+                                      <div className="absolute top-2 left-2 group/star">
+                                        <div className="p-1.5 bg-amber-500/90 rounded-lg shadow-lg">
+                                          <Star size={12} className="text-white fill-white" />
+                                        </div>
+                                        <div className="absolute left-0 top-full mt-1 opacity-0 group-hover/star:opacity-100 transition-opacity pointer-events-none z-10">
+                                          <div className="bg-dark-bg border border-dark-border rounded-lg px-2 py-1 shadow-xl whitespace-nowrap">
+                                            <span className="text-[10px] text-white">Recommended by CodeDeck</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="w-full h-40 bg-gradient-to-br from-blue-500/10 to-purple-500/10 flex items-center justify-center relative">
+                                    <div className="flex gap-3">
+                                      {template.techStack.slice(0, 3).map((tech) => (
+                                        <TechIcon key={tech} name={tech} />
+                                      ))}
+                                    </div>
+                                    <span className="absolute top-2 right-2 inline-flex items-center bg-blue-500/90 rounded px-1.5 py-0.5 text-[9px] font-semibold text-white uppercase tracking-wide shadow-lg">
+                                      Frontend
+                                    </span>
+                                    {/* Recommended Star */}
+                                    {template.recommended && (
+                                      <div className="absolute top-2 left-2 group/star">
+                                        <div className="p-1.5 bg-amber-500/90 rounded-lg shadow-lg">
+                                          <Star size={12} className="text-white fill-white" />
+                                        </div>
+                                        <div className="absolute left-0 top-full mt-1 opacity-0 group-hover/star:opacity-100 transition-opacity pointer-events-none z-10">
+                                          <div className="bg-dark-bg border border-dark-border rounded-lg px-2 py-1 shadow-xl whitespace-nowrap">
+                                            <span className="text-[10px] text-white">Recommended by CodeDeck</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 
                                 <div className="p-4">
-                                  <div className="flex items-start justify-between mb-3">
-                                    <h4 className="text-sm font-medium text-white group-hover:text-primary transition-colors flex-1">
-                                      {template.name}
-                                    </h4>
-                                    {template.requiredPlan !== 'free' && (
-                                      <span
-                                        className={`inline-flex items-center ${getPlanBadgeColor(template.requiredPlan)} rounded px-1.5 py-0.5 text-[9px] font-semibold text-white uppercase tracking-wide flex-shrink-0 ml-2`}
-                                      >
-                                        {getPlanLabel(template.requiredPlan)}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className="text-xs text-gray-400 mb-3 line-clamp-2">
-                                    {template.longDescription || template.description}
+                                  <h4 className="text-sm font-semibold text-white group-hover:text-primary transition-colors mb-1.5">
+                                    {template.name}
+                                  </h4>
+                                  <p className="text-xs text-gray-400 mb-3 line-clamp-2 leading-relaxed">
+                                    {template.description}
                                   </p>
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    {template.techStack.slice(0, 4).map((tech) => (
-                                      <TechIcon key={tech} name={tech} />
-                                    ))}
-                                    {template.techStack.length > 4 && (
-                                      <span className="text-[9px] text-gray-600">+{template.techStack.length - 4}</span>
+
+                                  {/* Tech Stack & Deploy */}
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5">
+                                      {template.techStack.slice(0, 3).map((tech) => (
+                                        <TechIcon key={tech} name={tech} />
+                                      ))}
+                                      {template.techStack.length > 3 && (
+                                        <span className="text-[10px] text-gray-500">+{template.techStack.length - 3}</span>
+                                      )}
+                                    </div>
+
+                                    {/* Deploy Services */}
+                                    {template.deployServices && template.deployServices.length > 0 && (
+                                      <div className="flex items-center gap-1 bg-dark-bg/50 rounded-md px-2 py-1">
+                                        {template.deployServices.map((service) => (
+                                          <TechIcon key={service} name={service} />
+                                        ))}
+                                      </div>
                                     )}
                                   </div>
                                 </div>
                               </div>
                             ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Fullstack Starters */}
+                    {filteredTemplates.filter(t => t.type === 'fullstack').length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className="p-1.5 bg-green-500/10 rounded-lg">
+                            <Server className="w-4 h-4 text-green-400" />
+                          </div>
+                          <h3 className="text-sm font-semibold text-white">Fullstack</h3>
+                          <span className="text-xs text-gray-500">Frontend + Backend</span>
+                        </div>
+                        <div className="overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-dark-border/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-primary/40 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-primary/60">
+                          <div className="flex gap-4" style={{ width: 'max-content' }}>
+                            {filteredTemplates.filter(t => t.type === 'fullstack').map((template) => (
+                              <div
+                                key={template.id}
+                                onClick={() => handleTemplateSelect(template)}
+                                className="w-[calc((100vw-theme(spacing.16)-theme(spacing.8)*2-theme(spacing.4)*2)/3)] max-w-[320px] min-w-[280px] flex-shrink-0 rounded-xl border border-dark-border hover:border-primary/50 hover:bg-primary/5 transition-all group cursor-pointer overflow-hidden"
+                              >
+                                {/* Screenshot Thumbnail */}
+                                {template.screenshot ? (
+                                  <div className="w-full h-40 bg-dark-bg/50 overflow-hidden relative">
+                                    <img
+                                      src={template.screenshot}
+                                      alt={template.name}
+                                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none'
+                                      }}
+                                    />
+                                    {/* Type Badge Overlay */}
+                                    <span className="absolute top-2 right-2 inline-flex items-center bg-green-500/90 rounded px-1.5 py-0.5 text-[9px] font-semibold text-white uppercase tracking-wide shadow-lg">
+                                      Fullstack
+                                    </span>
+                                    {/* Recommended Star */}
+                                    {template.recommended && (
+                                      <div className="absolute top-2 left-2 group/star">
+                                        <div className="p-1.5 bg-amber-500/90 rounded-lg shadow-lg">
+                                          <Star size={12} className="text-white fill-white" />
+                                        </div>
+                                        <div className="absolute left-0 top-full mt-1 opacity-0 group-hover/star:opacity-100 transition-opacity pointer-events-none z-10">
+                                          <div className="bg-dark-bg border border-dark-border rounded-lg px-2 py-1 shadow-xl whitespace-nowrap">
+                                            <span className="text-[10px] text-white">Recommended by CodeDeck</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="w-full h-40 bg-gradient-to-br from-green-500/10 to-emerald-500/10 flex items-center justify-center relative">
+                                    <div className="flex gap-3">
+                                      {template.techStack.slice(0, 3).map((tech) => (
+                                        <TechIcon key={tech} name={tech} />
+                                      ))}
+                                    </div>
+                                    <span className="absolute top-2 right-2 inline-flex items-center bg-green-500/90 rounded px-1.5 py-0.5 text-[9px] font-semibold text-white uppercase tracking-wide shadow-lg">
+                                      Fullstack
+                                    </span>
+                                    {/* Recommended Star */}
+                                    {template.recommended && (
+                                      <div className="absolute top-2 left-2 group/star">
+                                        <div className="p-1.5 bg-amber-500/90 rounded-lg shadow-lg">
+                                          <Star size={12} className="text-white fill-white" />
+                                        </div>
+                                        <div className="absolute left-0 top-full mt-1 opacity-0 group-hover/star:opacity-100 transition-opacity pointer-events-none z-10">
+                                          <div className="bg-dark-bg border border-dark-border rounded-lg px-2 py-1 shadow-xl whitespace-nowrap">
+                                            <span className="text-[10px] text-white">Recommended by CodeDeck</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                <div className="p-4">
+                                  <h4 className="text-sm font-semibold text-white group-hover:text-primary transition-colors mb-1.5">
+                                    {template.name}
+                                  </h4>
+                                  <p className="text-xs text-gray-400 mb-3 line-clamp-2 leading-relaxed">
+                                    {template.description}
+                                  </p>
+
+                                  {/* Tech Stack & Deploy */}
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5">
+                                      {template.techStack.slice(0, 3).map((tech) => (
+                                        <TechIcon key={tech} name={tech} />
+                                      ))}
+                                      {template.techStack.length > 3 && (
+                                        <span className="text-[10px] text-gray-500">+{template.techStack.length - 3}</span>
+                                      )}
+                                    </div>
+
+                                    {/* Deploy Services */}
+                                    {template.deployServices && template.deployServices.length > 0 && (
+                                      <div className="flex items-center gap-1 bg-dark-bg/50 rounded-md px-2 py-1">
+                                        {template.deployServices.map((service) => (
+                                          <TechIcon key={service} name={service} />
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No results message */}
+                    {filteredTemplates.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <div className="p-4 bg-dark-bg/50 rounded-full mb-4">
+                          <FileCode className="w-8 h-8 text-gray-500" />
+                        </div>
+                        <h4 className="text-sm font-medium text-white mb-1">No starter kits found</h4>
+                        <p className="text-xs text-gray-500">Try adjusting your filters</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Regular Templates UI */
+                  <div className="space-y-6">
+                    {templateCategories.map((category) => {
+                      const categoryTemplates = filteredTemplates.filter((t) => t.category === category)
+                      return (
+                        <div key={category}>
+                          <h3 className="text-sm font-semibold text-white/70 uppercase tracking-wider mb-3" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
+                            {category}
+                          </h3>
+                          <div className="overflow-x-auto pb-2 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-dark-border/30 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-primary/40 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-primary/60">
+                            <div className="flex gap-4" style={{ width: 'max-content' }}>
+                              {categoryTemplates.map((template) => (
+                                <div
+                                  key={template.id}
+                                  onClick={() => handleTemplateSelect(template)}
+                                  className="w-[calc((100vw-theme(spacing.16)-theme(spacing.8)*2-theme(spacing.4)*2)/3)] max-w-[320px] min-w-[280px] flex-shrink-0 rounded-xl border border-dark-border hover:border-primary/50 hover:bg-primary/5 transition-all group cursor-pointer overflow-hidden"
+                                >
+                                  {/* Screenshot Thumbnail */}
+                                  {template.screenshot && (
+                                    <div className="w-full h-40 bg-dark-bg/50 overflow-hidden relative">
+                                      <img
+                                        src={template.screenshot}
+                                        alt={template.name}
+                                        className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = 'none'
+                                        }}
+                                      />
+                                      {/* Plan Badge Overlay */}
+                                      {template.requiredPlan !== 'free' && (
+                                        <span
+                                          className={`absolute top-2 right-2 inline-flex items-center ${getPlanBadgeColor(template.requiredPlan)} rounded px-1.5 py-0.5 text-[9px] font-semibold text-white uppercase tracking-wide shadow-lg`}
+                                        >
+                                          {getPlanLabel(template.requiredPlan)}
+                                        </span>
+                                      )}
+                                      {/* Recommended Star */}
+                                      {template.recommended && (
+                                        <div className="absolute top-2 left-2 group/star">
+                                          <div className="p-1.5 bg-amber-500/90 rounded-lg shadow-lg">
+                                            <Star size={12} className="text-white fill-white" />
+                                          </div>
+                                          <div className="absolute left-0 top-full mt-1 opacity-0 group-hover/star:opacity-100 transition-opacity pointer-events-none z-10">
+                                            <div className="bg-dark-bg border border-dark-border rounded-lg px-2 py-1 shadow-xl whitespace-nowrap">
+                                              <span className="text-[10px] text-white">Recommended by CodeDeck</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  <div className="p-4">
+                                    <h4 className="text-sm font-semibold text-white group-hover:text-primary transition-colors mb-1.5 flex items-center gap-1.5">
+                                      {template.name}
+                                      {template.recommended && !template.screenshot && (
+                                        <Star size={12} className="text-amber-500 fill-amber-500 flex-shrink-0" />
+                                      )}
+                                    </h4>
+                                    <p className="text-xs text-gray-400 mb-3 line-clamp-2 leading-relaxed">
+                                      {template.description}
+                                    </p>
+
+                                    {/* Tech Stack & Deploy */}
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5">
+                                        {template.techStack.slice(0, 3).map((tech) => (
+                                          <TechIcon key={tech} name={tech} />
+                                        ))}
+                                        {template.techStack.length > 3 && (
+                                          <span className="text-[10px] text-gray-500">+{template.techStack.length - 3}</span>
+                                        )}
+                                      </div>
+
+                                      {/* Deploy Services */}
+                                      {template.deployServices && template.deployServices.length > 0 && (
+                                        <div className="flex items-center gap-1 bg-dark-bg/50 rounded-md px-2 py-1">
+                                          {template.deployServices.map((service) => (
+                                            <TechIcon key={service} name={service} />
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         </div>
@@ -1448,7 +1964,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
             )}
 
             {/* Step 3: Template Details */}
-            {currentStep === 'details' && (selectedTemplate || importDesignOption === 'screenshot' || importDesignOption === 'ai' || importDesignOption === 'clone') && (
+            {currentStep === 'details' && (selectedTemplate || importDesignOption === 'screenshot') && (
               <motion.div
                 key="details"
                 initial={{ opacity: 0, x: 20 }}
@@ -1456,170 +1972,50 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 exit={{ opacity: 0, x: -20 }}
                 className="max-w-3xl mx-auto overflow-x-hidden"
               >
-                {/* Import flow - show import type info alongside starter details */}
-                {isImportFlow && selectedTemplate && (importDesignOption === 'clone' || importDesignOption === 'screenshot' || importDesignOption === 'ai') ? (
-                  <div className="space-y-5">
-                    {/* Starter Info */}
-                    <div className="flex items-start gap-4">
-                      {selectedTemplate.screenshot && (
-                        <img
-                          src={selectedTemplate.screenshot}
-                          alt={selectedTemplate.name}
-                          className="w-24 h-16 object-cover rounded-lg border border-dark-border"
-                        />
-                      )}
-                      <div>
-                        <h3 className="text-base font-semibold text-white mb-1">{selectedTemplate.name}</h3>
-                        <p className="text-xs text-gray-400">{selectedTemplate.description}</p>
+                {/* Screenshot Upload - Import flow only */}
+                {isImportFlow && importDesignOption === 'screenshot' && !selectedTemplate ? (
+                  <div className="max-w-lg mx-auto space-y-6">
+                    <div className="text-center">
+                      <div className="inline-flex items-center justify-center w-14 h-14 bg-primary/10 rounded-full mb-3">
+                        <Palette className="w-7 h-7 text-primary" />
                       </div>
-                    </div>
-
-                    {/* Project Name Input */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-300 mb-1.5">
-                        Project Name
-                      </label>
-                      <input
-                        type="text"
-                        value={projectName}
-                        onChange={(e) => setProjectName(e.target.value)}
-                        placeholder="my-awesome-project"
-                        className="w-full px-3 py-2.5 bg-dark-bg/50 border border-dark-border rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary transition-colors"
-                        autoFocus
-                      />
-                    </div>
-
-                    {/* Clone Website Info */}
-                    {importDesignOption === 'clone' && (
-                      <div className="p-4 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/30 rounded-lg">
-                        <div className="flex items-start gap-3">
-                          <div className="p-2 bg-blue-500/20 rounded-lg">
-                            <Code className="w-5 h-5 text-blue-400" />
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-white mb-1">Clone Website</h4>
-                            <p className="text-xs text-gray-400 leading-relaxed">
-                              AI will recreate the website exactly as it looks using the captured screenshot - same design, icons, animations, and layout.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Screenshot Upload */}
-                    {importDesignOption === 'screenshot' && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-300 mb-1.5">
-                          Upload Design Reference
-                        </label>
-                        <label className="block w-full p-4 border-2 border-dashed border-dark-border rounded-lg hover:border-primary/50 transition-all cursor-pointer group">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)}
-                            className="hidden"
-                          />
-                          <div className="text-center">
-                            {screenshotFile ? (
-                              <div className="flex items-center justify-center gap-2">
-                                <CheckCircle className="w-4 h-4 text-primary" />
-                                <span className="text-xs text-white">{screenshotFile.name}</span>
-                              </div>
-                            ) : (
-                              <>
-                                <Download className="w-6 h-6 text-gray-400 mx-auto mb-1.5 group-hover:text-primary transition-colors" />
-                                <p className="text-xs text-gray-400 group-hover:text-gray-300 transition-colors">
-                                  Click to upload or drag and drop
-                                </p>
-                                <p className="text-[10px] text-gray-500 mt-0.5">
-                                  PNG, JPG up to 10MB
-                                </p>
-                              </>
-                            )}
-                          </div>
-                        </label>
-                      </div>
-                    )}
-
-                    {/* AI Redesign Info */}
-                    {importDesignOption === 'ai' && (
-                      <div className="p-4 bg-gradient-to-br from-primary/10 to-purple-500/10 border border-primary/30 rounded-lg">
-                        <div className="flex items-start gap-3">
-                          <div className="p-2 bg-primary/20 rounded-lg">
-                            <Sparkles className="w-5 h-5 text-primary" />
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="text-sm font-semibold text-white mb-1">AI-Powered Redesign</h4>
-                            <p className="text-xs text-gray-400 leading-relaxed">
-                              AI will analyze the website content you imported and create a modern, custom design tailored to your needs.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (importDesignOption === 'screenshot' || importDesignOption === 'ai') && !selectedTemplate ? (
-                  <div className="space-y-5">
-                    <div>
-                      <h3 className="text-base font-semibold text-white mb-1.5">Project Details</h3>
+                      <h3 className="text-base font-semibold text-white mb-1.5">
+                        Show Us the Look You Want
+                      </h3>
                       <p className="text-xs text-gray-400">
-                        {importDesignOption === 'screenshot'
-                          ? 'Enter a name for your project. We\'ll use your uploaded screenshot as design reference.'
-                          : 'Enter a name for your project. AI will design it based on your imported content.'}
+                        Upload a screenshot of a design you like. We'll style your content to match it.
                       </p>
                     </div>
 
-                    {/* Project Name Input */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-300 mb-1.5">
-                        Project Name
-                      </label>
+                    <label className="block w-full p-8 border-2 border-dashed border-dark-border rounded-xl hover:border-primary/50 transition-all cursor-pointer group">
                       <input
-                        type="text"
-                        value={projectName}
-                        onChange={(e) => setProjectName(e.target.value)}
-                        placeholder="my-awesome-project"
-                        className="w-full px-3 py-2.5 bg-dark-bg/50 border border-dark-border rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary transition-colors"
-                        autoFocus
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)}
+                        className="hidden"
                       />
-                    </div>
-
-                    {/* Screenshot Preview */}
-                    {importDesignOption === 'screenshot' && screenshotFile && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-300 mb-1.5">
-                          Design Reference
-                        </label>
-                        <div className="p-3 bg-dark-bg/50 border border-dark-border rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-primary" />
-                            <span className="text-xs text-white">{screenshotFile.name}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* AI Design Choice Card */}
-                    {importDesignOption === 'ai' && (
-                      <div>
-                        <label className="block text-xs font-medium text-gray-300 mb-1.5">
-                          Your Choice
-                        </label>
-                        <div className="p-4 bg-gradient-to-br from-primary/10 to-purple-500/10 border border-primary/30 rounded-lg">
-                          <div className="flex items-start gap-3">
-                            <div className="p-2 bg-primary/20 rounded-lg">
-                              <Sparkles className="w-5 h-5 text-primary" />
+                      <div className="text-center">
+                        {screenshotFile ? (
+                          <div className="space-y-2">
+                            <div className="inline-flex items-center justify-center w-12 h-12 bg-primary/20 rounded-full">
+                              <CheckCircle className="w-6 h-6 text-primary" />
                             </div>
-                            <div className="flex-1">
-                              <h4 className="text-sm font-semibold text-white mb-1">AI-Powered Design</h4>
-                              <p className="text-xs text-gray-400 leading-relaxed">
-                                Our AI will analyze the website content you imported and create a custom design tailored to your needs.
-                              </p>
-                            </div>
+                            <p className="text-sm text-white font-medium">{screenshotFile.name}</p>
+                            <p className="text-xs text-gray-500">Click to change file</p>
                           </div>
-                        </div>
+                        ) : (
+                          <>
+                            <Download className="w-10 h-10 text-gray-400 mx-auto mb-3 group-hover:text-primary transition-colors" />
+                            <p className="text-sm text-gray-300 group-hover:text-white transition-colors mb-1">
+                              Click to upload or drag and drop
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              PNG, JPG up to 10MB
+                            </p>
+                          </>
+                        )}
                       </div>
-                    )}
+                    </label>
                   </div>
                 ) : (
                   <div className="space-y-5">{selectedTemplate && (
@@ -1654,16 +2050,14 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                           {selectedTemplate.name}
                         </h1>
                         {selectedTemplate.demoUrl && (
-                          <a
-                            href={selectedTemplate.demoUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            onClick={() => window.electronAPI?.shell?.openExternal(selectedTemplate.demoUrl!)}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-dark-bg/70 hover:bg-dark-bg border border-dark-border hover:border-primary/50 rounded-lg text-xs text-gray-300 hover:text-white font-medium transition-all group opacity-60 hover:opacity-100"
                           >
                             <Globe size={12} className="group-hover:text-primary transition-colors" />
                             View Live Demo
                             <ExternalLink size={10} className="opacity-50" />
-                          </a>
+                          </button>
                         )}
                       </div>
                       <p className="text-sm text-gray-400 leading-relaxed break-words">
@@ -1672,20 +2066,41 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                     </div>
                   </div>
 
-                  {/* Tech Stack */}
-                  <div>
-                    <h3 className="text-xs font-semibold text-white uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
-                      Tech Stack
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedTemplate.techStack.map((tech) => (
-                        <TechIcon
-                          key={tech}
-                          name={tech}
-                          label={tech.charAt(0).toUpperCase() + tech.slice(1)}
-                        />
-                      ))}
+                  {/* Tech Stack & Deploy Services Row */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Tech Stack */}
+                    <div>
+                      <h3 className="text-xs font-semibold text-white uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
+                        Tech Stack
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedTemplate.techStack.map((tech) => (
+                          <TechIcon
+                            key={tech}
+                            name={tech}
+                            label={tech.charAt(0).toUpperCase() + tech.slice(1)}
+                          />
+                        ))}
+                      </div>
                     </div>
+
+                    {/* Deploy Services */}
+                    {selectedTemplate.deployServices && selectedTemplate.deployServices.length > 0 && (
+                      <div>
+                        <h3 className="text-xs font-semibold text-white uppercase tracking-wider mb-2" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
+                          Deploy To
+                        </h3>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedTemplate.deployServices.map((service) => (
+                            <TechIcon
+                              key={service}
+                              name={service}
+                              label={service.charAt(0).toUpperCase() + service.slice(1)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Required Services */}
@@ -1782,10 +2197,10 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   {envVariables.length > 0 && (
                     <div>
                       <h3 className="text-sm font-semibold text-white/70 mb-2" style={{ fontFamily: 'var(--tg-body-font-family)' }}>
-                        Environment Variables
+                        API Keys (Optional)
                       </h3>
                       <p className="text-xs text-gray-400 mb-4">
-                        Connect your accounts to enable features like payments and databases. You can skip this and configure later.
+                        Add your API keys to enable things like payments and databases. Don't have them yet? No worries — you can add them later.
                       </p>
                       <div className="space-y-3">
                         {Object.entries(groupedEnvVariables).map(([providerKey, { provider, icon, vars }]) => {
@@ -2004,7 +2419,26 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
               <div className="w-24">
                 {currentStep === 'templates' && (
                   <button
-                    onClick={() => setCurrentStep(isImportFlow ? 'import-design' : 'category')}
+                    onClick={() => {
+                      setSelectedTemplate(null)
+                      setCurrentStep(isImportFlow ? 'template-or-starter' : 'category')
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+                  >
+                    <ArrowLeft size={14} />
+                    Back
+                  </button>
+                )}
+                {currentStep === 'template-or-starter' && (
+                  <button
+                    onClick={() => {
+                      if (importDesignOption === 'screenshot') {
+                        setSelectedTemplate(null)
+                        setCurrentStep('details')
+                      } else {
+                        setCurrentStep('import-design')
+                      }
+                    }}
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                   >
                     <ArrowLeft size={14} />
@@ -2042,9 +2476,9 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 {currentStep === 'details' && (
                   <button
                     onClick={() => {
-                      if (isImportFlow) {
-                        // In import flow, go back to templates (which shows filtered list)
-                        setCurrentStep('templates')
+                      if (isImportFlow && importDesignOption === 'screenshot') {
+                        // Screenshot upload - go back to import-design
+                        setCurrentStep('import-design')
                       } else {
                         setCurrentStep('templates')
                       }
@@ -2057,7 +2491,14 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 )}
                 {currentStep === 'configure' && (
                   <button
-                    onClick={() => setCurrentStep('details')}
+                    onClick={() => {
+                      if (isImportFlow) {
+                        setSelectedTemplate(null)
+                        setCurrentStep('templates')
+                      } else {
+                        setCurrentStep('details')
+                      }
+                    }}
                     className="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                   >
                     <ArrowLeft size={14} />
@@ -2077,28 +2518,22 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                     Continue
                   </button>
                 )}
-                {currentStep === 'import-design' && (
-                  <button
-                    onClick={() => {
-                      if (importDesignOption === 'screenshot' || importDesignOption === 'ai') {
-                        // For screenshot and AI options, skip template selection and go to details
-                        setCurrentStep('details')
-                      }
-                      // For 'template' option, navigation already handled in the button onClick above
-                    }}
-                    disabled={!importDesignOption || (importDesignOption === 'screenshot' && !screenshotFile)}
-                    className={
-                      importDesignOption && (importDesignOption !== 'screenshot' || screenshotFile)
-                        ? 'px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2'
-                        : 'bg-gray-700/50 text-gray-500 cursor-not-allowed inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all'
-                    }
-                  >
-                    Continue
-                  </button>
-                )}
+                {/* import-design navigation handled by option buttons - no footer Continue needed */}
                 {currentStep === 'details' && (
                   <>
-                    {!canAccess && selectedTemplate ? (
+                    {/* Import flow screenshot upload - go to template-or-starter */}
+                    {isImportFlow && importDesignOption === 'screenshot' && !selectedTemplate ? (
+                      <button
+                        onClick={() => setCurrentStep('template-or-starter')}
+                        disabled={!screenshotFile}
+                        className={screenshotFile
+                          ? 'px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2'
+                          : 'bg-gray-700/50 text-gray-500 cursor-not-allowed inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all'
+                        }
+                      >
+                        Continue
+                      </button>
+                    ) : !canAccess && selectedTemplate ? (
                       <button
                         onClick={handleUpgrade}
                         className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium text-sm transition-all text-white shadow-lg ${
@@ -2112,44 +2547,10 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                       </button>
                     ) : (
                       <button
-                        onClick={async () => {
-                          // For screenshot/AI, create project directly with hardcoded template
-                          if (importDesignOption === 'screenshot' || importDesignOption === 'ai') {
-                            // Fetch the hardcoded template
-                            const hardcodedTemplateId = 'react_boilerplate' // Change this ID to use a different template
-                            const templateResult = await window.electronAPI?.templates.getById(hardcodedTemplateId)
-
-                            if (templateResult?.success && templateResult.template) {
-                              setSelectedTemplate(templateResult.template)
-                              // Skip configure and go straight to creating
-                              setCurrentStep('creating')
-                            } else {
-                              toast.error('Failed to load template')
-                            }
-                          } else {
-                            // Normal flow - go to configure
-                            handleContinueToConfig()
-                          }
-                        }}
-                        disabled={(importDesignOption === 'screenshot' || importDesignOption === 'ai') && !projectName.trim()}
-                        className={`${
-                          (importDesignOption === 'screenshot' || importDesignOption === 'ai')
-                            ? projectName.trim()
-                              ? 'px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2'
-                              : 'bg-gray-700/50 text-gray-500 cursor-not-allowed inline-flex items-center gap-2 px-5 py-2 rounded-lg font-medium transition-all'
-                            : 'px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2'
-                        }`}
+                        onClick={() => handleContinueToConfig()}
+                        className="px-5 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all inline-flex items-center gap-2"
                       >
-                        {importDesignOption === 'screenshot' || importDesignOption === 'ai' ? (
-                          'Create Project'
-                        ) : isImportFlow ? (
-                          <>
-                            <CheckCircle size={13} />
-                            Select this Design
-                          </>
-                        ) : (
-                          'Continue'
-                        )}
+                        Continue
                       </button>
                     )}
                   </>
@@ -2185,15 +2586,15 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
               {/* Import Flow Progress */}
               {isImportFlow ? (
                 <>
-                  <ProgressDot active={currentStep === 'category'} completed={['import-url', 'import-design', 'templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-                  <ProgressLine completed={['import-url', 'import-design', 'templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-                  <ProgressDot active={currentStep === 'import-url'} completed={['import-design', 'templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-                  <ProgressLine completed={['import-design', 'templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-                  <ProgressDot active={currentStep === 'import-design'} completed={['templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-                  <ProgressLine completed={['templates', 'details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-                  <ProgressDot active={currentStep === 'templates'} completed={['details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-                  <ProgressLine completed={['details', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
-                  <ProgressDot active={currentStep === 'details'} completed={['configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'category'} completed={['import-url', 'import-design', 'details', 'template-or-starter', 'templates', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['import-url', 'import-design', 'details', 'template-or-starter', 'templates', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'import-url'} completed={['import-design', 'details', 'template-or-starter', 'templates', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['import-design', 'details', 'template-or-starter', 'templates', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'import-design' || currentStep === 'details'} completed={['template-or-starter', 'templates', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['template-or-starter', 'templates', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'template-or-starter'} completed={['templates', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressLine completed={['templates', 'configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
+                  <ProgressDot active={currentStep === 'templates'} completed={['configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
                   <ProgressLine completed={['configure', 'creating', 'installing', 'initializing'].includes(currentStep)} />
                   <ProgressDot active={currentStep === 'configure'} completed={['creating', 'installing', 'initializing'].includes(currentStep)} />
                   <ProgressLine completed={['creating', 'installing', 'initializing'].includes(currentStep)} />
@@ -2249,17 +2650,17 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                 </div>
                 <div className="flex-1">
                   <h3 className="text-base font-semibold text-white mb-2">
-                    Not Ready Yet? No Worries.
+                    No API Keys Yet? That's Fine!
                   </h3>
                   <div className="space-y-3 text-xs text-gray-400 leading-relaxed">
                     <p>
-                      Skip this and dive into the code. You can always add your API keys later in Project Settings.
+                      Go ahead and skip this — you can add your API keys anytime in Project Settings.
                     </p>
                     <p>
-                      Here's the thing: <span className="text-white font-medium">True ownership means using your own services.</span> That's why we don't use shared demo credentials—your Stripe, Supabase, and MongoDB accounts mean your data is yours, forever.
+                      Quick note: <span className="text-white font-medium">We use YOUR accounts, not shared ones.</span> Your Stripe, Supabase, MongoDB — it's all yours. Your data stays yours, forever.
                     </p>
                     <p>
-                      The template won't be fully functional without them, but our guides will get you up and running in minutes when you're ready.
+                      Some features won't work until you add them, but our guides make it super easy when you're ready.
                     </p>
                   </div>
                 </div>
@@ -2269,13 +2670,13 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                   onClick={() => setShowSkipWarning(false)}
                   className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                 >
-                  Complete Setup
+                  Go Back
                 </button>
                 <button
                   onClick={handleConfirmSkip}
                   className="px-4 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-lg text-sm font-medium text-primary transition-all"
                 >
-                  I'll Do This Later
+                  Skip for Now
                 </button>
               </div>
             </motion.div>
