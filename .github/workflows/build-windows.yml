@@ -15,8 +15,16 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install GTK for canvas
+        run: |
+          choco install gtk-runtime -y
+          refreshenv
+
       - name: Install dependencies
-        run: npm install
+        run: npm install --ignore-scripts
+
+      - name: Rebuild native modules
+        run: npx electron-rebuild
 
       - name: Download binaries
         run: npm run prebuild
