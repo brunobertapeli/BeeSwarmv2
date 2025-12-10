@@ -31,15 +31,15 @@ jobs:
           [System.GC]::WaitForPendingFinalizers()
 
           # Copy binaries to temp location and back to release handles
-          $binDir = "resources/binaries/win32-x64"
+          $binDir = "resources\binaries\win32-x64"
           $tempDir = "temp-binaries"
 
           if (Test-Path $binDir) {
             New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-            Copy-Item -Path "$binDir/*" -Destination $tempDir -Force
-            Remove-Item -Path "$binDir/*" -Force
+            Get-ChildItem -Path $binDir | Copy-Item -Destination $tempDir -Force
+            Get-ChildItem -Path $binDir | Remove-Item -Force
             Start-Sleep -Seconds 2
-            Copy-Item -Path "$tempDir/*" -Destination $binDir -Force
+            Get-ChildItem -Path $tempDir | Copy-Item -Destination $binDir -Force
             Remove-Item -Path $tempDir -Recurse -Force
           }
 
