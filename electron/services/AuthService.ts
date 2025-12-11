@@ -18,8 +18,10 @@ class AuthService {
   private init() {
     if (this.initialized) return
 
-    this.supabaseUrl = process.env.VITE_SUPABASE_URL || ''
-    this.supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || ''
+    // These are public Supabase credentials (anon key is designed to be public)
+    // In dev, env vars are available via Vite; in production, use hardcoded values
+    this.supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://xstqigedezzkrvtsnmko.supabase.co'
+    this.supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhzdHFpZ2VkZXp6a3J2dHNubWtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDI3NzEzODcsImV4cCI6MjA1ODM0NzM4N30.XzbXQJLJENxBDpMSefpZiV8P8tQ8rV03ddB3SkPAP2g'
 
     this.initialized = true
   }
