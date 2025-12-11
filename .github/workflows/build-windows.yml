@@ -28,8 +28,16 @@ jobs:
       - name: Download binaries
         run: npm run prebuild
 
-      - name: Add exclusion for build directory
-        run: Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+      - name: Copy binaries to break file locks
+        run: |
+          $src = "resources\binaries\win32-x64"
+          $temp = "$env:TEMP\binaries-copy"
+          if (Test-Path $src) {
+            Copy-Item -Path $src -Destination $temp -Recurse -Force
+            Remove-Item -Path $src -Recurse -Force
+            Copy-Item -Path $temp -Destination $src -Recurse -Force
+            Remove-Item -Path $temp -Recurse -Force
+          }
         shell: pwsh
 
       - name: Build Electron app (with retry)
