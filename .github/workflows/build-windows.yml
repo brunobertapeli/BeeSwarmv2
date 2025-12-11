@@ -28,7 +28,21 @@ jobs:
         run: |
           [System.GC]::Collect()
           [System.GC]::WaitForPendingFinalizers()
-          Start-Sleep -Seconds 10
+          Start-Sleep -Seconds 15
+          # Kill any processes that might be holding file handles
+          Get-Process | Where-Object { $_.Path -like "*BeeSwarmv2*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+          # Try to access the node.exe to ensure it's not locked
+          $nodePath = "resources\binaries\win32-x64\node.exe"
+          if (Test-Path $nodePath) {
+            try {
+              $stream = [System.IO.File]::Open($nodePath, 'Open', 'Read', 'None')
+              $stream.Close()
+              Write-Host "File is accessible"
+            } catch {
+              Write-Host "File might be locked, waiting more..."
+              Start-Sleep -Seconds 10
+            }
+          }
         shell: pwsh
 
       - name: Build Electron app
