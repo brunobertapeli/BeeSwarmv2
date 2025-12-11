@@ -4,6 +4,18 @@ dotenv.config()
 
 // Now import everything else
 import { app, BrowserWindow, Menu, shell, ipcMain, globalShortcut, protocol, net } from 'electron'
+
+// Handle Windows Squirrel events (install, uninstall, update)
+// This MUST be at the very top before any other app logic
+if (process.platform === 'win32') {
+  const squirrelCommand = process.argv[1]
+  if (squirrelCommand === '--squirrel-install' ||
+      squirrelCommand === '--squirrel-updated' ||
+      squirrelCommand === '--squirrel-uninstall' ||
+      squirrelCommand === '--squirrel-obsolete') {
+    app.quit()
+  }
+}
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
