@@ -116,7 +116,8 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // Debug: Log if environment variables are loaded
-const isDev = process.env.NODE_ENV !== 'production'
+// Use app.isPackaged for reliable detection (NODE_ENV may not be set in production builds)
+const isDev = !app.isPackaged
 
 // Suppress Electron security warnings in development (we need unsafe-eval for Vite HMR)
 if (isDev) {
