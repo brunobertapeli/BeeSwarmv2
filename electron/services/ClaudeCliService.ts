@@ -55,34 +55,13 @@ class ClaudeCliService {
 
     console.log('[ClaudeCliService] Claude CLI is installed')
 
-    // Step 2: Fast check - look for config files
-    const configCheck = await this.checkConfigFiles()
-    if (configCheck.authenticated) {
-      console.log('[ClaudeCliService] Config file indicates authenticated')
-
-      // Step 3: Verify with SDK (optional but recommended)
-      const sdkCheck = await this.verifyWithSdk()
-      if (sdkCheck.verified) {
-        return {
-          installed: true,
-          authenticated: true,
-          email: sdkCheck.email || configCheck.email
-        }
-      } else if (sdkCheck.error) {
-        // SDK check failed - might be network issue, trust config check
-        console.log('[ClaudeCliService] SDK check failed, trusting config:', sdkCheck.error)
-        return {
-          installed: true,
-          authenticated: true,
-          email: configCheck.email
-        }
-      }
-    }
-
-    // Step 4: Config didn't show auth, try SDK directly as final check
-    console.log('[ClaudeCliService] Config check inconclusive, trying SDK...')
+    // Step 2: Always verify with SDK - this is the most reliable method
+    // Config files can exist without valid auth (e.g., after installing but before login)
+    console.log('[ClaudeCliService] Verifying authentication with SDK...')
     const sdkCheck = await this.verifyWithSdk()
+
     if (sdkCheck.verified) {
+      console.log('[ClaudeCliService] SDK verified authentication')
       return {
         installed: true,
         authenticated: true,
@@ -90,6 +69,41 @@ class ClaudeCliService {
       }
     }
 
+    // SDK check failed - check if it's an auth error vs network/other error
+    const errorMsg = (sdkCheck.error || '').toLowerCase()
+    const isAuthError = errorMsg.includes('auth') ||
+                        errorMsg.includes('login') ||
+                        errorMsg.includes('unauthorized') ||
+                        errorMsg.includes('api key') ||
+                        errorMsg.includes('not authenticated')
+
+    if (isAuthError) {
+      // Definite auth failure - user is not logged in
+      console.log('[ClaudeCliService] SDK indicates not authenticated:', sdkCheck.error)
+      return {
+        installed: true,
+        authenticated: false,
+        error: 'Not logged in to Claude'
+      }
+    }
+
+    // SDK failed for non-auth reason (network, timeout, etc.)
+    // Check config files as fallback
+    console.log('[ClaudeCliService] SDK failed (non-auth error), checking config as fallback:', sdkCheck.error)
+    const configCheck = await this.checkConfigFiles()
+
+    if (configCheck.authenticated) {
+      // Config suggests auth, and SDK didn't explicitly say "not authenticated"
+      // Trust the config (user might be offline but previously logged in)
+      console.log('[ClaudeCliService] Config indicates authenticated, trusting for offline case')
+      return {
+        installed: true,
+        authenticated: true,
+        email: configCheck.email
+      }
+    }
+
+    // Neither SDK nor config indicate authentication
     return {
       installed: true,
       authenticated: false,
@@ -122,6 +136,8 @@ class ClaudeCliService {
   /**
    * Fast check using config files (works on macOS, Linux, Windows)
    * Config locations from official docs: https://code.claude.com/docs/en/setup
+   *
+   * NOTE: This is now just a hint - we always verify with SDK for reliable auth check
    */
   private async checkConfigFiles(): Promise<{ authenticated: boolean; email?: string }> {
     const homeDir = os.homedir()
@@ -153,16 +169,25 @@ class ClaudeCliService {
         if (fs.existsSync(configPath)) {
           const content = fs.readFileSync(configPath, 'utf-8')
           const config = JSON.parse(content)
+          console.log(`[ClaudeCliService] Config contents:`, JSON.stringify(config, null, 2))
 
-          // Check various auth indicators
+          // Only trust strong auth indicators (actual tokens/keys)
+          // hasCompletedOnboarding alone is NOT enough - user may have onboarded but not logged in
           if (
-            config.hasCompletedOnboarding === true ||
-            config.userID ||
             config.oauthAccessToken ||
             config.apiKey ||
             config.primaryApiKey
           ) {
-            console.log('[ClaudeCliService] Found auth indicator in config')
+            console.log('[ClaudeCliService] Found strong auth indicator (token/key) in config')
+            return {
+              authenticated: true,
+              email: config.email || config.userID || config.primaryEmail
+            }
+          }
+
+          // hasCompletedOnboarding + userID might indicate auth, but we should verify
+          if (config.hasCompletedOnboarding === true && config.userID) {
+            console.log('[ClaudeCliService] Found hasCompletedOnboarding + userID, needs SDK verification')
             return {
               authenticated: true,
               email: config.email || config.userID || config.primaryEmail
