@@ -1,75 +1,3 @@
-PS C:\Users\bbert\Documents\GitHub\BeeSwarmv2> npm install
-npm warn EBADENGINE Unsupported engine {
-npm warn EBADENGINE   package: '@electron/rebuild@4.0.2',
-npm warn EBADENGINE   required: { node: '>=22.12.0' },
-npm warn EBADENGINE   current: { node: 'v20.17.0', npm: '10.8.2' }
-npm warn EBADENGINE }
-npm warn EBADENGINE Unsupported engine {
-npm warn EBADENGINE   package: 'node-abi@4.24.0',
-npm warn EBADENGINE   required: { node: '>=22.12.0' },
-npm warn EBADENGINE   current: { node: 'v20.17.0', npm: '10.8.2' }
-npm warn EBADENGINE }
-npm warn EBADENGINE Unsupported engine {
-npm warn EBADENGINE   package: 'rolldown@1.0.0-beta.52',
-npm warn EBADENGINE   required: { node: '^20.19.0 || >=22.12.0' },
-npm warn EBADENGINE   current: { node: 'v20.17.0', npm: '10.8.2' }
-npm warn EBADENGINE }
-npm warn deprecated path-match@1.2.4: This package is archived and no longer maintained. For support, visit https://github.com/expressjs/express/discussions    
-npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
-npm warn deprecated glob@7.2.3: Glob versions prior to v9 are no longer supported
-npm warn deprecated asar@3.2.0: Please use @electron/asar moving forward.  There is no API change, just a package name change
-npm warn deprecated boolean@3.2.0: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
-npm warn deprecated electron-osx-sign@0.6.0: Please use @electron/osx-sign moving forward. Be aware the API is slightly different
-npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
-npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
-npm warn deprecated xterm@5.3.0: This package is now deprecated. Move to @xterm/xterm instead.
-npm warn cleanup Failed to remove some directories [
-npm warn cleanup   [
-npm warn cleanup     'C:\\Users\\bbert\\Documents\\GitHub\\BeeSwarmv2\\node_modules\\netlify-cli\\node_modules\\@netlify\\otel',
-npm warn cleanup     [Error: EPERM: operation not permitted, rmdir 'C:\Users\bbert\Documents\GitHub\BeeSwarmv2\node_modules\netlify-cli\node_modules\@netlify\otel\node_modules\@opentelemetry\api\build\esm\trace'] {
-npm warn cleanup       errno: -4048,
-npm warn cleanup       code: 'EPERM',
-npm warn cleanup       syscall: 'rmdir',
-npm warn cleanup       path: 'C:\\Users\\bbert\\Documents\\GitHub\\BeeSwarmv2\\node_modules\\netlify-cli\\node_modules\\@netlify\\otel\\node_modules\\@opentelemetry\\api\\build\\esm\\trace'
-npm warn cleanup     }
-npm warn cleanup   ],
-npm warn cleanup   [
-npm warn cleanup     'C:\\Users\\bbert\\Documents\\GitHub\\BeeSwarmv2\\node_modules',
-npm warn cleanup     [Error: EPERM: operation not permitted, rmdir 'C:\Users\bbert\Documents\GitHub\BeeSwarmv2\node_modules\netlify-cli\node_modules\@cspotcode'] {
-npm warn cleanup       errno: -4048,
-npm warn cleanup       code: 'EPERM',
-npm warn cleanup       syscall: 'rmdir',
-npm warn cleanup       path: 'C:\\Users\\bbert\\Documents\\GitHub\\BeeSwarmv2\\node_modules\\netlify-cli\\node_modules\\@cspotcode'
-npm warn cleanup     }
-npm warn cleanup   ],
-npm warn cleanup   [
-npm warn cleanup     'C:\\Users\\bbert\\Documents\\GitHub\\BeeSwarmv2\\node_modules\\netlify-cli\\node_modules',
-npm warn cleanup     [Error: EPERM: operation not permitted, rmdir 'C:\Users\bbert\Documents\GitHub\BeeSwarmv2\node_modules\netlify-cli\node_modules\@netlify\otel\node_modules\@opentelemetry\api'] {
-npm warn cleanup       errno: -4048,
-npm warn cleanup       code: 'EPERM',
-npm warn cleanup       syscall: 'rmdir',
-npm warn cleanup       path: 'C:\\Users\\bbert\\Documents\\GitHub\\BeeSwarmv2\\node_modules\\netlify-cli\\node_modules\\@netlify\\otel\\node_modules\\@opentelemetry\\api'
-npm warn cleanup     }
-npm warn cleanup   ],
-npm warn cleanup   [
-npm warn cleanup     'C:\\Users\\bbert\\Documents\\GitHub\\BeeSwarmv2\\node_modules\\@grpc',
-npm warn cleanup     [Error: EPERM: operation not permitted, rmdir 'C:\Users\bbert\Documents\GitHub\BeeSwarmv2\node_modules\@grpc\grpc-js\build\src'] {
-npm warn cleanup       errno: -4048,
-npm warn cleanup       code: 'EPERM',
-npm warn cleanup       syscall: 'rmdir',
-npm warn cleanup       path: 'C:\\Users\\bbert\\Documents\\GitHub\\BeeSwarmv2\\node_modules\\@grpc\\grpc-js\\build\\src'
-npm warn cleanup     }
-npm warn cleanup   ],
-npm warn cleanup   [
-npm warn cleanup     'C:\\Users\\bbert\\Documents\\GitHub\\BeeSwarmv2\\node_modules\\node-pty',
-npm warn cleanup     [Error: EPERM: operation not permitted, rmdir 'C:\Users\bbert\Documents\GitHub\BeeSwarmv2\node_modules\node-pty\build\deps\winpty\src\Release\obj\winpty\deps\winpty'] {
-npm warn cleanup       errno: -4048,
-npm warn cleanup       code: 'EPERM',
-npm warn cleanup       syscall: 'rmdir',
-npm warn cleanup       path: 'C:\\Users\\bbert\\Documents\\GitHub\\BeeSwarmv2\\node_modules\\node-pty\\build\\deps\\winpty\\src\\Release\\obj\\winpty\\deps\\winpty'
-npm warn cleanup     }
-npm warn cleanup   ]
-npm warn cleanup ]
 npm error code 1
 npm error path C:\Users\bbert\Documents\GitHub\BeeSwarmv2\node_modules\node-pty
 npm error command failed
@@ -184,5 +112,5 @@ npm error gyp ERR! cwd C:\Users\bbert\Documents\GitHub\BeeSwarmv2\node_modules\n
 npm error gyp ERR! node -v v20.17.0
 npm error gyp ERR! node-gyp -v v11.5.0
 npm error gyp ERR! not ok
-npm error A complete log of this run can be found in: C:\Users\bbert\AppData\Local\npm-cache\_logs\2025-12-11T02_48_52_840Z-debug-0.log
-PS C:\Users\bbert\Documents\GitHub\BeeSwarmv2> 
+npm error A complete log of this run can be found in: C:\Users\bbert\AppData\Local\npm-cache\_logs\2025-12-11T02_55_37_143Z-debug-0.log
+PS C:\Users\bbert\Documents\GitHub\BeeSwarmv2>
