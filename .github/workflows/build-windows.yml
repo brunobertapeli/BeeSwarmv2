@@ -10,6 +10,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Disable Windows Defender real-time monitoring
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+        shell: pwsh
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -24,29 +28,33 @@ jobs:
       - name: Download binaries
         run: npm run prebuild
 
-      - name: Wait for file handles to release
-        run: |
-          [System.GC]::Collect()
-          [System.GC]::WaitForPendingFinalizers()
-          Start-Sleep -Seconds 15
-          # Kill any processes that might be holding file handles
-          Get-Process | Where-Object { $_.Path -like "*BeeSwarmv2*" } | Stop-Process -Force -ErrorAction SilentlyContinue
-          # Try to access the node.exe to ensure it's not locked
-          $nodePath = "resources\binaries\win32-x64\node.exe"
-          if (Test-Path $nodePath) {
-            try {
-              $stream = [System.IO.File]::Open($nodePath, 'Open', 'Read', 'None')
-              $stream.Close()
-              Write-Host "File is accessible"
-            } catch {
-              Write-Host "File might be locked, waiting more..."
-              Start-Sleep -Seconds 10
-            }
-          }
+      - name: Add exclusion for build directory
+        run: Add-MpPreference -ExclusionPath "${{ github.workspace }}"
         shell: pwsh
 
-      - name: Build Electron app
-        run: npm run electron:build
+      - name: Build Electron app (with retry)
+        run: |
+          $maxRetries = 3
+          $retryCount = 0
+          $success = $false
+
+          while (-not $success -and $retryCount -lt $maxRetries) {
+            try {
+              npm run electron:build
+              $success = $true
+            } catch {
+              $retryCount++
+              Write-Host "Build failed, attempt $retryCount of $maxRetries"
+              if ($retryCount -lt $maxRetries) {
+                Start-Sleep -Seconds 10
+              }
+            }
+          }
+
+          if (-not $success) {
+            exit 1
+          }
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
