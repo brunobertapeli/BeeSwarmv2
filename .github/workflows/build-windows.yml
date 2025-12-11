@@ -24,26 +24,11 @@ jobs:
       - name: Download binaries
         run: npm run prebuild
 
-      - name: Release file handles and prepare binaries
+      - name: Wait for file handles to release
         run: |
-          # Force garbage collection and close handles
           [System.GC]::Collect()
           [System.GC]::WaitForPendingFinalizers()
-
-          # Copy binaries to temp location and back to release handles
-          $binDir = "resources\binaries\win32-x64"
-          $tempDir = "temp-binaries"
-
-          if (Test-Path $binDir) {
-            New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
-            Get-ChildItem -Path $binDir | Copy-Item -Destination $tempDir -Force
-            Get-ChildItem -Path $binDir | Remove-Item -Force
-            Start-Sleep -Seconds 2
-            Get-ChildItem -Path $tempDir | Copy-Item -Destination $binDir -Force
-            Remove-Item -Path $tempDir -Recurse -Force
-          }
-
-          Start-Sleep -Seconds 3
+          Start-Sleep -Seconds 10
         shell: pwsh
 
       - name: Build Electron app
