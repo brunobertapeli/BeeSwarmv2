@@ -101,39 +101,6 @@ function setupOAuthPopup(
 }
 
 export function registerAuthHandlers(mainWindow: BrowserWindow) {
-  // Sign in with Google
-  ipcMain.handle('auth:sign-in-google', async () => {
-    try {
-      const { popup } = await authService.signInWithGoogle(mainWindow)
-      setupOAuthPopup(popup, mainWindow, handleAuthCallback)
-      return { success: true }
-    } catch (error: any) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Sign in with Facebook
-  ipcMain.handle('auth:sign-in-facebook', async () => {
-    try {
-      const { popup } = await authService.signInWithFacebook(mainWindow)
-      setupOAuthPopup(popup, mainWindow, handleAuthCallback)
-      return { success: true }
-    } catch (error: any) {
-      return { success: false, error: error.message }
-    }
-  })
-
-  // Sign in with GitHub
-  ipcMain.handle('auth:sign-in-github', async () => {
-    try {
-      const { popup } = await authService.signInWithGithub(mainWindow)
-      setupOAuthPopup(popup, mainWindow, handleAuthCallback)
-      return { success: true }
-    } catch (error: any) {
-      return { success: false, error: error.message }
-    }
-  })
-
   // Helper function to handle auth callback
   async function handleAuthCallback(url: string) {
     try {
@@ -178,7 +145,48 @@ export function registerAuthHandlers(mainWindow: BrowserWindow) {
     }
   }
 
-  // Handle auth callback (called when user is redirected back)
+  // Sign in with Google
+  ipcMain.handle('auth:sign-in-google', async () => {
+    try {
+      const { popup } = await authService.signInWithGoogle(mainWindow)
+      // In production, popup is null (uses system browser with deep link callback)
+      if (popup) {
+        setupOAuthPopup(popup, mainWindow, handleAuthCallback)
+      }
+      // Deep link callback will be handled by 'auth:handle-callback' IPC
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Sign in with Facebook
+  ipcMain.handle('auth:sign-in-facebook', async () => {
+    try {
+      const { popup } = await authService.signInWithFacebook(mainWindow)
+      if (popup) {
+        setupOAuthPopup(popup, mainWindow, handleAuthCallback)
+      }
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Sign in with GitHub
+  ipcMain.handle('auth:sign-in-github', async () => {
+    try {
+      const { popup } = await authService.signInWithGithub(mainWindow)
+      if (popup) {
+        setupOAuthPopup(popup, mainWindow, handleAuthCallback)
+      }
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  // Handle auth callback (called when user is redirected back via deep link)
   ipcMain.handle('auth:handle-callback', async (event, url: string) => {
     return handleAuthCallback(url)
   })

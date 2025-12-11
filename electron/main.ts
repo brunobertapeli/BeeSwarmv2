@@ -704,13 +704,25 @@ app.on('window-all-closed', () => {
 })
 
 // Handle OAuth callback URLs (macOS)
-app.on('open-url', (event, url) => {
+app.on('open-url', async (event, url) => {
   event.preventDefault()
 
   if (url.startsWith('codedeck://auth/callback')) {
-    // Send the callback URL to the renderer process
+    // Process the auth callback and send result to renderer
     if (mainWindow) {
-      mainWindow.webContents.send('auth:callback', url)
+      try {
+        // Import and use the auth handler to process the callback
+        const result = await mainWindow.webContents.executeJavaScript(
+          `window.electronAPI?.auth?.handleCallback?.("${url.replace(/"/g, '\\"')}")`
+        )
+        if (result?.success) {
+          mainWindow.webContents.send('auth:success', result)
+        } else {
+          mainWindow.webContents.send('auth:error', result || { error: 'Authentication failed' })
+        }
+      } catch (error: any) {
+        mainWindow.webContents.send('auth:error', { error: error.message })
+      }
     }
   }
 })
@@ -721,7 +733,7 @@ const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 } else {
-  app.on('second-instance', (event, commandLine, workingDirectory) => {
+  app.on('second-instance', async (event, commandLine, workingDirectory) => {
     // Someone tried to run a second instance, we should focus our window
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore()
@@ -730,7 +742,19 @@ if (!gotTheLock) {
       // Check for auth callback in command line
       const url = commandLine.find(arg => arg.startsWith('codedeck://'))
       if (url && url.startsWith('codedeck://auth/callback')) {
-        mainWindow.webContents.send('auth:callback', url)
+        try {
+          // Process the auth callback via IPC
+          const result = await mainWindow.webContents.executeJavaScript(
+            `window.electronAPI?.auth?.handleCallback?.("${url.replace(/"/g, '\\"')}")`
+          )
+          if (result?.success) {
+            mainWindow.webContents.send('auth:success', result)
+          } else {
+            mainWindow.webContents.send('auth:error', result || { error: 'Authentication failed' })
+          }
+        } catch (error: any) {
+          mainWindow.webContents.send('auth:error', { error: error.message })
+        }
       }
     }
   })
