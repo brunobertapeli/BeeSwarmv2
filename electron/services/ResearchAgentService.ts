@@ -159,6 +159,7 @@ class ResearchAgentService extends EventEmitter {
       maxTurns: agentConfig.maxTurns,
       signal: agent.abortController?.signal,
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(),
+      unsafe: { allowUnsafeCustomBinary: true }, // Required for custom binary paths (Windows has spaces in paths)
       model: agentConfig.model || agent.model, // Use config model if specified, otherwise user's choice
       systemPrompt: systemPrompt,
       settingSources: ['project' as const],

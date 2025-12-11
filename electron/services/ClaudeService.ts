@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import * as path from 'path';
 import { databaseService } from './DatabaseService';
+import { bundledBinaries } from './BundledBinaries.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -274,6 +275,7 @@ class ClaudeService extends EventEmitter {
       maxTurns: 50, // Increased to allow more tool usage with thinking
       abortController, // SDK uses abortController, not signal
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(), // Path to claude CLI
+      unsafe: { allowUnsafeCustomBinary: true }, // Required for custom binary paths (Windows has spaces in paths)
       model: effectiveModel, // Always set model
       systemPrompt: {
         type: 'preset' as const,
@@ -755,36 +757,8 @@ class ClaudeService extends EventEmitter {
    * @private
    */
   private getClaudeExecutablePath(): string {
-    try {
-      // Try to find claude in PATH
-      const path = execSync('which claude', { encoding: 'utf-8' }).trim();
-      if (path) {
-        return path;
-      }
-    } catch (error) {
-      // which failed, try common paths
-    }
-
-    // Common installation paths
-    const commonPaths = [
-      '/opt/homebrew/bin/claude', // Homebrew on Apple Silicon
-      '/usr/local/bin/claude',    // Homebrew on Intel Mac
-      process.env.HOME + '/.local/bin/claude', // npm global install
-      '/usr/bin/claude',           // System install
-    ];
-
-    for (const path of commonPaths) {
-      try {
-        if (existsSync(path)) {
-          return path;
-        }
-      } catch (error) {
-        // Continue checking
-      }
-    }
-
-    // Default to 'claude' and hope it's in PATH
-    return 'claude';
+    // Use bundledBinaries which handles all platforms properly
+    return bundledBinaries.getEffectiveClaudePath();
   }
 }
 

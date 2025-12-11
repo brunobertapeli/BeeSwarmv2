@@ -224,6 +224,7 @@ class ClaudeCliService {
           maxTurns: 1,
           allowedTools: [], // No tools needed
           pathToClaudeCodeExecutable: claudePath,
+          unsafe: { allowUnsafeCustomBinary: true }, // Required for custom binary paths
         }
       })
 
