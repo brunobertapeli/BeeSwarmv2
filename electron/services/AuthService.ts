@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, shell, app } from 'electron'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 export interface AuthUser {
@@ -42,14 +42,19 @@ class AuthService {
     return this.supabase
   }
 
-  async signInWithGoogle(mainWindow: BrowserWindow): Promise<{ url: string; popup: BrowserWindow }> {
+  async signInWithGoogle(mainWindow: BrowserWindow): Promise<{ url: string; popup: BrowserWindow | null }> {
     try {
       const supabase = this.getSupabaseClient()
+
+      // Use deep link callback for production, localhost for dev
+      const redirectTo = app.isPackaged
+        ? 'codedeck://auth/callback'
+        : 'http://localhost:5173/auth/callback'
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: 'http://localhost:5173/auth/callback',
+          redirectTo,
           skipBrowserRedirect: true,
           queryParams: {
             prompt: 'select_account'
@@ -65,23 +70,29 @@ class AuthService {
         throw new Error('No OAuth URL returned from Supabase')
       }
 
-      // Create a popup window for OAuth
-      const popup = new BrowserWindow({
-        width: 500,
-        height: 700,
-        show: true,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true
-        },
-        parent: mainWindow,
-        modal: true,
-        title: 'Sign in with Google'
-      })
+      // In production, use system browser (Google blocks embedded browsers)
+      // In dev, use popup window for easier debugging
+      if (app.isPackaged) {
+        shell.openExternal(data.url)
+        return { url: data.url, popup: null }
+      } else {
+        // Create a popup window for OAuth (dev only)
+        const popup = new BrowserWindow({
+          width: 500,
+          height: 700,
+          show: true,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true
+          },
+          parent: mainWindow,
+          modal: true,
+          title: 'Sign in with Google'
+        })
 
-      popup.loadURL(data.url)
-
-      return { url: data.url, popup }
+        popup.loadURL(data.url)
+        return { url: data.url, popup }
+      }
     } catch (error) {
       throw error
     }
