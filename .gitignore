@@ -13,6 +13,7 @@ out/
 *.log
 .env
 .env.local
+docs/
 
 # IDE
 .vscode/
