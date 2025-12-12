@@ -2213,7 +2213,7 @@ export function ProjectCreationFlow({ isOpen, onComplete, onCancel }: ProjectCre
                               <div className="px-4 py-3 flex items-center gap-3 bg-dark-border/10">
                                 <div className="w-5 h-5 flex items-center justify-center">
                                   <img
-                                    src={`/src/assets/tech-icons/${icon}.svg`}
+                                    src={`/tech-icons/${icon}.svg`}
                                     alt={provider}
                                     className="w-4 h-4"
                                     onError={(e) => {

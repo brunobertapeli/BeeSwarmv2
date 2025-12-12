@@ -24,6 +24,10 @@ import { useLayoutStore } from '../store/layoutStore'
 import { useToast } from '../hooks/useToast'
 import { ModalPortal } from './ModalPortal'
 
+// Import deployment provider logos
+import NetlifyLogo from '../assets/images/netlify.svg'
+import RailwayLogo from '../assets/tech-icons/railway.svg'
+
 interface ProjectSettingsProps {
   isOpen: boolean
   onClose: () => void
@@ -226,7 +230,7 @@ function ProjectSettings({
   }> = {
     netlify: {
       name: 'Netlify',
-      logo: '/src/assets/images/netlify.svg',
+      logo: NetlifyLogo,
       description: 'Deploy with instant rollbacks and automatic HTTPS',
       tokenUrl: 'https://app.netlify.com/user/applications#personal-access-tokens',
       tokenPlaceholder: 'nfp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
@@ -234,7 +238,7 @@ function ProjectSettings({
     },
     vercel: {
       name: 'Vercel',
-      logo: '/src/assets/images/vercel.svg',
+      logo: '',
       description: 'Deploy with edge functions and instant cache invalidation',
       tokenUrl: 'https://vercel.com/account/tokens',
       tokenPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
@@ -242,7 +246,7 @@ function ProjectSettings({
     },
     cloudflare: {
       name: 'Cloudflare Pages',
-      logo: '/src/assets/images/cloudflare.svg',
+      logo: '',
       description: 'Deploy with global CDN and Workers',
       tokenUrl: 'https://dash.cloudflare.com/profile/api-tokens',
       tokenPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx',
@@ -250,7 +254,7 @@ function ProjectSettings({
     },
     railway: {
       name: 'Railway',
-      logo: '/src/assets/tech-icons/railway.svg',
+      logo: RailwayLogo,
       description: 'Deploy with instant infrastructure and automatic scaling',
       tokenUrl: 'https://railway.com/account/tokens',
       tokenPlaceholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxx',

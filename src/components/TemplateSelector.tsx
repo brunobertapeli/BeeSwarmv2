@@ -29,7 +29,7 @@ const TECH_CONFIGS: Record<string, TechConfig> = {
   stripe: {
     name: 'stripe',
     displayName: 'Stripe',
-    icon: '/src/assets/tech-icons/stripe.svg',
+    icon: '/tech-icons/stripe.svg',
     apiKeys: [
       {
         name: 'STRIPE_PUBLISHABLE_KEY',
@@ -54,7 +54,7 @@ const TECH_CONFIGS: Record<string, TechConfig> = {
   mongodb: {
     name: 'mongodb',
     displayName: 'MongoDB',
-    icon: '/src/assets/tech-icons/mongodb.svg',
+    icon: '/tech-icons/mongodb.svg',
     apiKeys: [
       {
         name: 'MONGODB_URI',
@@ -67,7 +67,7 @@ const TECH_CONFIGS: Record<string, TechConfig> = {
   supabase: {
     name: 'supabase',
     displayName: 'Supabase',
-    icon: '/src/assets/tech-icons/supabase.svg',
+    icon: '/tech-icons/supabase.svg',
     apiKeys: [
       {
         name: 'SUPABASE_URL',
@@ -158,7 +158,7 @@ function MiniTechIcon({ tech }: { tech: string }) {
     >
       <div className="w-4 h-4">
         <img
-          src={`/src/assets/tech-icons/${tech}.svg`}
+          src={`/tech-icons/${tech}.svg`}
           alt={tech}
           className="w-full h-full transition-all duration-200"
           style={{

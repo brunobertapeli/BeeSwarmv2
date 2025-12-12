@@ -85,5 +85,8 @@ export default defineConfig({
         manualChunks: undefined
       }
     }
+  },
+  optimizeDeps: {
+    include: ['@xterm/xterm', '@xterm/addon-fit']
   }
 })

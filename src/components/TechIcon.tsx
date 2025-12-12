@@ -16,7 +16,7 @@ function TechIcon({ name, label }: TechIconProps) {
   // Try to dynamically load the icon, fallback to a colored circle if not found
   let iconSrc = ''
   try {
-    iconSrc = `/src/assets/tech-icons/${config.iconFileName}`
+    iconSrc = `/tech-icons/${config.iconFileName}`
   } catch (e) {
     // If icon doesn't exist, we'll show a colored circle with the first letter
   }

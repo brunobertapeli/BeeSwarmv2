@@ -10,6 +10,11 @@ class AutoUpdateService {
     autoUpdater.autoDownload = false // Don't auto-download, let user decide
     autoUpdater.autoInstallOnAppQuit = true
 
+    // Set GitHub token for private repo access
+    if (process.env.GH_TOKEN) {
+      autoUpdater.requestHeaders = { Authorization: `token ${process.env.GH_TOKEN}` }
+    }
+
     this.setupEventListeners()
   }
 
@@ -48,6 +53,11 @@ class AutoUpdateService {
     })
 
     autoUpdater.on('error', (error: Error) => {
+      // Suppress 404 errors (repo doesn't exist or is private)
+      if (error.message?.includes('404') || error.message?.includes('HttpError')) {
+        console.log('Auto-updater: No releases available (repo may be private or have no releases)')
+        return
+      }
       console.error('Auto-updater error:', error)
       this.sendToRenderer('update:error', {
         message: error.message

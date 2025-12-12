@@ -1,39 +1,37 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, TrendingUp, Users, Eye, Clock, Globe, Smartphone, Monitor, Tablet, Settings, ExternalLink, RefreshCw } from 'lucide-react'
+import { X, TrendingUp, Users, Eye, Clock, Globe, Smartphone, Monitor, Tablet, Settings, ExternalLink, RefreshCw, BarChart3 } from 'lucide-react'
 import { useLayoutStore } from '../store/layoutStore'
 import { useAppStore } from '../store/appStore'
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
+import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 
-// Mock data - will be replaced with real GA data
-const MOCK_DATA = {
-  activeUsers: 127,
-  stats: { visitors: 1247, pageViews: 3891, avgTime: '3m 24s' },
+// Placeholder data for UI preview
+const PLACEHOLDER_DATA = {
+  activeUsers: '--',
+  stats: { visitors: '--', pageViews: '--', avgTime: '--' },
   trend: [
-    { date: 'Jan 15', visitors: 820 },
-    { date: 'Jan 16', visitors: 932 },
-    { date: 'Jan 17', visitors: 901 },
-    { date: 'Jan 18', visitors: 1234 },
-    { date: 'Jan 19', visitors: 1050 },
-    { date: 'Jan 20', visitors: 1189 },
-    { date: 'Jan 21', visitors: 1247 }
+    { date: 'Mon', visitors: 40 },
+    { date: 'Tue', visitors: 55 },
+    { date: 'Wed', visitors: 45 },
+    { date: 'Thu', visitors: 70 },
+    { date: 'Fri', visitors: 60 },
+    { date: 'Sat', visitors: 80 },
+    { date: 'Sun', visitors: 65 }
   ],
   topPages: [
-    { path: '/dashboard', views: 1234, percentage: 32 },
-    { path: '/products', views: 891, percentage: 23 },
-    { path: '/pricing', views: 567, percentage: 15 },
-    { path: '/about', views: 445, percentage: 12 },
-    { path: '/contact', views: 323, percentage: 8 }
+    { path: '/home', percentage: '--' },
+    { path: '/about', percentage: '--' },
+    { path: '/contact', percentage: '--' }
   ],
   sources: [
-    { name: 'Google', value: 45, color: '#4285F4' },
-    { name: 'Direct', value: 30, color: '#34A853' },
-    { name: 'Social', value: 15, color: '#FBBC04' },
-    { name: 'Referral', value: 10, color: '#EA4335' }
+    { name: 'Google', value: '--', color: '#4285F4' },
+    { name: 'Direct', value: '--', color: '#34A853' },
+    { name: 'Social', value: '--', color: '#FBBC04' },
+    { name: 'Referral', value: '--', color: '#EA4335' }
   ],
   devices: [
-    { name: 'Desktop', value: 58, color: '#8b5cf6' },
-    { name: 'Mobile', value: 35, color: '#ec4899' },
-    { name: 'Tablet', value: 7, color: '#06b6d4' }
+    { name: 'Desktop', value: '--', color: '#8b5cf6' },
+    { name: 'Mobile', value: '--', color: '#ec4899' },
+    { name: 'Tablet', value: '--', color: '#06b6d4' }
   ]
 }
 
@@ -46,25 +44,10 @@ interface AnalyticsData {
     pageViews: number
     avgTime: string
   }
-  trend: Array<{
-    date: string
-    visitors: number
-  }>
-  topPages: Array<{
-    path: string
-    views: number
-    percentage: number
-  }>
-  sources: Array<{
-    name: string
-    value: number
-    color: string
-  }>
-  devices: Array<{
-    name: string
-    value: number
-    color: string
-  }>
+  trend: Array<{ date: string; visitors: number }>
+  topPages: Array<{ path: string; views: number; percentage: number }>
+  sources: Array<{ name: string; value: number; color: string }>
+  devices: Array<{ name: string; value: number; color: string }>
 }
 
 function AnalyticsWidget() {
@@ -80,81 +63,65 @@ function AnalyticsWidget() {
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const widgetRef = useRef<HTMLDivElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
   const settingsRef = useRef<HTMLDivElement>(null)
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const FIXED_HEIGHT = 405
+  const isConnected = gaId.trim().length > 0
 
-  // Fetch analytics data
+  // Load saved GA ID on mount
+  useEffect(() => {
+    const loadGaId = async () => {
+      if (!currentProjectId) return
+      try {
+        const result = await window.electronAPI?.analytics?.getGaId?.(currentProjectId)
+        if (result?.success && result.gaId) {
+          setGaId(result.gaId)
+        }
+      } catch (err) {
+        console.error('Failed to load GA ID:', err)
+      }
+    }
+    loadGaId()
+  }, [currentProjectId])
+
+  // Fetch analytics data only if GA is connected
   const fetchAnalyticsData = async (showLoadingState = true) => {
-    if (!currentProjectId) return
+    if (!currentProjectId || !isConnected) return
 
     try {
-      if (showLoadingState) {
-        setIsLoading(true)
-      } else {
-        setIsRefreshing(true)
-      }
-      setError(null)
+      if (showLoadingState) setIsLoading(true)
+      else setIsRefreshing(true)
 
-      const result = await window.electronAPI?.analytics.getData(currentProjectId, timeRange)
+      const result = await window.electronAPI?.analytics?.getData?.(currentProjectId, timeRange)
 
       if (result?.success && result.data) {
         setAnalyticsData(result.data)
-      } else {
-        setError(result?.error || 'Failed to fetch analytics data')
-        // Fallback to mock data on error
-        setAnalyticsData(MOCK_DATA as AnalyticsData)
       }
     } catch (err) {
       console.error('Error fetching analytics:', err)
-      setError('Failed to load analytics')
-      // Fallback to mock data on error
-      setAnalyticsData(MOCK_DATA as AnalyticsData)
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
     }
   }
 
-  // Manual refresh
+  // Fetch data when GA is connected and time range changes
+  useEffect(() => {
+    if (isConnected) {
+      fetchAnalyticsData()
+    } else {
+      setAnalyticsData(null)
+    }
+  }, [currentProjectId, timeRange, isConnected])
+
   const handleRefresh = () => {
-    fetchAnalyticsData(false)
+    if (isConnected) fetchAnalyticsData(false)
   }
 
-  // Initial data fetch and when time range changes
-  useEffect(() => {
-    fetchAnalyticsData()
-  }, [currentProjectId, timeRange])
-
-  // Auto-refresh every 5 minutes
-  useEffect(() => {
-    // Clear any existing interval
-    if (refreshIntervalRef.current) {
-      clearInterval(refreshIntervalRef.current)
-    }
-
-    // Set up new interval (5 minutes = 300000ms)
-    refreshIntervalRef.current = setInterval(() => {
-      fetchAnalyticsData(false)
-    }, 300000)
-
-    // Cleanup on unmount
-    return () => {
-      if (refreshIntervalRef.current) {
-        clearInterval(refreshIntervalRef.current)
-      }
-    }
-  }, [currentProjectId, timeRange])
-
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (!headerRef.current?.contains(e.target as Node)) {
-      return
-    }
-
+    if (!headerRef.current?.contains(e.target as Node)) return
     setIsDragging(true)
     setDragOffset({
       x: e.clientX - analyticsWidgetPosition.x,
@@ -167,7 +134,6 @@ function AnalyticsWidget() {
       if (isDragging) {
         const newX = e.clientX - dragOffset.x
         const newY = e.clientY - dragOffset.y
-
         const padding = 5
         const headerHeight = 40 + padding
         const bottomReservedArea = 200 + 2
@@ -183,9 +149,7 @@ function AnalyticsWidget() {
       }
     }
 
-    const handleMouseUp = () => {
-      setIsDragging(false)
-    }
+    const handleMouseUp = () => setIsDragging(false)
 
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove)
@@ -196,7 +160,7 @@ function AnalyticsWidget() {
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isDragging, dragOffset, analyticsWidgetPosition, setAnalyticsWidgetPosition, FIXED_HEIGHT])
+  }, [isDragging, dragOffset, analyticsWidgetPosition, setAnalyticsWidgetPosition])
 
   // Close settings dropdown when clicking outside
   useEffect(() => {
@@ -205,20 +169,21 @@ function AnalyticsWidget() {
         setShowSettings(false)
       }
     }
-
-    if (showSettings) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
+    if (showSettings) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showSettings])
 
-  const handleSaveGAId = () => {
+  const handleSaveGAId = async () => {
     setGaId(tempGaId)
     setShowGAModal(false)
-    // TODO: Save to database/localStorage
+    // Save to backend
+    if (currentProjectId) {
+      try {
+        await window.electronAPI?.analytics?.saveGaId?.(currentProjectId, tempGaId)
+      } catch (err) {
+        console.error('Failed to save GA ID:', err)
+      }
+    }
   }
 
   const handleOpenGAModal = () => {
@@ -232,12 +197,9 @@ function AnalyticsWidget() {
     setShowSettings(false)
   }
 
-  // Use fetched data or fallback to mock data
-  const displayData = analyticsData || (MOCK_DATA as any)
-  // Handle both API response format and MOCK_DATA format
-  const currentStats = analyticsData
-    ? analyticsData.stats
-    : MOCK_DATA.stats[timeRange]
+  // Use real data if connected, otherwise placeholder
+  const displayData = isConnected && analyticsData ? analyticsData : PLACEHOLDER_DATA
+  const currentStats = displayData.stats
 
   return (
     <div
@@ -266,10 +228,7 @@ function AnalyticsWidget() {
             {(['today', 'week', 'month'] as TimeRange[]).map((range) => (
               <button
                 key={range}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setTimeRange(range)
-                }}
+                onClick={(e) => { e.stopPropagation(); setTimeRange(range) }}
                 onMouseDown={(e) => e.stopPropagation()}
                 className={`px-2 py-0.5 text-[10px] rounded transition-all ${
                   timeRange === range
@@ -282,66 +241,53 @@ function AnalyticsWidget() {
             ))}
           </div>
 
-          {/* Active Users - Compact */}
-          <div className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/20 rounded-lg px-2 py-0.5">
+          {/* Active Users */}
+          <div className={`flex items-center gap-1.5 rounded-lg px-2 py-0.5 ${isConnected ? 'bg-green-500/10 border border-green-500/20' : 'bg-dark-bg/30 border border-dark-border/30'}`}>
             <div className="relative">
-              <Users size={11} className="text-green-400" />
-              <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
+              <Users size={11} className={isConnected ? 'text-green-400' : 'text-gray-500'} />
+              {isConnected && <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />}
             </div>
-            <span className="text-[9px] text-gray-400">Active Now:</span>
-            <span className="text-[11px] font-bold text-green-400">{displayData.activeUsers}</span>
+            <span className="text-[9px] text-gray-400">Active:</span>
+            <span className={`text-[11px] font-bold ${isConnected ? 'text-green-400' : 'text-gray-500'}`}>
+              {displayData.activeUsers}
+            </span>
           </div>
         </div>
 
         <div className="flex items-center gap-1">
           {/* Refresh Button */}
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              handleRefresh()
-            }}
+            onClick={(e) => { e.stopPropagation(); handleRefresh() }}
             onMouseDown={(e) => e.stopPropagation()}
             className="p-1 hover:bg-dark-bg/50 rounded-lg transition-colors"
-            disabled={isRefreshing}
-            title="Refresh analytics data"
+            disabled={isRefreshing || !isConnected}
+            title={isConnected ? 'Refresh analytics data' : 'Connect GA to enable'}
           >
-            <RefreshCw
-              size={14}
-              className={`text-gray-400 hover:text-white ${isRefreshing ? 'animate-spin' : ''}`}
-            />
+            <RefreshCw size={14} className={`${isConnected ? 'text-gray-400 hover:text-white' : 'text-gray-600'} ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
+
           <div className="relative" ref={settingsRef}>
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowSettings(!showSettings)
-              }}
+              onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings) }}
               onMouseDown={(e) => e.stopPropagation()}
               className="p-1 hover:bg-dark-bg/50 rounded-lg transition-colors"
             >
               <Settings size={14} className="text-gray-400 hover:text-white" />
             </button>
 
-            {/* Settings Dropdown */}
             {showSettings && (
               <div className="absolute top-full right-0 mt-1 bg-dark-card border border-dark-border/80 rounded-lg shadow-xl overflow-hidden z-[200] min-w-[200px]">
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleOpenGAModal()
-                  }}
+                  onClick={(e) => { e.stopPropagation(); handleOpenGAModal() }}
                   onMouseDown={(e) => e.stopPropagation()}
                   className="w-full px-3 py-2 text-left text-[11px] text-gray-300 hover:bg-dark-bg/50 transition-colors flex items-center gap-2"
                 >
                   <Settings size={12} className="text-gray-400" />
-                  Enter Your GA ID
+                  {gaId ? 'Update GA ID' : 'Connect Google Analytics'}
                 </button>
                 {gaId && (
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleVisitGA()
-                    }}
+                    onClick={(e) => { e.stopPropagation(); handleVisitGA() }}
                     onMouseDown={(e) => e.stopPropagation()}
                     className="w-full px-3 py-2 text-left text-[11px] text-gray-300 hover:bg-dark-bg/50 transition-colors flex items-center gap-2 border-t border-dark-border/50"
                   >
@@ -352,6 +298,7 @@ function AnalyticsWidget() {
               </div>
             )}
           </div>
+
           <button
             onClick={() => setAnalyticsWidgetEnabled(false)}
             className="p-1 hover:bg-dark-bg/50 rounded-lg transition-colors"
@@ -363,25 +310,56 @@ function AnalyticsWidget() {
       </div>
 
       {/* Content */}
-      <div
-        className="relative p-3 overflow-y-auto scrollbar-thin"
-        style={{ height: `calc(${FIXED_HEIGHT}px - 37px)` }}
-      >
+      <div className="relative p-3 overflow-y-auto scrollbar-thin" style={{ height: `calc(${FIXED_HEIGHT}px - 37px)` }}>
+
+        {/* Not Connected Banner */}
+        {!isConnected && (
+          <div className="mb-3 bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <BarChart3 size={20} className="text-primary" />
+            </div>
+            <div className="flex-1">
+              <p className="text-xs font-medium text-gray-200">Connect Google Analytics</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">Add your GA4 Property ID to see real analytics data</p>
+            </div>
+            <button
+              onClick={handleOpenGAModal}
+              className="px-3 py-1.5 bg-primary/20 hover:bg-primary/30 border border-primary/50 rounded-lg text-xs text-primary font-medium transition-all"
+            >
+              Connect
+            </button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {isLoading && isConnected && (
+          <div className="absolute inset-0 bg-dark-card/80 flex items-center justify-center z-10">
+            <div className="flex items-center gap-2">
+              <RefreshCw size={16} className="text-primary animate-spin" />
+              <span className="text-xs text-gray-400">Loading analytics...</span>
+            </div>
+          </div>
+        )}
+
         {/* Overview Stats */}
-        <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className={`grid grid-cols-3 gap-2 mb-3 ${!isConnected ? 'opacity-50' : ''}`}>
           <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-2">
             <div className="flex items-center gap-1.5 mb-1">
               <Users size={12} className="text-blue-400" />
               <span className="text-[9px] text-gray-500 uppercase">Visitors</span>
             </div>
-            <p className="text-lg font-bold text-gray-200">{currentStats.visitors.toLocaleString()}</p>
+            <p className="text-lg font-bold text-gray-200">
+              {typeof currentStats.visitors === 'number' ? currentStats.visitors.toLocaleString() : currentStats.visitors}
+            </p>
           </div>
           <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-2">
             <div className="flex items-center gap-1.5 mb-1">
               <Eye size={12} className="text-purple-400" />
               <span className="text-[9px] text-gray-500 uppercase">Views</span>
             </div>
-            <p className="text-lg font-bold text-gray-200">{currentStats.pageViews.toLocaleString()}</p>
+            <p className="text-lg font-bold text-gray-200">
+              {typeof currentStats.pageViews === 'number' ? currentStats.pageViews.toLocaleString() : currentStats.pageViews}
+            </p>
           </div>
           <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-2">
             <div className="flex items-center gap-1.5 mb-1">
@@ -393,7 +371,7 @@ function AnalyticsWidget() {
         </div>
 
         {/* Visitor Trend Chart */}
-        <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-2.5 mb-3">
+        <div className={`bg-dark-bg/30 border border-dark-border/30 rounded-lg p-2.5 mb-3 ${!isConnected ? 'opacity-50' : ''}`}>
           <div className="flex items-center gap-1.5 mb-2">
             <TrendingUp size={12} className="text-primary" />
             <span className="text-[10px] font-medium text-gray-300">Visitor Trend</span>
@@ -401,16 +379,8 @@ function AnalyticsWidget() {
           <ResponsiveContainer width="100%" height={80}>
             <LineChart data={displayData.trend}>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
-              <XAxis
-                dataKey="date"
-                tick={{ fill: '#6b7280', fontSize: 9 }}
-                stroke="#404040"
-              />
-              <YAxis
-                tick={{ fill: '#6b7280', fontSize: 9 }}
-                stroke="#404040"
-                width={35}
-              />
+              <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 9 }} stroke="#404040" />
+              <YAxis tick={{ fill: '#6b7280', fontSize: 9 }} stroke="#404040" width={35} />
               <Tooltip
                 contentStyle={{
                   backgroundColor: '#1a1a1a',
@@ -422,16 +392,16 @@ function AnalyticsWidget() {
               <Line
                 type="monotone"
                 dataKey="visitors"
-                stroke="#8b5cf6"
+                stroke={isConnected ? '#8b5cf6' : '#4a4a4a'}
                 strokeWidth={2}
-                dot={{ fill: '#8b5cf6', r: 3 }}
+                dot={{ fill: isConnected ? '#8b5cf6' : '#4a4a4a', r: 3 }}
                 activeDot={{ r: 5 }}
               />
             </LineChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className={`grid grid-cols-3 gap-2 mb-3 ${!isConnected ? 'opacity-50' : ''}`}>
           {/* Top Pages */}
           <div className="bg-dark-bg/30 border border-dark-border/30 rounded-lg p-2">
             <div className="flex items-center gap-1.5 mb-2">
@@ -445,7 +415,7 @@ function AnalyticsWidget() {
                     {page.path}
                   </span>
                   <span className="text-[10px] font-semibold text-gray-300">
-                    {page.percentage}%
+                    {typeof page.percentage === 'number' ? `${page.percentage}%` : page.percentage}
                   </span>
                 </div>
               ))}
@@ -462,13 +432,12 @@ function AnalyticsWidget() {
               {displayData.sources.map((source, i) => (
                 <div key={i} className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <div
-                      className="w-2 h-2 rounded-sm"
-                      style={{ backgroundColor: source.color }}
-                    />
+                    <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: isConnected ? source.color : '#4a4a4a' }} />
                     <span className="text-[10px] text-gray-400">{source.name}</span>
                   </div>
-                  <span className="text-[10px] font-semibold text-gray-300">{source.value}%</span>
+                  <span className="text-[10px] font-semibold text-gray-300">
+                    {typeof source.value === 'number' ? `${source.value}%` : source.value}
+                  </span>
                 </div>
               ))}
             </div>
@@ -484,12 +453,14 @@ function AnalyticsWidget() {
               {displayData.devices.map((device, i) => (
                 <div key={i} className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    {device.name === 'Desktop' && <Monitor size={11} className="text-purple-400" />}
-                    {device.name === 'Mobile' && <Smartphone size={11} className="text-pink-400" />}
-                    {device.name === 'Tablet' && <Tablet size={11} className="text-cyan-400" />}
+                    {device.name === 'Desktop' && <Monitor size={11} className={isConnected ? 'text-purple-400' : 'text-gray-500'} />}
+                    {device.name === 'Mobile' && <Smartphone size={11} className={isConnected ? 'text-pink-400' : 'text-gray-500'} />}
+                    {device.name === 'Tablet' && <Tablet size={11} className={isConnected ? 'text-cyan-400' : 'text-gray-500'} />}
                     <span className="text-[10px] text-gray-400">{device.name}</span>
                   </div>
-                  <span className="text-[10px] font-semibold text-gray-300">{device.value}%</span>
+                  <span className="text-[10px] font-semibold text-gray-300">
+                    {typeof device.value === 'number' ? `${device.value}%` : device.value}
+                  </span>
                 </div>
               ))}
             </div>
@@ -500,26 +471,14 @@ function AnalyticsWidget() {
       {/* GA ID Modal */}
       {showGAModal && (
         <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/60 z-[300]"
-            onClick={() => setShowGAModal(false)}
-          />
-
-          {/* Modal */}
+          <div className="fixed inset-0 bg-black/60 z-[300]" onClick={() => setShowGAModal(false)} />
           <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[301] bg-dark-card border border-dark-border rounded-xl shadow-2xl w-[400px] overflow-hidden">
-            {/* Header */}
             <div className="px-4 py-3 border-b border-dark-border/50 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-gray-200">Google Analytics Configuration</h3>
-              <button
-                onClick={() => setShowGAModal(false)}
-                className="p-1 hover:bg-dark-bg/50 rounded-lg transition-colors"
-              >
+              <button onClick={() => setShowGAModal(false)} className="p-1 hover:bg-dark-bg/50 rounded-lg transition-colors">
                 <X size={16} className="text-gray-400 hover:text-white" />
               </button>
             </div>
-
-            {/* Content */}
             <div className="p-4 space-y-3">
               <div>
                 <label className="block text-[10px] font-medium text-gray-400 mb-2">
@@ -529,7 +488,7 @@ function AnalyticsWidget() {
                   type="text"
                   value={tempGaId}
                   onChange={(e) => setTempGaId(e.target.value)}
-                  placeholder="e.g., GA4-XXXXXXXXX"
+                  placeholder="e.g., GA4-XXXXXXXXX or 123456789"
                   className="w-full bg-dark-bg/50 border border-dark-border/50 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-primary/50 transition-colors"
                   autoFocus
                 />
@@ -537,13 +496,8 @@ function AnalyticsWidget() {
                   Enter your Google Analytics 4 property ID to connect your analytics data.
                 </p>
               </div>
-
-              {/* Actions */}
               <div className="flex justify-end gap-2 pt-2">
-                <button
-                  onClick={() => setShowGAModal(false)}
-                  className="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition-colors"
-                >
+                <button onClick={() => setShowGAModal(false)} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition-colors">
                   Cancel
                 </button>
                 <button

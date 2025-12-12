@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Trash2, Terminal as TerminalIcon, Copy, Check, Send, Filter, Plus } from 'lucide-react'
-import { Terminal } from 'xterm'
+import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import 'xterm/css/xterm.css'
+import '@xterm/xterm/css/xterm.css'
 import { useAppStore } from '../store/appStore'
 import { useLayoutStore } from '../store/layoutStore'
 import { ModalPortal } from './ModalPortal'
@@ -358,18 +358,19 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
 
   // Initialize unified terminal for current project
   useEffect(() => {
-    if (!terminalRef.current) return
+    if (!terminalRef.current || !isOpen) return
 
-    // Always clear the container first
     const container = terminalRef.current
-    while (container.firstChild) {
-      container.removeChild(container.firstChild)
-    }
 
     // Check if we already have a terminal for this project
     let existing = unifiedTerminalsRef.current.get(projectId)
 
     if (!existing) {
+      // Clear container for new terminal
+      while (container.firstChild) {
+        container.removeChild(container.firstChild)
+      }
+
       // Create new terminal instance for this project
       const terminal = new Terminal({
         cursorBlink: false,
@@ -404,12 +405,12 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
       const fitAddon = new FitAddon()
       terminal.loadAddon(fitAddon)
 
-      // Store in map
+      // Open terminal first
+      terminal.open(container)
+
+      // Store in map after opening
       existing = { term: terminal, fit: fitAddon }
       unifiedTerminalsRef.current.set(projectId, existing)
-
-      // Open terminal
-      terminal.open(container)
 
       xtermRef.current = terminal
       fitAddonRef.current = fitAddon
@@ -435,61 +436,33 @@ function TerminalModal({ isOpen, onClose, projectId, projectName, projectPath }:
         return true // Allow other keys
       })
 
-      // Wait for DOM to render, then fit multiple times to ensure correct size
-      requestAnimationFrame(() => {
+      // Fit after a short delay to ensure container is visible
+      setTimeout(() => {
         fitAddon.fit()
-        requestAnimationFrame(() => {
-          fitAddon.fit()
-
-          // Wait for cols to be properly set before loading history
-          let retryCount = 0
-          const maxRetries = 10 // Max 500ms of retrying
-          const checkAndLoad = () => {
-            const currentCols = terminal.cols || 0
-
-            // Terminal should have > 100 cols for the wide modal (expecting ~150-180 cols)
-            if (currentCols > 100) {
-              // Terminal is properly sized - safe to load history
-              terminal.clear()
-              drawBanner()
-              loadTerminalHistory()
-            } else if (retryCount < maxRetries) {
-              // Not ready yet - fit again and retry (with limit)
-              retryCount++
-              fitAddon.fit()
-              setTimeout(checkAndLoad, 50)
-            } else {
-              // Give up and load anyway after max retries
-              terminal.clear()
-              drawBanner()
-              loadTerminalHistory()
-            }
-          }
-
-          setTimeout(checkAndLoad, 100)
-        })
-      })
+        terminal.clear()
+        drawBanner()
+        loadTerminalHistory()
+      }, 50)
     } else {
-      // Terminal exists - re-mount it in the container
-      existing.term.open(container)
+      // Terminal exists - check if it needs to be re-mounted
+      if (container.children.length === 0) {
+        existing.term.open(container)
+      }
 
       xtermRef.current = existing.term
       fitAddonRef.current = existing.fit
 
-      // Ensure it's properly fitted after remounting
-      requestAnimationFrame(() => {
+      // Fit after container is ready
+      setTimeout(() => {
         existing.fit.fit()
-        setTimeout(() => {
-          existing.fit.fit()
-        }, 100)
-      })
+      }, 50)
     }
 
     // Cleanup on unmount only
     return () => {
       // Don't dispose - keep terminals alive
     }
-  }, [projectId])
+  }, [projectId, isOpen])
 
   // Listen for new terminal lines
   useEffect(() => {

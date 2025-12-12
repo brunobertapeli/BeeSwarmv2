@@ -16,6 +16,45 @@ if (process.platform === 'win32') {
     app.quit()
   }
 }
+
+// ============================================================================
+// SINGLE INSTANCE LOCK - Must be checked BEFORE any initialization
+// This prevents multiple dock icons and duplicate windows during dev restarts
+// ============================================================================
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  // Another instance is already running - quit immediately
+  app.quit()
+} else {
+  // We got the lock - set up second-instance handler early
+  app.on('second-instance', async (event, commandLine) => {
+    // Focus existing window when second instance tries to start
+    const windows = BrowserWindow.getAllWindows()
+    if (windows.length > 0) {
+      const mainWin = windows[0]
+      if (mainWin.isMinimized()) mainWin.restore()
+      mainWin.focus()
+
+      // Check for OAuth callback in command line
+      const url = commandLine.find(arg => arg.startsWith('codedeck://'))
+      if (url && url.startsWith('codedeck://auth/callback')) {
+        try {
+          const result = await mainWin.webContents.executeJavaScript(
+            `window.electronAPI?.auth?.handleCallback?.("${url.replace(/"/g, '\\"')}")`
+          )
+          if (result?.success) {
+            mainWin.webContents.send('auth:success', result)
+          } else {
+            mainWin.webContents.send('auth:error', result || { error: 'Authentication failed' })
+          }
+        } catch (error: any) {
+          mainWin.webContents.send('auth:error', { error: error.message })
+        }
+      }
+    }
+  })
+}
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
@@ -126,7 +165,10 @@ if (isDev) {
 }
 
 // Hide dock icon until window is ready (prevents multiple dock icons flashing)
-app.dock?.hide()
+// Only do this if we got the single instance lock
+if (gotTheLock) {
+  app.dock?.hide()
+}
 
 // Register custom protocol for production builds
 // This allows CORS to work properly with a real origin instead of 'null'
@@ -287,6 +329,7 @@ function createWindow() {
     height: 900,
     minWidth: 1200,
     minHeight: 700,
+    show: false, // Don't show until ready-to-show (prevents flash)
     backgroundColor: '#0F1116',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -368,19 +411,26 @@ User: ${currentUserId || 'not logged in'}
   })
 
   // Set Content Security Policy (only in production - dev mode doesn't need strict CSP)
+  // Skip CSP for localhost URLs (user's dev servers in preview)
   if (!isDev) {
     mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+      // Don't apply CSP to localhost (user's preview dev servers)
+      if (details.url.includes('localhost') || details.url.includes('127.0.0.1')) {
+        callback({ responseHeaders: details.responseHeaders })
+        return
+      }
+
       callback({
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
             [
               "default-src 'self' codedeck:",
-              "script-src 'self' codedeck:",
+              "script-src 'self' codedeck: 'unsafe-inline'",
               "style-src 'self' codedeck: 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' codedeck: https://fonts.gstatic.com data:",
               "img-src 'self' codedeck: https://* data:",
-              "connect-src 'self' codedeck: https://*",
+              "connect-src 'self' codedeck: https://* ws://localhost:* http://localhost:*",
               "worker-src 'self' codedeck: blob:",
               "frame-src 'self' codedeck:"
             ].join('; ')
@@ -398,8 +448,17 @@ User: ${currentUserId || 'not logged in'}
     mainWindow.loadURL('codedeck://localhost/index.html')
   }
 
-  // Show dock icon once window is ready
+  // Toggle DevTools with Cmd+Option+I (Mac) or Ctrl+Shift+I (Windows/Linux) in production
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if ((input.meta && input.alt && input.key === 'i') ||
+        (input.control && input.shift && input.key === 'I')) {
+      mainWindow?.webContents.toggleDevTools()
+    }
+  })
+
+  // Show window and dock icon once content is ready
   mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
     app.dock?.show()
   })
 
@@ -668,6 +727,13 @@ app.whenReady().then(async () => {
       const url = request.url.replace('codedeck://localhost/', '')
       const filePath = path.join(__dirname, '../dist', url)
 
+      // Check if file exists before fetching
+      if (!fs.existsSync(filePath)) {
+        console.warn(`⚠️ File not found: ${filePath} (requested: ${request.url})`)
+        // Return empty response for missing files to avoid flooding errors
+        return new Response('', { status: 404 })
+      }
+
       return net.fetch(`file://${filePath}`)
     })
   }
@@ -775,35 +841,4 @@ app.on('open-url', async (event, url) => {
   }
 })
 
-// Handle OAuth callback URLs (Windows/Linux)
-const gotTheLock = app.requestSingleInstanceLock()
-
-if (!gotTheLock) {
-  app.quit()
-} else {
-  app.on('second-instance', async (event, commandLine, workingDirectory) => {
-    // Someone tried to run a second instance, we should focus our window
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
-
-      // Check for auth callback in command line
-      const url = commandLine.find(arg => arg.startsWith('codedeck://'))
-      if (url && url.startsWith('codedeck://auth/callback')) {
-        try {
-          // Process the auth callback via IPC
-          const result = await mainWindow.webContents.executeJavaScript(
-            `window.electronAPI?.auth?.handleCallback?.("${url.replace(/"/g, '\\"')}")`
-          )
-          if (result?.success) {
-            mainWindow.webContents.send('auth:success', result)
-          } else {
-            mainWindow.webContents.send('auth:error', result || { error: 'Authentication failed' })
-          }
-        } catch (error: any) {
-          mainWindow.webContents.send('auth:error', { error: error.message })
-        }
-      }
-    }
-  })
-}
+// Note: Single instance lock is handled at the top of this file

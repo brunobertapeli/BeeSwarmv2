@@ -1,3 +1,12 @@
+# Build with envs:
+  export APPLE_ID=bruno@bertapeli.com
+  export APPLE_APP_SPECIFIC_PASSWORD=jrot-qzeo-jklg-hvsk
+  export APPLE_TEAM_ID=2Q2RJ392ZP
+  npm run electron:build
+
+# Check Notarization command:
+  xcrun notarytool history --apple-id "bruno@bertapeli.com" --password "jrot-qzeo-jklg-hvsk" --team-id "2Q2RJ392ZP"
+
 # CodeDeck Release Guide
 
 ## Prerequisites
@@ -22,6 +31,7 @@ Edit `package.json`:
 
 ```bash
 npm run electron:build
+source .env && npm run electron:build
 ```
 
 Output files in `dist/`:

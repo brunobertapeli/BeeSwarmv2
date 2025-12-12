@@ -11,7 +11,7 @@
 export interface TechStackConfig {
   displayName: string
   color: string
-  iconFileName: string // SVG filename in /src/assets/tech-icons/
+  iconFileName: string // SVG filename in /public/tech-icons/
 }
 
 export const TECH_STACK_CONFIG: Record<string, TechStackConfig> = {
