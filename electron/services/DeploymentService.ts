@@ -7,6 +7,7 @@ import path from 'path'
 import fs from 'fs'
 import { app } from 'electron'
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process'
+import { bundledBinaries } from './BundledBinaries'
 
 export interface DeployResult {
   success: boolean
@@ -492,7 +493,20 @@ class DeploymentService {
     return new Promise((resolve) => {
       onProgress(`Running: ${cmd} ${args.join(' ')}`)
 
-      const proc = spawn(cmd, args, {
+      // Handle npm/npx commands - use bundled binaries for cross-platform compatibility
+      let spawnCmd = cmd
+      let spawnArgs = args
+      if (cmd === 'npm') {
+        const npmConfig = bundledBinaries.getNpmSpawnConfig(args)
+        spawnCmd = npmConfig.command
+        spawnArgs = npmConfig.args
+      } else if (cmd === 'npx') {
+        const npxConfig = bundledBinaries.getNpxSpawnConfig(args)
+        spawnCmd = npxConfig.command
+        spawnArgs = npxConfig.args
+      }
+
+      const proc = spawn(spawnCmd, spawnArgs, {
         cwd: options.cwd,
         env: options.env,
         shell: false // Don't use shell to avoid issues with special characters in args

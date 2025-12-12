@@ -159,7 +159,7 @@ class ResearchAgentService extends EventEmitter {
       maxTurns: agentConfig.maxTurns,
       signal: agent.abortController?.signal,
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(),
-      unsafe: { allowUnsafeCustomBinary: true }, // Required for custom binary paths (Windows has spaces in paths)
+      unsafe: { allowUnsafeCustomBinary: true }, // Required for custom binary path
       model: agentConfig.model || agent.model, // Use config model if specified, otherwise user's choice
       systemPrompt: systemPrompt,
       settingSources: ['project' as const],
@@ -169,7 +169,7 @@ class ResearchAgentService extends EventEmitter {
       ...(agentConfig.maxThinkingTokens && { maxThinkingTokens: agentConfig.maxThinkingTokens }),
       ...(agentConfig.includePartialMessages && { includePartialMessages: agentConfig.includePartialMessages }),
       ...(agentConfig.additionalDirectories && { additionalDirectories: agentConfig.additionalDirectories }),
-    };
+    } as any;
 
     try {
       // Build prompt with attachments if provided

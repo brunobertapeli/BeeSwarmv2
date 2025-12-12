@@ -113,12 +113,6 @@
     "win": {
       "target": [
         "nsis"
-      ],
-      "extraResources": [
-        {
-          "from": "resources/binaries/win32-x64",
-          "to": "binaries"
-        }
       ]
     },
     "nsis": {

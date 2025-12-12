@@ -275,7 +275,7 @@ class ClaudeService extends EventEmitter {
       maxTurns: 50, // Increased to allow more tool usage with thinking
       abortController, // SDK uses abortController, not signal
       pathToClaudeCodeExecutable: this.getClaudeExecutablePath(), // Path to claude CLI
-      unsafe: { allowUnsafeCustomBinary: true }, // Required for custom binary paths (Windows has spaces in paths)
+      unsafe: { allowUnsafeCustomBinary: true }, // Required for custom binary path
       model: effectiveModel, // Always set model
       systemPrompt: {
         type: 'preset' as const,
@@ -285,7 +285,7 @@ class ClaudeService extends EventEmitter {
       settingSources: ['project' as const], // Load .claude/CLAUDE.md files from projects
       ...(sessionId && { resume: sessionId }), // Resume if we have session ID
       ...(thinkingEnabled && { maxThinkingTokens: 16000 }), // Enable extended thinking (16k tokens)
-    };
+    } as any;
 
     if (thinkingEnabled) {
     }

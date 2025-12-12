@@ -251,9 +251,8 @@ class ProjectService {
 
   /**
    * Delete project from database and filesystem
-   * NOTE: This is a synchronous operation but may be called from async context
    */
-  deleteProject(id: string): void {
+  async deleteProject(id: string): Promise<void> {
     const project = databaseService.getProjectById(id)
 
     if (!project) {
@@ -267,18 +266,58 @@ class ProjectService {
 
     // Delete from filesystem
     if (fs.existsSync(validatedPath)) {
-      try {
-        fs.rmSync(validatedPath, {
-          recursive: true,
-          force: true,
-          maxRetries: 3,
-          retryDelay: 100
-        })
-      } catch (error) {
-        console.error('❌ Error deleting filesystem path:', error)
-        throw error
+      let deleted = false
+
+      // On Windows, use cmd /c rd which handles locks better
+      if (process.platform === 'win32') {
+        try {
+          const { execSync } = require('child_process')
+          // Use rd /s /q for recursive forced deletion
+          execSync(`cmd /c rd /s /q "${validatedPath}"`, {
+            stdio: 'pipe',
+            timeout: 30000
+          })
+          deleted = !fs.existsSync(validatedPath)
+          if (deleted) {
+            console.log('✅ Project folder deleted using rd command')
+          }
+        } catch (rdError) {
+          console.warn('⚠️ rd command failed:', (rdError as Error).message)
+        }
       }
-    } else {
+
+      // Fallback to Node.js rmSync if rd didn't work or on non-Windows
+      if (!deleted) {
+        const maxAttempts = process.platform === 'win32' ? 5 : 3
+        const retryDelay = process.platform === 'win32' ? 500 : 100
+
+        let lastError: Error | null = null
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          try {
+            fs.rmSync(validatedPath, {
+              recursive: true,
+              force: true,
+              maxRetries: 3,
+              retryDelay: 100
+            })
+            lastError = null
+            deleted = true
+            break // Success
+          } catch (error) {
+            lastError = error as Error
+            console.warn(`⚠️ Delete attempt ${attempt}/${maxAttempts} failed:`, (error as Error).message)
+            if (attempt < maxAttempts) {
+              // Wait before retrying - Windows needs time to release file handles
+              await new Promise(resolve => setTimeout(resolve, retryDelay * attempt))
+            }
+          }
+        }
+
+        if (lastError && !deleted) {
+          console.error('❌ Error deleting filesystem path after all retries:', lastError)
+          throw lastError
+        }
+      }
     }
 
     // Delete from database (do this last so other services can still access project data)

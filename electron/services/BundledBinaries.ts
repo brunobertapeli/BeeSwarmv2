@@ -76,13 +76,19 @@ class BundledBinaries {
 
   /**
    * Get path to bundled Git executable
-   * - Windows: uses MinGit in git/ subfolder
+   * - Windows: uses MinGit in git/ subfolder, falls back to system git
    * - macOS/Linux: wrapper script that uses system git
    */
   get gitPath(): string {
     const basePath = this.getBasePath()
     if (process.platform === 'win32') {
-      return path.join(basePath, 'git', 'cmd', 'git.exe')
+      const bundledGit = path.join(basePath, 'git', 'cmd', 'git.exe')
+      // Check if bundled git exists, otherwise fall back to system git
+      if (fs.existsSync(bundledGit)) {
+        return bundledGit
+      }
+      // Fall back to system git (assumes git is in PATH)
+      return 'git'
     }
     return path.join(basePath, 'git')
   }
@@ -107,7 +113,18 @@ class BundledBinaries {
    * Check if Git is available (bundled or system)
    */
   isGitAvailable(): boolean {
-    return fs.existsSync(this.gitPath)
+    const gitPath = this.gitPath
+    // If gitPath is just 'git', check if it's available in PATH
+    if (gitPath === 'git') {
+      try {
+        const { execSync } = require('child_process')
+        execSync('git --version', { stdio: 'pipe' })
+        return true
+      } catch {
+        return false
+      }
+    }
+    return fs.existsSync(gitPath)
   }
 
   /**
@@ -158,7 +175,8 @@ class BundledBinaries {
     if (process.platform === 'win32') {
       // Official Windows installation paths (from docs.claude.com)
       possiblePaths.push(
-        // Native installer location
+        // Native installer location (common location for Claude Code)
+        path.join(homeDir, '.local', 'bin', 'claude.exe'),
         path.join(homeDir, 'AppData', 'Local', 'Microsoft', 'WindowsApps', 'claude.exe'),
         path.join(homeDir, 'AppData', 'Local', 'Programs', 'claude-code', 'claude.exe'),
         // npm global installations

@@ -466,8 +466,8 @@ function ImageEditModal({ isOpen, onClose, imageSrc, imageWidth, imageHeight, im
       const imgY = img.y()
       const imgScaleX = img.scaleX()
       const imgScaleY = img.scaleY()
-      const srcWidth = img.image()?.width || 1
-      const srcHeight = img.image()?.height || 1
+      const srcWidth = (img.image() as HTMLImageElement)?.width || 1
+      const srcHeight = (img.image() as HTMLImageElement)?.height || 1
       const offsetX = img.offsetX()
       const offsetY = img.offsetY()
 

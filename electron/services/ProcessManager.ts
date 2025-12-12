@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import { EventEmitter } from 'events';
 import stripAnsi from 'strip-ansi';
 import { processPersistence } from './ProcessPersistence';
@@ -12,6 +12,20 @@ import {
   ProcessConfig,
 } from './deployment';
 import { bundledBinaries } from './BundledBinaries';
+
+/**
+ * Kill a process and all its children on Windows using taskkill
+ */
+function killProcessTree(pid: number): void {
+  if (process.platform === 'win32') {
+    try {
+      // /T kills the process tree, /F forces termination
+      execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'pipe' });
+    } catch {
+      // Process might already be dead, ignore errors
+    }
+  }
+}
 
 /**
  * Process state enum
@@ -428,11 +442,18 @@ class ProcessManager extends EventEmitter {
       ([processId, processInfo]) =>
         new Promise<void>((resolve) => {
           const childProcess = processInfo.process;
+          const pid = childProcess.pid;
 
           const killTimeout = setTimeout(() => {
             if (childProcess && !childProcess.killed) {
-              childProcess.kill('SIGKILL');
+              // On Windows, use taskkill to kill the entire process tree
+              if (process.platform === 'win32' && pid) {
+                killProcessTree(pid);
+              } else {
+                childProcess.kill('SIGKILL');
+              }
             }
+            resolve();
           }, 5000);
 
           childProcess.once('exit', () => {
@@ -442,7 +463,18 @@ class ProcessManager extends EventEmitter {
           });
 
           if (childProcess && !childProcess.killed) {
-            childProcess.kill('SIGTERM');
+            // On Windows, use taskkill to kill the entire process tree immediately
+            if (process.platform === 'win32' && pid) {
+              killProcessTree(pid);
+              // Give Windows time to clean up
+              setTimeout(() => {
+                clearTimeout(killTimeout);
+                processPersistence.removePID(`${projectId}-${processId}`);
+                resolve();
+              }, 500);
+            } else {
+              childProcess.kill('SIGTERM');
+            }
           } else {
             clearTimeout(killTimeout);
             resolve();
@@ -451,6 +483,11 @@ class ProcessManager extends EventEmitter {
     );
 
     await Promise.all(killPromises);
+
+    // On Windows, give extra time for file handles to be released
+    if (process.platform === 'win32') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
 
     // Release ports
     group.strategy.releasePorts(projectId);

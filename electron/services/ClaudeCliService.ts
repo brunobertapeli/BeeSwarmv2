@@ -224,8 +224,8 @@ class ClaudeCliService {
           maxTurns: 1,
           allowedTools: [], // No tools needed
           pathToClaudeCodeExecutable: claudePath,
-          unsafe: { allowUnsafeCustomBinary: true }, // Required for custom binary paths
-        }
+          unsafe: { allowUnsafeCustomBinary: true },
+        } as any
       })
 
       // Try to get account info - this requires valid auth

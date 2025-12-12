@@ -643,7 +643,7 @@ function ImageEditorModal({ isOpen, onClose, onSave, imageSrc, imageWidth, image
     const layer = layerRef.current
     if (!img || !layer) return
 
-    const filters: Konva.Filter[] = []
+    const filters: Array<typeof Konva.Filters.Brighten> = []
 
     // Brightness (Konva range is -1 to 1)
     if (pendingAdjustments.brightness !== 0) {

@@ -149,13 +149,30 @@ export function registerProjectHandlers() {
         // Destroy terminal session (if any)
         terminalService.destroySession(projectId)
         terminalAggregator.deleteBuffer(projectId)
+
+        // Windows: Kill any processes that might be holding file handles
+        if (process.platform === 'win32') {
+          const project = projectService.getProjectById(projectId)
+          if (project?.path) {
+            try {
+              const { execSync } = require('child_process')
+              // Kill any node processes in the project directory
+              // Use taskkill to forcefully terminate processes
+              execSync(`taskkill /F /IM node.exe /FI "WINDOWTITLE eq ${project.path}*" 2>nul`, { stdio: 'ignore' })
+            } catch {
+              // Ignore errors - process might not exist
+            }
+            // Give Windows time to release file handles
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
+        }
       } catch (cleanupError) {
         // Log but don't fail deletion if cleanup fails
         console.warn('⚠️ Error during cleanup (continuing with deletion):', cleanupError)
       }
 
       // Now delete the project
-      projectService.deleteProject(projectId)
+      await projectService.deleteProject(projectId)
 
       return {
         success: true
