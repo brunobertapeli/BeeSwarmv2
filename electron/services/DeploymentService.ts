@@ -19,7 +19,7 @@ export interface DeployResult {
 
 /**
  * Get the application root directory
- * In dev: /Users/.../BeeSwarmv2
+ * In dev: /Users/.../CodeDeck
  * In production: varies by platform
  */
 function getAppRoot(): string {

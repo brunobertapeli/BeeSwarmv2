@@ -465,6 +465,46 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clearCrashLogs: () => ipcRenderer.invoke('app:clear-crash-logs')
   },
 
+  // Auto-update methods
+  updates: {
+    check: () => ipcRenderer.invoke('update:check'),
+    checkSilent: () => ipcRenderer.invoke('update:check-silent'),
+    download: () => ipcRenderer.invoke('update:download'),
+    install: () => ipcRenderer.invoke('update:install'),
+
+    // Update event listeners
+    onChecking: (callback) => {
+      const listener = () => callback()
+      ipcRenderer.on('update:checking', listener)
+      return () => ipcRenderer.removeListener('update:checking', listener)
+    },
+    onAvailable: (callback) => {
+      const listener = (_event, info) => callback(info)
+      ipcRenderer.on('update:available', listener)
+      return () => ipcRenderer.removeListener('update:available', listener)
+    },
+    onNotAvailable: (callback) => {
+      const listener = (_event, info) => callback(info)
+      ipcRenderer.on('update:not-available', listener)
+      return () => ipcRenderer.removeListener('update:not-available', listener)
+    },
+    onProgress: (callback) => {
+      const listener = (_event, progress) => callback(progress)
+      ipcRenderer.on('update:download-progress', listener)
+      return () => ipcRenderer.removeListener('update:download-progress', listener)
+    },
+    onDownloaded: (callback) => {
+      const listener = (_event, info) => callback(info)
+      ipcRenderer.on('update:downloaded', listener)
+      return () => ipcRenderer.removeListener('update:downloaded', listener)
+    },
+    onError: (callback) => {
+      const listener = (_event, error) => callback(error)
+      ipcRenderer.on('update:error', listener)
+      return () => ipcRenderer.removeListener('update:error', listener)
+    }
+  },
+
   // Keywords for educational tooltips
   keywords: {
     getAll: () => ipcRenderer.invoke('keywords:get-all')

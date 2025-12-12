@@ -3,6 +3,7 @@ import { useAppStore, initAuth } from './store/appStore'
 import Login from './components/Login'
 import ProjectView from './components/ProjectView'
 import ToastContainer from './components/ToastContainer'
+import UpdateNotification from './components/UpdateNotification'
 import { ClaudeAuthModal, type ClaudeAuthModalState } from './components/ClaudeAuthModal'
 import { useToast } from './hooks/useToast'
 import type { User } from './types/auth'
@@ -59,13 +60,6 @@ function App() {
   useEffect(() => {
     // Initialize auth from secure storage (after electronAPI is ready)
     initAuth().catch(console.error)
-
-    // Listen for check-updates event from Electron menu
-    if (window.electronAPI) {
-      window.electronAPI.receive('check-updates', () => {
-        // Check for updates
-      })
-    }
   }, [])
 
   // Start background Claude check on mount
@@ -291,6 +285,9 @@ function App() {
 
       {/* Toast notifications - always rendered */}
       <ToastContainer />
+
+      {/* Auto-update notification */}
+      <UpdateNotification />
     </div>
   )
 }

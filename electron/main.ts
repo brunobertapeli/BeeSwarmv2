@@ -3,7 +3,7 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 // Now import everything else
-import { app, BrowserWindow, Menu, shell, ipcMain, globalShortcut, protocol, net } from 'electron'
+import { app, BrowserWindow, Menu, shell, ipcMain, globalShortcut, protocol, net, dialog } from 'electron'
 
 // Handle Windows Squirrel events (install, uninstall, update)
 // This MUST be at the very top before any other app logic
@@ -42,6 +42,7 @@ import { registerChatWidgetHandlers, setChatWidgetWindow } from './handlers/chat
 import { registerBackgroundRemoverHandlers } from './handlers/backgroundRemoverHandlers.js'
 import { registerClaudeCliHandlers } from './handlers/claudeCliHandlers.js'
 import { registerDeploymentHandlers, setDeploymentMainWindow } from './handlers/deploymentHandlers.js'
+import { autoUpdateService, registerAutoUpdateHandlers } from './services/AutoUpdateService.js'
 import { databaseService } from './services/DatabaseService.js'
 import { analyticsService } from './services/AnalyticsService.js'
 import { layoutManager } from './services/LayoutManager.js'
@@ -160,13 +161,53 @@ function createMenu() {
       label: 'CodeDeck',
       submenu: [
         {
-          label: 'Check for Updates',
-          click: () => {
-            mainWindow?.webContents.send('check-updates')
+          label: 'Check for Updates...',
+          click: async () => {
+            await autoUpdateService.checkForUpdates(false)
           }
         },
         { type: 'separator' },
-        { role: 'about' },
+        {
+          label: 'About CodeDeck',
+          click: () => {
+            const appVersion = app.getVersion()
+            const electronVersion = process.versions.electron
+            const chromeVersion = process.versions.chrome
+            const nodeVersion = process.versions.node
+            const v8Version = process.versions.v8
+            const osInfo = `${process.platform} ${process.arch} ${require('os').release()}`
+
+            dialog.showMessageBox({
+              type: 'info',
+              title: 'About CodeDeck',
+              message: 'CodeDeck',
+              detail: [
+                `Version: ${appVersion}`,
+                `Electron: ${electronVersion}`,
+                `Chromium: ${chromeVersion}`,
+                `Node.js: ${nodeVersion}`,
+                `V8: ${v8Version}`,
+                `OS: ${osInfo}`
+              ].join('\n'),
+              buttons: ['Copy', 'OK'],
+              defaultId: 1,
+              icon: path.join(__dirname, '../build/icon.png')
+            }).then((result) => {
+              if (result.response === 0) {
+                // Copy to clipboard
+                const { clipboard } = require('electron')
+                clipboard.writeText([
+                  `Version: ${appVersion}`,
+                  `Electron: ${electronVersion}`,
+                  `Chromium: ${chromeVersion}`,
+                  `Node.js: ${nodeVersion}`,
+                  `V8: ${v8Version}`,
+                  `OS: ${osInfo}`
+                ].join('\n'))
+              }
+            })
+          }
+        },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
@@ -199,10 +240,6 @@ function createMenu() {
         { role: 'reload' },
         { role: 'forceReload' },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
         { role: 'togglefullscreen' }
       ]
     },
@@ -212,19 +249,19 @@ function createMenu() {
         {
           label: 'Discord',
           click: async () => {
-            await shell.openExternal('https://discord.gg/zkfAAGqFwW')
-          }
-        },
-        {
-          label: 'Wiki',
-          click: async () => {
-            await shell.openExternal('https://wiki.codedeck.app')
+            await shell.openExternal('https://discord.com/invite/zkfAAGqFwW')
           }
         },
         {
           label: 'FAQ',
           click: async () => {
-            await shell.openExternal('https://codedeck.app/faq')
+            await shell.openExternal('https://www.codedeckai.com/faq')
+          }
+        },
+        {
+          label: 'News',
+          click: async () => {
+            await shell.openExternal('https://www.codedeckai.com/blog')
           }
         }
       ]
@@ -433,6 +470,7 @@ async function initializeApp() {
     registerBackgroundRemoverHandlers()
     registerClaudeCliHandlers()
     registerDeploymentHandlers()
+    registerAutoUpdateHandlers()
 
     // App-level IPC handlers
     ipcMain.on('app:flash-window', () => {
@@ -642,6 +680,16 @@ app.whenReady().then(async () => {
   if (mainWindow && !authHandlersRegistered) {
     registerAuthHandlers(mainWindow)
     authHandlersRegistered = true
+  }
+
+  // Initialize auto-updater (only in production)
+  if (!isDev && mainWindow) {
+    autoUpdateService.setMainWindow(mainWindow)
+
+    // Check for updates on startup (silent - no error popup if offline)
+    setTimeout(() => {
+      autoUpdateService.checkForUpdates(true)
+    }, 5000) // Wait 5 seconds after app start
   }
 
   app.on('activate', () => {
